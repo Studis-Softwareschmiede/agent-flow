@@ -60,10 +60,11 @@ APP_ITEM="$(bw list items --search studis-softwareschmiede-github-app --session 
   | jq -c '[.[] | select(.name=="studis-softwareschmiede-github-app")][0] // empty')"
 APP_ID="$(jq -r '.fields[]? | select(.name=="app_id").value // empty' <<<"$APP_ITEM")"
 APP_INST="$(jq -r '.fields[]? | select(.name=="installation_id").value // empty' <<<"$APP_ITEM")"
-[ -n "$APP_ID" ] && [ -n "$APP_INST" ] || die "github-app-Item unvollständig (app_id/installation_id)"
+APP_KEY_B64="$(jq -r '.fields[]? | select(.name=="private_key_b64").value // empty' <<<"$APP_ITEM")"
+[ -n "$APP_ID" ] && [ -n "$APP_INST" ] && [ -n "$APP_KEY_B64" ] || die "github-app-Item unvollständig (app_id/installation_id/private_key_b64)"
 PEM="$(mktemp)"; trap 'rm -f "$PEM"' EXIT; chmod 600 "$PEM"
-jq -r '.notes // ""' <<<"$APP_ITEM" > "$PEM"
-grep -q 'PRIVATE KEY' "$PEM" || die "github-app-Item: kein gültiger Key in Notes"
+printf '%s' "$APP_KEY_B64" | base64 -d > "$PEM"
+grep -q 'PRIVATE KEY' "$PEM" || die "github-app-Item: private_key_b64 dekodiert nicht zu gültigem Key"
 CLAUDE_TOKEN="$(bwget password studis-softwareschmiede-claude-token 2>/dev/null || true)"
 
 # --- 4. GitHub-Installation-Token minten (inline JWT) -------------------------

@@ -22,9 +22,10 @@ APP_ITEM="$(bw list items --search studis-softwareschmiede-github-app --session 
   | jq -c '[.[] | select(.name=="studis-softwareschmiede-github-app")][0] // empty')"
 APP_ID="$(jq -r '.fields[]? | select(.name=="app_id").value // empty' <<<"$APP_ITEM")"
 APP_INST="$(jq -r '.fields[]? | select(.name=="installation_id").value // empty' <<<"$APP_ITEM")"
+APP_KEY_B64="$(jq -r '.fields[]? | select(.name=="private_key_b64").value // empty' <<<"$APP_ITEM")"
 PEM="$(mktemp)"; trap 'rm -f "$PEM"' EXIT; chmod 600 "$PEM"
-jq -r '.notes // ""' <<<"$APP_ITEM" > "$PEM"
-echo "  github-app: app_id=${APP_ID:-LEER}  installation_id=${APP_INST:-LEER}  pem_zeilen=$(wc -l < "$PEM" | tr -d ' ')"
+printf '%s' "$APP_KEY_B64" | base64 -d > "$PEM" 2>/dev/null || true
+echo "  github-app: app_id=${APP_ID:-LEER}  installation_id=${APP_INST:-LEER}  key_b64_len=${#APP_KEY_B64}  pem_zeilen=$(wc -l < "$PEM" | tr -d ' ')"
 if [ -n "$APP_ID" ] && [ -n "$APP_INST" ] && grep -q 'PRIVATE KEY' "$PEM"; then
   b64url(){ openssl base64 -A | tr '+/' '-_' | tr -d '='; }
   now=$(date +%s)
