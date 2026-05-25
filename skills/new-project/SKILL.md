@@ -11,7 +11,7 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
 
 ## Ablauf
 1. **Repo**
-   - `new-project`: `gh repo create studis-softwareschmiede/<name> --private` + clone.
+   - `new-project`: `gh repo create studis-softwareschmiede/<name> --public` + clone. (Public: Branch-Protection/PR+Gate im Free-Plan möglich; ghcr-Image ohne Pull-Login.)
    - `init`: bestehendes Repo (cwd) nutzen; Remote prüfen.
 2. **Stack**
    - `new-project`: aus `--lang` oder genau **1 Frage**.
@@ -24,7 +24,7 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
 5. **Deploy scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
    - `Dockerfile`.
    - `.github/workflows/build.yml`: on push `main` → Image bauen + Push nach `ghcr.io/studis-softwareschmiede/<name>` via eingebautem `GITHUB_TOKEN` (`permissions: packages: write`).
-6. **Branch-Protection** auf `main`: require PR + `reviewer`-Check. (Solo: KEIN Pflicht-Human-Approval — du mergst selbst.)
+6. **Branch-Protection** auf `main` (optional/best-effort): nur *„require a pull request before merging"* (blockiert Direkt-Push). **KEINE** Pflicht-Status-Checks (`reviewer` ist ein Agent, kein GitHub-Check → würde sonst jeden Merge blockieren) und **KEINE** Pflicht-Approvals (solo kann eigenen PR nicht approven). Lehnt die API ab (Plan/Permissions) → **überspringen, nicht abbrechen**. Das eigentliche Gate ist dein manueller Merge nach Review-PASS + Test-PASS.
 7. **Initial commit + push.**
 
 ## Output

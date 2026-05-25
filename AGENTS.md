@@ -265,7 +265,7 @@ Zweck     Bootstrappt ein Projekt: Repo + Board + .claude/-Scaffold +
 Trigger   /new-project <name> [--lang <x>]   → neues Repo in der Org
           /init                               → bestehendes Repo (cwd) adoptieren
 Tools     Read, Write, Edit, Bash(gh + git)
-Ablauf    1. Repo:  new  → gh repo create studis-softwareschmiede/<name> --private + clone
+Ablauf    1. Repo:  new  → gh repo create studis-softwareschmiede/<name> --public + clone
                      init → bestehendes Repo (cwd) nutzen
           2. Stack erkennen:  new → aus --lang oder 1 Frage
                               init → aus Dateien (pubspec→flutter, pom/gradle→java,
@@ -280,8 +280,9 @@ Ablauf    1. Repo:  new  → gh repo create studis-softwareschmiede/<name> --pri
              • Dockerfile
              • .github/workflows/build.yml → on push main: build + push
                ghcr.io/<org>/<name> via eingebautem GITHUB_TOKEN (packages: write)
-          6. Branch-Protection auf main: require PR + reviewer-Check
-             (solo: KEIN Pflicht-Human-Approval — du mergst selbst)
+          6. Branch-Protection auf main (best-effort): nur "require PR before merging";
+             KEINE Pflicht-Checks (reviewer=Agent, kein GitHub-Check), KEINE Pflicht-Approvals (solo).
+             API-Ablehnung → ueberspringen, nicht abbrechen. Gate = manueller Merge nach PASS.
           7. Initial commit + push
 Output    Repo-URL · Board-URL · Profil · Image-Ziel → „bereit für /requirement"
 Harte     • kein App-Code
