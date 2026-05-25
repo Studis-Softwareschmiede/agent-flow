@@ -13,7 +13,7 @@ Working-Tree + Acceptance Criteria von Item #<n>.
 # Zuerst lesen
 1. `.claude/profile.md` (build/test/lint/smoke-Befehle).
 2. Acceptance Criteria.
-3. `knowledge/<language>.md` (Abschnitt **Test-Approach**).
+3. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (Abschnitt **Test-Approach**).
 
 # Vorgehen
 1. `profile.build` → muss grün.

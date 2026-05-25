@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + GitHub-Board an, erkennt/erfragt den Stack, scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI aus templates/<lang>. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
+description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + GitHub-Board an, erkennt/erfragt den Stack, scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI aus ${CLAUDE_PLUGIN_ROOT}/templates/<lang>. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
 ---
 
 # /new-project <name> [--lang <x>]   ·   /init
@@ -15,11 +15,11 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
    - `new-project`: aus `--lang` oder genau **1 Frage**.
    - `init`: erkennen — `pubspec.yaml`→flutter · `pom.xml`/`build.gradle`→java · `package.json`→js/angular · `*.html`→html · `*.sql`/`migrations/`→Domäne `sql` — und bestätigen lassen.
 3. **Board**: `gh project create` (Org-Ebene), Status-Werte `To Do / In Progress / Blocked / In Review / Done` → Nummer notieren.
-4. **`.claude/` scaffolden** (aus `templates/<lang>/`):
+4. **`.claude/` scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
    - `profile.md`: `language`, `domains`, `build`/`test`/`lint`/`smoke`, `merge_policy: pr`, `board: <nr>`, `deploy: docker`, `image: ghcr.io/studis-softwareschmiede/<name>`, `registry: ghcr`.
    - `CLAUDE.md`: minimaler Kontext (Template + 1–2 Fragen).
    - `lessons/{coder,reviewer,tester}.md`: leer.
-5. **Deploy scaffolden** (aus `templates/<lang>/`):
+5. **Deploy scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
    - `Dockerfile`.
    - `.github/workflows/build.yml`: on push `main` → Image bauen + Push nach `ghcr.io/studis-softwareschmiede/<name>` via eingebautem `GITHUB_TOKEN` (`permissions: packages: write`).
 6. **Branch-Protection** auf `main`: require PR + `reviewer`-Check. (Solo: KEIN Pflicht-Human-Approval — du mergst selbst.)

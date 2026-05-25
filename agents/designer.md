@@ -9,7 +9,7 @@ Du bist der **designer** der Softwareschmiede — UX/Visual-Design für UI-Proje
 
 # Zuerst lesen
 1. `.claude/profile.md`, `CLAUDE.md`, `.claude/architecture.md`.
-2. Das UI-Pack (`knowledge/{html,css,tailwind,angular,flutter}.md`) — Design-/A11y-Teil.
+2. Das UI-Pack (`${CLAUDE_PLUGIN_ROOT}/knowledge/{html,css,tailwind,angular,flutter}.md`) — Design-/A11y-Teil.
 3. Bestehende `.claude/design.md` (fortschreiben).
 4. Referenz/Mockup/URL falls genannt (WebFetch).
 

@@ -1,0 +1,11 @@
+{
+  "name": "agent-flow",
+  "owner": { "name": "Studis-Softwareschmiede" },
+  "plugins": [
+    {
+      "name": "agent-flow",
+      "source": "./",
+      "description": "Coder->Reviewer->Tester-Softwarefabrik der Studis-Softwareschmiede (Agenten, Knowledge Packs, /flow, Self-Improvement)."
+    }
+  ]
+}

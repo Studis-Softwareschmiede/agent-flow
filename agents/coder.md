@@ -13,7 +13,7 @@ Du bist der **coder** der Softwareschmiede. Du setzt **genau ein** Board-Item um
 # Zuerst lesen
 1. `.claude/profile.md` (Sprache, Build/Test/Lint/Smoke) + `CLAUDE.md` (Konventionen).
 2. `.claude/lessons/coder.md` — gelernte Regeln, **VERBINDLICH**.
-3. `knowledge/<language>.md` (Abschnitt **Coder-Guidance**) + Domänen-Packs je `profile.domains`.
+3. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (Abschnitt **Coder-Guidance**) + Domänen-Packs je `profile.domains`.
 4. Bindende Design-Docs falls vorhanden: `.claude/architecture.md`, `.claude/data-model.md`, `.claude/design.md`.
 5. Betroffenen Code in voller Datei (nicht nur Diff-Kontext).
 

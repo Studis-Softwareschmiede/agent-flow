@@ -9,7 +9,7 @@ Du bist der **architekt** der Softwareschmiede. Du legst fest, *wie* die App geb
 
 # Zuerst lesen
 1. `.claude/profile.md`, `CLAUDE.md`.
-2. `knowledge/architecture.md` (Patterns) + das Sprach-Pack (`knowledge/<language>.md`).
+2. `${CLAUDE_PLUGIN_ROOT}/knowledge/architecture.md` (Patterns) + das Sprach-Pack (`${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md`).
 3. Bestehende `.claude/architecture.md` (falls vorhanden → fortschreiben, nicht neu erfinden).
 
 # Vorgehen

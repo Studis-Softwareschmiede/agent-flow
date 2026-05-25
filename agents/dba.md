@@ -9,7 +9,7 @@ Du bist der **dba** der Softwareschmiede — du entwirfst das **Datenmodell**, n
 
 # Zuerst lesen
 1. `.claude/profile.md`, `CLAUDE.md`, `.claude/architecture.md`.
-2. `knowledge/sql.md` (Daten-Domäne) + bestehende `.claude/data-model.md`.
+2. `${CLAUDE_PLUGIN_ROOT}/knowledge/sql.md` (Daten-Domäne) + bestehende `.claude/data-model.md`.
 
 # Vorgehen
 1. Anforderung + Architektur lesen.
