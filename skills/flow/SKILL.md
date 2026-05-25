@@ -9,7 +9,7 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 ## 0. Setup
 - `.claude/profile.md` lesen → Board-Referenz, `merge_policy` (`pr`|`direct`), Build/Test-Befehle.
-- Sicherstellen, dass `GH_TOKEN` gesetzt ist (sonst Hinweis: `source ${CLAUDE_PLUGIN_ROOT}/scripts/load-env.sh`).
+- **Auth herstellen:** `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"` (mintet App-Token aus `.env.gpg`, loggt `gh` ein). **NICHT `gh auth login --web`.**
 
 ## 1. Nächstes Item wählen
 - `gh project item-list …` → das **To-Do**-Item mit höchster Priority, dessen **Depends-on** alle `Done` sind.

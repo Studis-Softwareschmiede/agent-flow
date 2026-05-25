@@ -5,7 +5,9 @@ description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + GitHub
 
 # /new-project <name> [--lang <x>]   ·   /init
 
-Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`new-project`) bzw. das bestehende Repo (`init`). `GH_TOKEN` muss gesetzt sein.
+Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`new-project`) bzw. das bestehende Repo (`init`).
+
+**Auth ZUERST (sonst scheitert jeder gh-Schritt):** `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"` — das mintet den GitHub-App-Token aus `.env.gpg` und loggt `gh` damit ein. **NICHT `gh auth login --web`** (wir nutzen die App, nicht einen interaktiven Login).
 
 ## Ablauf
 1. **Repo**
