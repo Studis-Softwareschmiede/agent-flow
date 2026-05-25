@@ -47,18 +47,23 @@ else BW_SESSION="$(bw login "$BW_EMAIL" --raw)"; fi
 export BW_SESSION
 bw sync >/dev/null
 bwget(){ bw get "$@" --session "$BW_SESSION"; }
-bwfield(){ bw get item "$1" --session "$BW_SESSION" \
-  | python3 -c "import sys,json;d=json.load(sys.stdin);print(next((f['value'] for f in d.get('fields',[]) if f['name']=='$2'),''))"; }
+have jq || { log "Installiere jq"; if [ "$PLATFORM" = mac ]; then ensure_brew; brew install jq;
+  elif have apt-get; then sudo apt-get update -qq && sudo apt-get install -y jq;
+  elif have dnf; then sudo dnf install -y jq; else die "jq fehlt — manuell installieren"; fi; }
 
 # --- 3. Secrets aus Bitwarden -------------------------------------------------
 log "Hole Secrets aus Bitwarden"
 mkdir -p "$CFG" && chmod 700 "$CFG"
 bwget password studis-softwareschmiede-gpg-passphrase > "$CFG/gpg.pass"; chmod 600 "$CFG/gpg.pass"
-APP_ID="$(bwfield studis-softwareschmiede-github-app app_id)"
-APP_INST="$(bwfield studis-softwareschmiede-github-app installation_id)"
+# GitHub-App via list+jq (robuster als `bw get item`, das hängen kann)
+APP_ITEM="$(bw list items --search studis-softwareschmiede-github-app --session "$BW_SESSION" \
+  | jq -c '[.[] | select(.name=="studis-softwareschmiede-github-app")][0] // empty')"
+APP_ID="$(jq -r '.fields[]? | select(.name=="app_id").value // empty' <<<"$APP_ITEM")"
+APP_INST="$(jq -r '.fields[]? | select(.name=="installation_id").value // empty' <<<"$APP_ITEM")"
 [ -n "$APP_ID" ] && [ -n "$APP_INST" ] || die "github-app-Item unvollständig (app_id/installation_id)"
 PEM="$(mktemp)"; trap 'rm -f "$PEM"' EXIT; chmod 600 "$PEM"
-bwget notes studis-softwareschmiede-github-app > "$PEM"
+jq -r '.notes // ""' <<<"$APP_ITEM" > "$PEM"
+grep -q 'PRIVATE KEY' "$PEM" || die "github-app-Item: kein gültiger Key in Notes"
 CLAUDE_TOKEN="$(bwget password studis-softwareschmiede-claude-token 2>/dev/null || true)"
 
 # --- 4. GitHub-Installation-Token minten (inline JWT) -------------------------
@@ -69,8 +74,7 @@ jh="$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)"
 jp="$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$((now-60))" "$((now+540))" "$APP_ID" | b64url)"
 js="$(printf '%s' "$jh.$jp" | openssl dgst -sha256 -sign "$PEM" | b64url)"
 GH_TOKEN="$(curl -s -X POST -H "Authorization: Bearer $jh.$jp.$js" -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/app/installations/$APP_INST/access_tokens" \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')"
+  "https://api.github.com/app/installations/$APP_INST/access_tokens" | jq -r '.token // empty')"
 [ -n "$GH_TOKEN" ] || die "GitHub-Token-Mint fehlgeschlagen (App-Key/IDs prüfen)"
 export GH_TOKEN
 
