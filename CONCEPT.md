@@ -176,9 +176,9 @@ Pro Zielprojekt, **nicht** in der Fabrik:
 
 ## 8. GitHub-Integration
 
-- **Voller GitHub-Zugang** via **Fine-grained PAT**, auf die Org gescoped. Permissions: Contents / Issues / Pull requests RW, **Administration RW** (Repo-Anlegen **+** Branch-Protection = das PR+Gate), Actions / Workflows / Secrets RW, Projects RW. Ablaufdatum gesetzt; bei Leak revoke + neu. (Classic PAT als Fallback; GitHub App als spätere „richtige" Bot-Identität — beides später möglich.)
-- **Token-Storage = `.env.gpg`, umgebungs-uniform (Mac == VPS).** Kein OS-Keychain (auf dem VPS nicht da) → der Token lebt GPG-symmetrisch in einer **factory-eigenen** `.env.gpg` (eigene Secret-Domäne, nicht Brewing). Auf jeder Box: `decrypt → export GH_TOKEN=…`; `gh` + GitHub-API lesen `GH_TOKEN` automatisch → identisch überall, kein `gh auth login`. Einmal je Box `gh auth setup-git` (nur Config) für git-über-https. GPG-Passphrase via Datei-Chain + eigenem Bitwarden-Item (analog Brewing). Token = **Infra-Credential der Fabrik** (über alle Projekte genutzt) → verletzt Projekt-Neutralität nicht.
-- **Org anlegen ist manuell** (GitHub-UI) — per PAT nicht möglich. Einmaliger Schritt des Users.
+- **Voller GitHub-Zugang via GitHub App `softwareschmiede-bot`** (org-installiert; App-ID + Installation-ID). Permissions: Contents / Issues / Pull requests RW, **Administration RW** (Repo-Anlegen **+** Branch-Protection = das PR+Gate), Actions / Workflows / Secrets RW, **Organization → Projects RW** (`createProjectV2` = Auto-Boards). **Warum App statt PAT:** ein Fine-grained-PAT darf `createProjectV2` NICHT (keine org-Boards), eine App schon — plus org-scoped + kurzlebige Tokens.
+- **Auth-Mechanik = kurzlebige Installation-Tokens, umgebungs-uniform (Mac == VPS).** App-**Private-Key (base64) + App-ID + Installation-ID** liegen GPG-symmetrisch in der factory-eigenen `.env.gpg`. `scripts/gh-app-token.sh` signiert einen JWT (RS256) → tauscht ihn gegen einen **~1h-Installation-Token**; `source scripts/load-env.sh` → `export GH_TOKEN`; `gh` + API lesen ihn automatisch. Kein langlebiger Token (bei Leak in ~1h tot). GPG-Passphrase via Datei-Chain + Bitwarden; einmal je Box `gh auth setup-git`.
+- **Org anlegen ist manuell** (GitHub-UI). **Repos *und* Boards** legt die App danach selbst an.
 - **Projects v2** für Boards (Kanban + Iteration/Sprint + Roadmap), Org-Ebene.
 - **Deploy/Registry:** Default `deploy: docker` (profil-überschreibbar auf `static|package|none`). CI baut bei Push auf `main` ein Image und pusht nach **ghcr.io** (`ghcr.io/<org>/<name>`) via eingebautem `GITHUB_TOKEN` (`packages: write`) — **kein Push-Secret nötig**. Actions: kostenlose Freiminuten oder self-hosted Runner auf dem VPS. Das tatsächliche Deployen (Pull+Run, Watchtower-Stil) ist ein separater per-Projekt-Schritt (späteres Template).
 
@@ -195,7 +195,7 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 
 ## 11. Entscheidungen & nächste Arbeit
 
-**Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; Org + Fine-grained PAT + Bitwarden-Items angelegt (`studis-softwareschmiede-github-token`, `studis-softwareschmiede-gpg-passphrase`); Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a).
+**Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; GitHub-Zugang via **GitHub App `softwareschmiede-bot`** (App-Key+IDs in `.env.gpg`, kurzlebige Token via JWT-Mint). Bitwarden hält `studis-softwareschmiede-gpg-passphrase` + `studis-softwareschmiede-github-app` (Felder app_id/installation_id/private_key_b64) + optional `studis-softwareschmiede-claude-token`. *(Der frühere Fine-grained-PAT `studis-softwareschmiede-github-token` wurde durch die App abgelöst und **revoked**.)* Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a).
 
 **Noch zu erarbeiten (vor Scaffold):**
 1. **Agenten im Detail** — je Agent (`requirement, coder, reviewer, tester, retro, train`): genaue Aufgabe, Input/Output-Format, Tools, Lese-Pflichten (Profil/Lessons), harte Grenzen — generisch & sprach-neutral.
