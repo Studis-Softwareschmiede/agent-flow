@@ -23,7 +23,8 @@ ID="$(jq -r '.id' <<<"$ITEM")"
 
 NEW="$(jq --arg a "$GH_APP_ID" --arg i "$GH_APP_INSTALLATION_ID" --arg k "$GH_APP_PRIVATE_KEY_B64" \
   '.fields=[{name:"app_id",value:$a,type:0},{name:"installation_id",value:$i,type:0},{name:"private_key_b64",value:$k,type:1}]' <<<"$ITEM")"
-printf '%s' "$NEW" | bw encode | bw edit item "$ID" --session "$BW_SESSION" >/dev/null
+ENC="$(printf '%s' "$NEW" | bw encode)"   # encode liest stdin (kein Vault-Zugriff)
+bw edit item "$ID" "$ENC" --session "$BW_SESSION" >/dev/null   # JSON als ARGUMENT → stdin frei, kein readline-Crash
 bw sync >/dev/null
 echo "✓ '$NAME' befüllt: app_id, installation_id, private_key_b64 (${#GH_APP_PRIVATE_KEY_B64} Zeichen)"
 echo "→ jetzt prüfen:  bash scripts/verify-secrets.sh"
