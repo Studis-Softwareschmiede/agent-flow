@@ -195,7 +195,7 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 
 ## 11. Entscheidungen & nächste Arbeit
 
-**Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; Org + Fine-grained PAT + Bitwarden-Items angelegt (`studis-softwareschmiede-token`, `studis-softwareschmiede-gpg-passphrase`); Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a).
+**Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; Org + Fine-grained PAT + Bitwarden-Items angelegt (`studis-softwareschmiede-github-token`, `studis-softwareschmiede-gpg-passphrase`); Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a).
 
 **Noch zu erarbeiten (vor Scaffold):**
 1. **Agenten im Detail** — je Agent (`requirement, coder, reviewer, tester, retro, train`): genaue Aufgabe, Input/Output-Format, Tools, Lese-Pflichten (Profil/Lessons), harte Grenzen — generisch & sprach-neutral.
