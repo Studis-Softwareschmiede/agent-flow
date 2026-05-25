@@ -1,0 +1,12 @@
+# Plaintext-Secrets — NIE committen (nur .env.gpg ist versioniert)
+.env
+*.plain
+
+# transiente Build-Inputs
+specs/
+
+# OS / Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
