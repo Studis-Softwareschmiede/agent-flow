@@ -202,13 +202,20 @@ Wo der Container landet, folgt der Arbeitsmaschine (Mac-App → Mac-Docker, VPS-
 
 **`dev` (SSH, migrierbar):** Ziel = VPS-Zügeln ohne Schmerz. *Default-Vorschlag:* `dev.alexstuder.cloud` = **A-Record (DNS-only/grau) → öffentliche VPS-IP**, normales SSH:22 (Termius ohne Client-Setup). Der **Bootstrap upsert**et den Record beim Aufsetzen via Cloudflare-API → Migration = neuen VPS bootstrappen, Record zeigt automatisch um, alter VPS weg. *(Härtung: key-only Login, fail2ban. **Offene Alternative:** SSH durch den Tunnel via `cloudflared access ssh` = kein offener Port, aber Termius braucht eine ProxyCommand.)*
 
-**App-Preview (HTTP):** Der VPS fährt **einen Cloudflare-Named-Tunnel** (Bootstrap legt ihn via API an). Pro deployter App: Ingress-Regel `<app>.alexstuder.cloud → http://localhost:<port>` + DNS-CNAME → Tunnel; TLS macht Cloudflare. `/flow` (VPS-Rolle) hängt die Route beim **ersten** Deploy an und ersetzt bei Folgeläufen nur den Container (gleicher Port → Route bleibt gültig). Migration: Bootstrap des neuen VPS legt Tunnel an und **repointet alle App-CNAMEs + `dev`** per API — kein manuelles DNS.
+**App-Preview (HTTP):** Der VPS fährt **einen Cloudflare-Named-Tunnel** (Bootstrap legt ihn via API an). Pro deployter App: Ingress-Regel `<app>.alexstuder.cloud → http://localhost:<port>` + DNS-CNAME → Tunnel; TLS macht Cloudflare. `/flow` (VPS-Rolle) hängt die Route beim **ersten** Deploy an und ersetzt bei Folgeläufen nur den Container (gleicher Port → Route bleibt gültig). **Bei VPS-Migration werden App-Previews NICHT mit-gezügelt** (nur `dev` zieht um, s.o.): Previews sind on-demand (s. *Lifecycle & Cleanup*) und entstehen erst neu, wenn du auf dem neuen VPS eine App deployst — die `<app>.`-Route/CNAME wird dann frisch angelegt.
 
 **Wie `/flow` Mac vs VPS unterscheidet:** der **Bootstrap (VPS-Pfad)** schreibt eine Rolle-Markierung (`DEPLOY_ROLE=vps` + `PREVIEW_DOMAIN=alexstuder.cloud` in die factory-`.env` bzw. `/etc/softwareschmiede/role`). Fehlt sie (Mac) → `local` → nur `localhost`. `/flow` liest das im Deploy-Schritt.
 
 **Per-App-State:** Host-Port in `.claude/profile.md` (`preview_port`), beim ersten Deploy vergeben (erste freie). Container-Name = `<app>`; Lifecycle `docker rm -f <app>; docker run -d --name <app> --restart unless-stopped -p <port>:<cport> ghcr…/<app>:latest`.
 
 **Cloudflare-Zugang:** `CLOUDFLARE_API_TOKEN` + `_ACCOUNT_ID` + `_ZONE_ID` (aus dem Brewing-Setup übernommen) liegen in der factory-`.env.gpg`; Bootstrap/`/flow` nutzen sie für DNS + Tunnel-Routen.
+
+**Lifecycle & Cleanup (Preview ist wegwerfbar):** **Source of Truth = das ghcr-Image** (bleibt dauerhaft in GitHub). Container, lokales Image und Cloudflare-Eintrag sind **ephemer** — jederzeit aus ghcr neu erzeugbar, müssen also weder dauerhaft laufen noch eine Migration überleben. Eine Preview lebt **bis zum expliziten Teardown** (Default: **manuell** — Neuaufbau aus ghcr ist billig). Dafür ein `preview`-Skill:
+- **`/preview up <app>`** — ghcr-Image pullen + Container starten (+ VPS: Route/CNAME anlegen) → URL. (Genau das macht auch `/flow` am Ende automatisch.)
+- **`/preview down <app>`** (Cleanup) — `docker rm -f <app>` + (VPS) `<app>`-Ingress-Regel + DNS-CNAME via API entfernen + optional `docker rmi` (lokales Image prunen). **ghcr-Image, Repo und Board werden NIE angefasst.**
+- **`/preview list`** — aktive Previews (Container + Routen).
+
+*(Optionaler Reaper später: Previews, die > N Tage idle sind, automatisch abräumen — weil aus ghcr trivial wiederherstellbar.)*
 
 **Abgrenzung zum Brewing-Tunnel:** `alexstuder.cloud` ist auch Brewing-Staging. Die Softwareschmiede nutzt **dieselbe Zone**, aber **eigene Subdomains** (`dev.`, `<app>.`) und einen **eigenen Tunnel** auf ihrem VPS — Brewing-Records werden nie angefasst (`/flow` legt nur `<app>.`-Records an, der Bootstrap nur `dev.` + Tunnel).
 
@@ -240,5 +247,5 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 - **P2 — Self-Improvement:** `retro` + `train` als PR-erzeugende Skills + Branch-Protection/Gate.
 - **P3 — GitHub-Integration:** `new-project`-Skill (Repo + Board + Profil bootstrappen), Deploy-Template (Actions).
 - **P4 — Beweisen:** Wegwerf-Projekt end-to-end (`/flow` → PASS → tester → deploy → Board).
-- **P5 — Live-Preview & Cloudflare (§8a):** (a) **Mac-Seite zuerst** — `/flow`-Deploy-Schritt: produktives ghcr-Image pullen + lokal `docker run` + `localhost`-URL (ohne VPS testbar). (b) **VPS-Seite** (sobald VPS da): Bootstrap installiert cloudflared + Named-Tunnel + `dev`-DNS-Upsert + Rolle-Marker; `/flow` (VPS-Rolle) legt pro App `<app>.alexstuder.cloud`-Route+CNAME an.
+- **P5 — Live-Preview & Cloudflare (§8a):** (a) **Mac-Seite zuerst** — `/flow`-Deploy-Schritt: produktives ghcr-Image pullen + lokal `docker run` + `localhost`-URL (ohne VPS testbar) + **`/preview up|down|list`**-Skill (Cleanup: Container + lokales Image + Cloudflare-Eintrag weg, ghcr-Image bleibt). (b) **VPS-Seite** (sobald VPS da): Bootstrap installiert cloudflared + Named-Tunnel + `dev`-DNS-Upsert + Rolle-Marker; `/flow`/`preview up` (VPS-Rolle) legt pro App `<app>.alexstuder.cloud`-Route+CNAME an, `preview down` entfernt sie wieder.
 - **P6 — optional:** Brewing migrieren.
