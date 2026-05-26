@@ -286,6 +286,7 @@ Harte Grenzen  • NIE Direkt-Push auf main
 - **`/flow`** — Orchestrator: arbeitet das Board ab (Spine + Handoff-Verträge: `CONCEPT.md` §4b). Einziger Schreiber von Board-Status + git/PR.
 - **`/retro`**, **`/train <lang>`** — triggern die gleichnamigen Meta-Agenten (oben).
 - **`/new-project` / `/init`** — Projekt-Bootstrap (Spec unten).
+- **`/adopt <owner/repo>`** — bestehendes Repo adoptieren + auf Standard heben: clone (fremd → Fork in die Org) → init (Spec aus Code) → **Audit** (reviewer Audit-Modus + gitleaks/dep-audit gegen Security-Floor/Packs/Spec) → Funde als priorisiertes **Backlog** aufs Board → `/flow`. Behebt nichts automatisch; pusht nie ungefragt aufs fremde Upstream.
 
 ```
 Skill: new-project  /  init
