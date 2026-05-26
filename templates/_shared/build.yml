@@ -1,6 +1,7 @@
 # Vorlage — von new-project nach .github/workflows/build.yml kopiert.
 # Baut bei Push auf main ein Image und pusht nach ghcr.io — via eingebautem GITHUB_TOKEN
 # (kein Push-Secret nötig). Typ-Spezifika stecken im Dockerfile.
+# Security-Gate: secret-scan (gitleaks) MUSS grün sein, bevor das Image gebaut/gepusht wird.
 name: build
 on:
   push:
@@ -9,7 +10,14 @@ permissions:
   contents: read
   packages: write
 jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Secret-Scan (gitleaks)
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest detect --source=/repo --no-git --redact -v
   image:
+    needs: secret-scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
