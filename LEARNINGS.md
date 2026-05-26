@@ -5,4 +5,4 @@ Eine Zeile pro Promotion (von `retro`/`train`/`teamLeader`, via PR). Status:
 
 | ID | Datum | Pack/Skill | Regel | Quelle | PR | Status |
 |----|-------|------------|-------|--------|----|--------|
-| _(noch keine — der erste Promotion-PR ergänzt hier die erste Zeile)_ | | | | | | |
+| `coder/R01` | 2026-05-26 | `agents/coder.md` | Kein Gold-Plating über die Spec hinaus — strikt nur die genannten AC; als Nicht-Ziel Gelistetes nicht bauen; fehlt etwas → SPEC-LÜCKE statt eigenmächtig ergänzen | sandbox-3 `.claude/lessons/coder.md` #1 (wiederkehrendes Spec-Drift-Muster) | retro/coder-no-gold-plating | Proposed |
