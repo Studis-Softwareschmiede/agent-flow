@@ -180,7 +180,39 @@ Pro Zielprojekt, **nicht** in der Fabrik:
 - **Auth-Mechanik = kurzlebige Installation-Tokens, umgebungs-uniform (Mac == VPS).** App-**Private-Key (base64) + App-ID + Installation-ID** liegen GPG-symmetrisch in der factory-eigenen `.env.gpg`. `scripts/gh-app-token.sh` signiert einen JWT (RS256) → tauscht ihn gegen einen **~1h-Installation-Token**; `source scripts/load-env.sh` → `export GH_TOKEN`; `gh` + API lesen ihn automatisch. Kein langlebiger Token (bei Leak in ~1h tot). GPG-Passphrase via Datei-Chain + Bitwarden; einmal je Box `gh auth setup-git`.
 - **Org anlegen ist manuell** (GitHub-UI). **Repos *und* Boards** legt die App danach selbst an.
 - **Projects v2** für Boards (Kanban + Iteration/Sprint + Roadmap), Org-Ebene.
-- **Deploy/Registry:** Default `deploy: docker` (profil-überschreibbar auf `static|package|none`). CI baut bei Push auf `main` ein Image und pusht nach **ghcr.io** (`ghcr.io/<org>/<name>`) via eingebautem `GITHUB_TOKEN` (`packages: write`) — **kein Push-Secret nötig**. Actions: kostenlose Freiminuten oder self-hosted Runner auf dem VPS. Das tatsächliche Deployen (Pull+Run, Watchtower-Stil) ist ein separater per-Projekt-Schritt (späteres Template).
+- **Deploy/Registry:** Default `deploy: docker` (profil-überschreibbar auf `static|package|none`). CI baut bei Push auf `main` ein Image und pusht nach **ghcr.io** (`ghcr.io/<org>/<name>`) via eingebautem `GITHUB_TOKEN` (`packages: write`) — **kein Push-Secret nötig**. Actions: kostenlose Freiminuten oder self-hosted Runner auf dem VPS. Das tatsächliche Deployen (Pull+Run) + die Live-Preview-URLs sind in **§8a** spezifiziert.
+
+## 8a. Deploy, Live-Preview & URLs (self-hosted, Cloudflare)
+
+**Grundprinzip:** Nach `/flow` (Merge → CI baut Image → `ghcr.io/<org>/<app>:latest`) wird das **produktive Image** als Container gestartet — **dort, wo `/flow` läuft** — und bekommt eine Test-URL.
+
+- **`/flow` auf dem Mac:** `docker pull ghcr…/<app>` → `docker run` lokal → **`http://localhost:<port>`**. Kein Cloudflare nötig.
+- **`/flow` auf dem VPS:** dito in den VPS-Docker → zusätzlich Cloudflare-Route → **`https://<app>.alexstuder.cloud`** (von überall erreichbar).
+
+Wo der Container landet, folgt der Arbeitsmaschine (Mac-App → Mac-Docker, VPS-App → VPS-Docker). Eine App lebt an **genau einem** Ort → kein Hostname-Konflikt.
+
+**Zwei Arten URL:**
+
+| Name | Zweck | Technik |
+|---|---|---|
+| `dev.alexstuder.cloud` | **SSH/Terminal** zum *aktuellen* VPS (Termius) | DNS → VPS (kein App-Tunnel) |
+| `<app>.alexstuder.cloud` | **HTTP-Live-Preview** einer auf dem VPS deployten App | Cloudflare-Tunnel → Container |
+
+→ pro App eine eigene Subdomain (mehrere Apps koexistieren); Mac-Apps bleiben auf `localhost:<port>`.
+
+**`dev` (SSH, migrierbar):** Ziel = VPS-Zügeln ohne Schmerz. *Default-Vorschlag:* `dev.alexstuder.cloud` = **A-Record (DNS-only/grau) → öffentliche VPS-IP**, normales SSH:22 (Termius ohne Client-Setup). Der **Bootstrap upsert**et den Record beim Aufsetzen via Cloudflare-API → Migration = neuen VPS bootstrappen, Record zeigt automatisch um, alter VPS weg. *(Härtung: key-only Login, fail2ban. **Offene Alternative:** SSH durch den Tunnel via `cloudflared access ssh` = kein offener Port, aber Termius braucht eine ProxyCommand.)*
+
+**App-Preview (HTTP):** Der VPS fährt **einen Cloudflare-Named-Tunnel** (Bootstrap legt ihn via API an). Pro deployter App: Ingress-Regel `<app>.alexstuder.cloud → http://localhost:<port>` + DNS-CNAME → Tunnel; TLS macht Cloudflare. `/flow` (VPS-Rolle) hängt die Route beim **ersten** Deploy an und ersetzt bei Folgeläufen nur den Container (gleicher Port → Route bleibt gültig). Migration: Bootstrap des neuen VPS legt Tunnel an und **repointet alle App-CNAMEs + `dev`** per API — kein manuelles DNS.
+
+**Wie `/flow` Mac vs VPS unterscheidet:** der **Bootstrap (VPS-Pfad)** schreibt eine Rolle-Markierung (`DEPLOY_ROLE=vps` + `PREVIEW_DOMAIN=alexstuder.cloud` in die factory-`.env` bzw. `/etc/softwareschmiede/role`). Fehlt sie (Mac) → `local` → nur `localhost`. `/flow` liest das im Deploy-Schritt.
+
+**Per-App-State:** Host-Port in `.claude/profile.md` (`preview_port`), beim ersten Deploy vergeben (erste freie). Container-Name = `<app>`; Lifecycle `docker rm -f <app>; docker run -d --name <app> --restart unless-stopped -p <port>:<cport> ghcr…/<app>:latest`.
+
+**Cloudflare-Zugang:** `CLOUDFLARE_API_TOKEN` + `_ACCOUNT_ID` + `_ZONE_ID` (aus dem Brewing-Setup übernommen) liegen in der factory-`.env.gpg`; Bootstrap/`/flow` nutzen sie für DNS + Tunnel-Routen.
+
+**Abgrenzung zum Brewing-Tunnel:** `alexstuder.cloud` ist auch Brewing-Staging. Die Softwareschmiede nutzt **dieselbe Zone**, aber **eigene Subdomains** (`dev.`, `<app>.`) und einen **eigenen Tunnel** auf ihrem VPS — Brewing-Records werden nie angefasst (`/flow` legt nur `<app>.`-Records an, der Bootstrap nur `dev.` + Tunnel).
+
+**Reihenfolge:** Die **Mac-Seite** (Pull + lokaler Run + `localhost`-URL) ist **ohne VPS testbar** und kommt zuerst; die VPS-/Cloudflare-Seite (Bootstrap-Tunnel, `<app>.`-Routen, `dev`-DNS) wird gebaut, sobald ein VPS existiert.
 
 ## 9. Explizit NICHT im Scope (bewusst)
 
@@ -195,7 +227,7 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 
 ## 11. Entscheidungen & nächste Arbeit
 
-**Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; GitHub-Zugang via **GitHub App `softwareschmiede-bot`** (App-Key+IDs in `.env.gpg`, kurzlebige Token via JWT-Mint). Bitwarden hält `studis-softwareschmiede-gpg-passphrase` + `studis-softwareschmiede-github-app` (Felder app_id/installation_id/private_key_b64) + optional `studis-softwareschmiede-claude-token`. *(Der frühere Fine-grained-PAT `studis-softwareschmiede-github-token` wurde durch die App abgelöst und **revoked**.)* Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a).
+**Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; GitHub-Zugang via **GitHub App `softwareschmiede-bot`** (App-Key+IDs in `.env.gpg`, kurzlebige Token via JWT-Mint). Bitwarden hält `studis-softwareschmiede-gpg-passphrase` + `studis-softwareschmiede-github-app` (Felder app_id/installation_id/private_key_b64) + optional `studis-softwareschmiede-claude-token`. *(Der frühere Fine-grained-PAT `studis-softwareschmiede-github-token` wurde durch die App abgelöst und **revoked**.)* Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a). **Deploy/Preview (§8a):** Container folgt der Arbeitsmaschine (Mac→`localhost`, VPS→`<app>.alexstuder.cloud`); `dev.alexstuder.cloud` = SSH-DNS zum aktuellen VPS (migrierbar via Bootstrap-Upsert). Cloudflare-Creds (`API_TOKEN`/`ACCOUNT_ID`/`ZONE_ID`) aus dem Brewing-Setup in die factory-`.env.gpg` übernommen.
 
 **Noch zu erarbeiten (vor Scaffold):**
 1. **Agenten im Detail** — je Agent (`requirement, coder, reviewer, tester, retro, train`): genaue Aufgabe, Input/Output-Format, Tools, Lese-Pflichten (Profil/Lessons), harte Grenzen — generisch & sprach-neutral.
@@ -208,4 +240,5 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 - **P2 — Self-Improvement:** `retro` + `train` als PR-erzeugende Skills + Branch-Protection/Gate.
 - **P3 — GitHub-Integration:** `new-project`-Skill (Repo + Board + Profil bootstrappen), Deploy-Template (Actions).
 - **P4 — Beweisen:** Wegwerf-Projekt end-to-end (`/flow` → PASS → tester → deploy → Board).
-- **P5 — optional:** Brewing migrieren.
+- **P5 — Live-Preview & Cloudflare (§8a):** (a) **Mac-Seite zuerst** — `/flow`-Deploy-Schritt: produktives ghcr-Image pullen + lokal `docker run` + `localhost`-URL (ohne VPS testbar). (b) **VPS-Seite** (sobald VPS da): Bootstrap installiert cloudflared + Named-Tunnel + `dev`-DNS-Upsert + Rolle-Marker; `/flow` (VPS-Rolle) legt pro App `<app>.alexstuder.cloud`-Route+CNAME an.
+- **P6 — optional:** Brewing migrieren.
