@@ -79,7 +79,7 @@ Das GitHub-Board ist nicht nur Anzeige, sondern **Arbeits-Queue UND persistenter
 
 ## 4b. /flow-Spine & Handoff-Verträge (akzeptiert)
 
-**Board-Item-Vertrag:** Title + **Acceptance Criteria** (Body) + Priority/Order + optional Depends-on + Status (**nur** der Orchestrator schreibt Status).
+**Board-Item-Vertrag:** Title + **Acceptance Criteria** (Body) + Priority/Order + optional Depends-on + Status (**nur** der Orchestrator schreibt Status). *(Mit §4d ausgelagert: die Acceptance-Criteria leben durable in `docs/specs/<feature>.md`; das Item referenziert die **Spec-ID** statt sie zu enthalten.)*
 
 **`/flow`-Ablauf** (cwd = Ziel-Projekt-Repo):
 0. Board-Ref aus `.claude/profile.md`.
@@ -110,6 +110,46 @@ agent-flow/knowledge/  flutter.md  html.md  java.md  js.md  sql.md  …
 - **Domänen statt nur Sprachen:** DBA/Security/A11y/Architektur sind Packs (`sql.md`, `security.md`, `architecture.md`, …), die die jeweilige Rolle dazulädt (`architekt`→`architecture.md`, `dba`→`sql.md`, `coder` bei berührter Domäne) — ersetzt das Brewing-`dba-coder` sauber.
 - **Selbst-verbessernd:** `train` recherchiert neue Patterns je Sprache → schreibt (PR+Gate) in `knowledge/<x>.md`; `retro` hebt wiederkehrende Projekt-Lessons in die Packs. **Neue Sprache = neue Datei, kein neuer Agent.**
 - **Seed-Packs zu Beginn:** `flutter`, `html`, `css`, `tailwind`, `angular`, `java`, `js`, `sql` (+ `architecture` als Domäne). UI-Frameworks (Angular/Tailwind/CSS/HTML) sind **Packs**, kein eigener Agent.
+
+## 4d. Spec-getriebene Entwicklung: Concept → Detailkonzept → Spec → Code (durable Docs)
+
+**Grundsatz:** Jede Weiterentwicklung läuft **Konzept → Detailkonzept → Spezifikation → Umsetzung**. Die ersten drei Schichten sind **durable, versionierte, sprach-/paradigma-unabhängige** Dokumente und die **Source of Truth** — der Code ist nachgelagert und (z.B. bei einem Sprach-Port) ersetzbar. Ziel: eine App lässt sich aus Konzept+Spec neu bauen, ohne den Alt-Code zu lesen.
+
+**Warum lasttragend, nicht dekorativ:** die Spec rottet nur, wenn niemand sie konsumiert. Hier liegt sie auf dem kritischen Pfad — `coder` baut aus ihr, `tester` testet aus ihren Acceptance-Kriterien, `reviewer` prüft gegen sie. Eine veraltete Spec erzeugt falschen Code/Test und fliegt im Gate auf → selbst-korrigierend statt Disziplin-abhängig.
+
+**Wo (entschieden): `docs/` im App-Repo**, versioniert neben dem Code → Code- und Doc-Änderung im selben PR (Drift-Kontrolle dadurch natürlich). Beim **Sprach-Port** wird `docs/` ins neue Repo **geseedet** (kopiert) → portabel by construction.
+
+**Drei Schichten (entschieden) — einheitliches, sprach-neutrales Skelett aus `templates/_docs/`:**
+
+```
+docs/
+  concept.md         # Konzept:       Problem · Nutzer · Ziele · Nicht-Ziele · Scope.        Ändert selten.
+  architecture.md    # Detailkonzept: Domänenmodell · Komponenten · Kern-Flows · Zustände ·
+                     #                NFRs · Entscheidungen (ADR-Stil).  Logisch, nicht sprachlich.
+  data-model.md      # (DB-Domäne)    Entitäten · Relationen · RLS-Konzept — Teil des Detailkonzepts.
+  design.md          # (UI-Domäne)    Design-System/UX-Vorgaben — Teil des Detailkonzepts.
+  specs/<feature>.md # Spezifikation: ID · Zweck · Verhalten · Acceptance-Kriterien (nummeriert, testbar)
+                     #                · Verträge (I/O, API, Schema) · Edge-Cases/Fehler · NFRs ·
+                     #                Nicht-Ziele · Abhängigkeiten · Status/Version.
+  glossary.md        # Ubiquitous Language (stützt die Sprach-Unabhängigkeit).
+```
+
+**Vereinheitlicht die bisherigen Design-Docs:** die früher in `.claude/` gedachten `architecture.md`/`data-model.md`/`design.md` (von `architekt`/`dba`/`designer`) wandern **unter `docs/`** — sie SIND das Detailkonzept. Und die bisher nur im **Board-Item** lebende **Acceptance-Criteria (§4b)** wird in `docs/specs/<feature>.md` **durable**; das Board-Item *referenziert* künftig eine **Spec-ID** statt die Kriterien selbst zu enthalten.
+
+**Authoring (entschieden: Hybrid):**
+- `requirement` legt/aktualisiert die Specs (+ ggf. `concept`/`architecture`) **vor** dem Board-Item; sein Q&A bleibt transient, der **Doc-Output wird committet** (durable).
+- `coder` baut **aus der Spec-Sektion**; kleine, im Build entdeckte Lücken darf er **direkt in der Spec nachziehen** (`reviewer` prüft Deckung).
+- Größere/strukturelle Abweichungen → Item **Blocked**, zurück an `requirement` (Mensch entscheidet).
+
+**Drift-Gate (entschieden: hart):** der `reviewer` blockt (`CHANGES-REQUIRED`), wenn ein Diff **beobachtbares Verhalten** ändert/erweitert, das nicht in der Spec steht. Heuristik „beobachtbares Verhalten": neue/geänderte Endpunkte, UI-Flows, Ein-/Ausgaben, Fehler-/Statuscodes, Datenfelder, NFR-relevante Limits. Reiner Refactor/Typo ohne Verhaltensänderung → keine Spec-Pflicht (**Proportionalität**). **Code und Spec landen im selben PR — zusammen oder gar nicht.**
+
+**Bestehende Apps / Reverse-Engineering (entschieden: eigener Schritt):** `/init` (Repo adoptieren) bietet einen **einmaligen, mensch-validierten** Schritt „**Spec aus Code ableiten**": liest den Code → erzeugt `docs/concept.md` + `architecture.md` + `specs/` als Entwurf → Mensch reviewt/korrigiert → committen. Erst danach ist die App **portierbar** und unter Drift-Gate. (Macht auch die bestehenden Brewing-Apps dokumentier-/portierbar.)
+
+**Sprach-Port (A → B):** neues Repo → `docs/` seeden → `profile.md` auf Sprache B → Board aus den Specs neu generieren → `/flow`. Der `coder` baut alles **aus den Specs**; der Alt-Code wird nicht gelesen.
+
+**Traceability:** Spec-ID → Board-Item → Commit/PR — durchgängig, in beide Richtungen.
+
+**Touchpoints (Umsetzung später):** `templates/_docs/` (4 Skelette) · `new-project` (scaffoldet `docs/`) · `requirement` (schreibt durable Docs + Board mit Spec-IDs) · `/init` (Reverse-Eng-Schritt) · `coder` (Quelle = Spec; darf Lücken nachziehen) · `reviewer` (Drift-Gate + Spec-Konformität) · `tester` (Tests aus Acceptance-Kriterien) · `/flow` (lädt Spec pro Item; Landen = Code+Spec im selben PR). **Abgrenzung:** Im Brewing sind `requirement-analyst`-Specs bewusst *transient/gitignored* — die Fabrik macht hier das Gegenteil: nur das *Q&A* bleibt flüchtig, der **Spec-Output ist durable**. Zwei getrennte Projekte, zwei Lebenszyklen; nicht vermischen.
 
 ## 5. Self-Improvement mit PR + Gate (das Sicherheits-Herzstück)
 
@@ -168,7 +208,7 @@ GitHub-Org  Studis-Softwareschmiede        ← Container für ALLES
 Pro Zielprojekt, **nicht** in der Fabrik:
 - `CLAUDE.md` — Projekt-Kontext (Stack, Konventionen, Deployment).
 - `.claude/profile.md` — Sprach-/Build-Profil: Sprache, Build-/Test-/Lint-Befehle, Smoke-Probe, **`merge_policy: pr|direct`**, **Board-Referenz** (GitHub-Project-Nummer). Orchestrator/coder lesen das, statt etwas hart zu kodieren.
-- `.claude/architecture.md` + `.claude/data-model.md` + `.claude/design.md` — **bindende Design-Docs** von `architekt`/`dba`/`designer`; `coder`/`reviewer` behandeln sie als Constraints (Architektur-/Modell-/Design-Konformität = Review-Kriterium).
+- `docs/concept.md` + `docs/architecture.md` (+ `docs/data-model.md` / `docs/design.md` je Domäne) + `docs/specs/<feature>.md` + `docs/glossary.md` — **durable, sprach-neutrale Source of Truth** (§4d): Konzept → Detailkonzept → Spec. `architekt`/`dba`/`designer` schreiben das Detailkonzept, `requirement` Konzept+Specs; `coder`/`reviewer`/`tester` behandeln sie als bindende Constraints (Spec-/Architektur-/Modell-/Design-Konformität = Review-Kriterium, hartes Drift-Gate). *(Ersetzt die früher unter `.claude/` gedachten Design-Docs.)*
 - `.claude/lessons/{coder,reviewer,tester}.md` — **projekt-isolierte** Lessons (Reviewer schreibt hierhin, coder liest). Kein Cross-Contamination, Fabrik bleibt sauber.
 - GitHub **Project (v2)** — eigenes Kanban/Scrum-Board pro Projekt (Status-Board + Iteration-Felder für Sprints); via `gh project`/GraphQL automatisierbar.
 
@@ -236,6 +276,8 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 
 **Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; GitHub-Zugang via **GitHub App `softwareschmiede-bot`** (App-Key+IDs in `.env.gpg`, kurzlebige Token via JWT-Mint). Bitwarden hält `studis-softwareschmiede-gpg-passphrase` + `studis-softwareschmiede-github-app` (Felder app_id/installation_id/private_key_b64) + optional `studis-softwareschmiede-claude-token`. *(Der frühere Fine-grained-PAT `studis-softwareschmiede-github-token` wurde durch die App abgelöst und **revoked**.)* Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a). **Deploy/Preview (§8a):** Container folgt der Arbeitsmaschine (Mac→`localhost`, VPS→`<app>.alexstuder.cloud`); `dev.alexstuder.cloud` = SSH-DNS zum aktuellen VPS (migrierbar via Bootstrap-Upsert). Cloudflare-Creds (`API_TOKEN`/`ACCOUNT_ID`/`ZONE_ID`) aus dem Brewing-Setup in die factory-`.env.gpg` übernommen. `dev`-SSH = **A-Record→VPS-IP** (gehärtet, kein Tunnel); Preview-**TTL = manuell** (`/preview down`; Reaper später); **ghcr-Image = Source of Truth** (Cleanup lässt es unangetastet).
 
+**Entschieden (Spec-getriebene Doku, §4d):** Entwicklung läuft **Konzept → Detailkonzept → Spezifikation → Code**; die drei Doc-Schichten sind durable, sprach-neutrale **Source of Truth**. (1) Ort = **`docs/` im App-Repo** (beim Port geseedet); (2) **3 Schichten** `concept.md` / `architecture.md` / `specs/`; (3) **hartes Drift-Gate** (reviewer blockt Verhaltensänderung ohne Spec-Delta, Code+Spec im selben PR); (4) **Hybrid-Authoring** (requirement legt Specs an, coder darf kleine Lücken nachziehen, Strukturelles → zurück an requirement); (5) **eigener Reverse-Eng-Schritt** „Spec aus Code ableiten" (via `/init`, mensch-validiert) → macht auch Bestands-Apps portierbar. Bewusst **anders als die Brewing-Konvention** (dort Specs transient/gitignored): in der Fabrik ist nur das Q&A flüchtig, der Spec-Output durable.
+
 **Noch zu erarbeiten (vor Scaffold):**
 1. **Agenten im Detail** — je Agent (`requirement, coder, reviewer, tester, retro, train`): genaue Aufgabe, Input/Output-Format, Tools, Lese-Pflichten (Profil/Lessons), harte Grenzen — generisch & sprach-neutral.
 2. **`/flow` im Detail** — Schritt-für-Schritt-Orchestrierung: Board lesen → Reihenfolge/Item-Auswahl → Handoffs → Status-Updates → Blocked/Resume → Done-Verlinkung.
@@ -244,6 +286,7 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 ## 12. Phasen-Plan
 
 - **P1 — Scaffold:** Plugin-Skelett (manifest, marketplace, generische `coder/reviewer/tester`, `/flow`-Skill, per-Projekt-Profil/Lessons-Mechanik). Lokal, neues Repo.
+- **P1b — Spec-getriebene Doku (§4d):** `templates/_docs/` (concept/architecture/spec/glossary-Skelett, sprach-neutral) + `new-project` scaffoldet `docs/`; `requirement` schreibt durable Specs + Board referenziert Spec-IDs; `coder`/`reviewer`/`tester` auf Spec-als-Quelle umstellen (reviewer: hartes Drift-Gate); `/init` „Spec-aus-Code"-Schritt; Port = `docs/` seeden + Profil tauschen. Zieht durch P1/P3 (Templates + `new-project`/`init`).
 - **P2 — Self-Improvement:** `retro` + `train` als PR-erzeugende Skills + Branch-Protection/Gate.
 - **P3 — GitHub-Integration:** `new-project`-Skill (Repo + Board + Profil bootstrappen), Deploy-Template (Actions).
 - **P4 — Beweisen:** Wegwerf-Projekt end-to-end (`/flow` → PASS → tester → deploy → Board).
