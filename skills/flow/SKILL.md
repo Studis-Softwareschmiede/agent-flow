@@ -13,7 +13,7 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 ## 1. Nächstes Item wählen
 - `gh project item-list …` → das **To-Do**-Item mit höchster Priority, dessen **Depends-on** alle `Done` sind.
-- Keins → melde „Board leer / nichts offen" und stoppe.
+- Keins → weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
 
 ## 2. In Progress
 - Board-Item-Status → **In Progress**.
@@ -37,6 +37,14 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 ## 6. Nächstes
 - Zurück zu 1, bis das Board leer ist oder der User stoppt.
+
+## 7. Abschluss-Deploy (Preview) — wenn das Board leer ist
+Nur wenn diesem Lauf mindestens ein Item gelandet ist **und** `profile.deploy == docker`:
+1. **Auf CI warten:** der letzte Merge triggert `build.yml` (Image → ghcr). `gh run watch "$(gh run list --repo <repo> --branch main --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status` (best-effort, kurzes Timeout).
+2. **Preview hochfahren:** die `up`-Logik aus dem **`preview`-Skill** ausführen (`docker pull "${image}:latest"` → `docker run … -p <preview_port>:<container_port>` → Smoke; zsh: Image-Ref immer mit `${…}`) → **Test-URL** melden (`local`: `http://localhost:<port>` · `vps`: `https://<app>.<domain>`).
+3. **Best-effort:** CI rot/Timeout oder Pull `denied` → melden + überspringen, den Flow NICHT scheitern lassen (Hinweis auf `/preview up`).
+
+Dann stoppen mit Zusammenfassung (gelandete Items + Test-URL).
 
 ## Grenzen
 - NUR der Orchestrator schreibt Board-Status + committet/PRt; die Agenten editieren nur / berichten.
