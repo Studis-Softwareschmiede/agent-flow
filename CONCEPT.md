@@ -255,6 +255,8 @@ Wo der Container landet, folgt der Arbeitsmaschine (Mac-App → Mac-Docker, VPS-
 - **`/preview up <app>`** — ghcr-Image pullen + Container starten (+ VPS: Route/CNAME anlegen) → URL. (Genau das macht auch `/flow` am Ende automatisch.)
 - **`/preview down <app>`** (Cleanup) — `docker rm -f <app>` + (VPS) `<app>`-Ingress-Regel + DNS-CNAME via API entfernen + optional `docker rmi` (lokales Image prunen). **ghcr-Image, Repo und Board werden NIE angefasst.**
 - **`/preview list`** — aktive Previews (Container + Routen).
+- **`/preview up <app>`** (repo-unabhängig) — Image per Namen `ghcr.io/<org>/<app>` laden ohne ins Repo zu wechseln; `container_port` per `docker inspect` aus dem Image abgeleitet.
+- **`/preview available`** — Menü der previewbaren Apps (Org-Repos außer `agent-flow`) für `up <app>`.
 
 *(Optionaler Reaper später: Previews, die > N Tage idle sind, automatisch abräumen — weil aus ghcr trivial wiederherstellbar.)*
 
