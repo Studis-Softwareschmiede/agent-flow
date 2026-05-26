@@ -17,7 +17,7 @@ Bringt ein bestehendes Repo auf Fabrik-Standard: **clone/fork → adopt → audi
 
 ## 2. Adoptieren (= `init`-Pfad des `new-project`-Skills, idempotent)
 Im Klon den **`/init`-Ablauf** ausführen — bestehende Dateien NICHT überschreiben:
-- **Stack erkennen** (pubspec→flutter · pom/gradle→java · package.json→js/angular · `*.html`→html · `*.sql`→sql-Domäne) → bestätigen → `.claude/profile.md` (+ leere `lessons/`).
+- **Stack erkennen** (pubspec→flutter · pom/gradle→java · package.json→js/angular · `*.html`→html · `*.sql`→sql-Domäne) → bestätigen → `.claude/profile.md` (+ leere `lessons/`). **`profile.image` = `ghcr.io/studis-softwareschmiede/<repo-lowercase>`** — Fork-Repos haben oft Großbuchstaben (z.B. `Spoon-Knife`), das Docker-Image ist aber `spoon-knife` (Docker erlaubt keine Großbuchstaben).
 - **`docs/` scaffolden + Spec aus Code ableiten:** concept/architecture/specs als **Entwurf** — dem User zur Durchsicht vorlegen, **verbindlich erst nach OK**.
 - Fehlende `Dockerfile` / `.github/workflows/build.yml` / `security.yml` / `.github/dependabot.yml` aus `${CLAUDE_PLUGIN_ROOT}/templates/` ergänzen (Sprach-Ökosystem im dependabot.yml setzen).
 - **Board** anlegen (`gh project create`) → Nummer ins Profil.
