@@ -1,6 +1,7 @@
 # Plaintext-Secrets — NIE committen (nur .env.gpg ist versioniert)
 .env
 *.plain
+cloudflare
 
 # transiente Build-Inputs
 specs/
