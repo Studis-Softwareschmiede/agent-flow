@@ -213,7 +213,9 @@ Ablauf         1. Tier-1-Lessons sammeln
                3. gegen bestehende Packs deduplizieren (mergen, nicht doppeln)
                4. Branch + Änderung in knowledge/<x>.md bzw. Agent-Def (mit Regel-ID)
                5. PR öffnen + LEARNINGS-Zeile + Improvement-Board-Karte (Proposed)
-Output         PR-Link + Liste: „promote → knowledge/<x>: <Regel> [ID]"
+Mechanik       NICHT ${CLAUDE_PLUGIN_ROOT} editieren (read-only Cache) → agent-flow-Source
+               temp-klonen (gh repo clone), Branch, edit, push, gh pr create. Details: agents/retro.md.
+Output         PR-Link + Liste: „promote → knowledge/<x>.md|agents/<role>.md: <Regel> [ID]"
 Gate           §5: reviewer-Check + Mensch-Approve → merge → neue Fabrik-Version
 Harte Grenzen  • NIE Direkt-Push auf main (nur PR)
                • promotet NUR Systemisches/Verallgemeinerbares (kein Dump)
@@ -237,6 +239,8 @@ Ablauf         1. aktuellen Pack lesen
                   Regeln zum Entfernen vorschlagen (Packs knapp/kuratiert halten)
                4. Branch + Änderung in knowledge/<lang>.md, JEDE Regel mit Quelle + ID
                5. PR öffnen + LEARNINGS-Zeile + Improvement-Board-Karte (Proposed)
+Mechanik       NICHT ${CLAUDE_PLUGIN_ROOT} editieren (read-only Cache) → agent-flow-Source
+               temp-klonen, Branch, edit, push, gh pr create. Details: agents/train.md.
 Output         PR-Link + Pack-Änderungen, je mit Quelle
 Gate           §5: reviewer-Check + Mensch-Approve → merge → neue Fabrik-Version
 Harte Grenzen  • NIE Direkt-Push auf main (nur PR)
