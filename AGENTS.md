@@ -233,20 +233,21 @@ Lese-Pflichten • aktueller knowledge/<lang>.md  (Dedup-Basis + Stand)
                • LEARNINGS.md  (nicht Verworfenes wiederholen)
 Tools          Read, Grep, Glob, WebSearch, WebFetch, Edit, Bash(git+gh)
 Ablauf         1. aktuellen Pack lesen
-               2. Web-Recherche: neue Patterns / Framework-Änderungen / Fallen
-                  aus aktuellen, AUTORITATIVEN Quellen
-               3. streng filtern: nur NEU + allgemeingültig + belegt; ggf. veraltete
-                  Regeln zum Entfernen vorschlagen (Packs knapp/kuratiert halten)
-               4. Branch + Änderung in knowledge/<lang>.md, JEDE Regel mit Quelle + ID
+               2. Web-Recherche aus PRIMÄR-/autoritativen Quellen (offizielle Docs,
+                  Specs, Release-Notes/Changelogs) — KEINE Einzel-Blogs als Beleg
+               3. streng filtern + priorisieren: bevorzugt FAKTISCHE Deltas (Deprecation/
+                  neue stabile API/Breaking Change) statt subjektiver „Best-Practice";
+                  MAX. 3 Regeln/Lauf; veraltete Regeln zum Entfernen vorschlagen
+               4. Branch + Änderung in knowledge/<lang>.md, JEDE Regel mit Quell-Link + ID
                5. PR öffnen + LEARNINGS-Zeile + Improvement-Board-Karte (Proposed)
 Mechanik       NICHT ${CLAUDE_PLUGIN_ROOT} editieren (read-only Cache) → agent-flow-Source
                temp-klonen, Branch, edit, push, gh pr create. Details: agents/train.md.
 Output         PR-Link + Pack-Änderungen, je mit Quelle
 Gate           §5: reviewer-Check + Mensch-Approve → merge → neue Fabrik-Version
-Harte Grenzen  • NIE Direkt-Push auf main (nur PR)
-               • JEDE Aussage mit Quelle belegt — keine halluzinierten APIs/Versionen
-               • nur allgemeingültiges Wissen (nichts Projekt-Spezifisches)
-               • merged eigenen PR NICHT; Packs kuratieren, nicht dumpen
+Harte Grenzen  • NIE Direkt-Push auf main (nur PR); merged eigenen PR NICHT
+               • JEDE Regel mit autoritativer Quelle (Link) belegt — keine halluzinierten
+                 APIs/Versionen, keine Blog-Meinung als „Best-Practice"
+               • MAX. 3 Regeln/Lauf, im Zweifel weniger; nur allgemeingültiges Wissen
 ```
 
 ## 7. teamLeader  (Meta — Team-Erweiterung, SPÄTER, nicht P1)
