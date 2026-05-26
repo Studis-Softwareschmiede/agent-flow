@@ -13,24 +13,27 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 ## 1. Nächstes Item wählen
 - `gh project item-list …` → das **To-Do**-Item mit höchster Priority, dessen **Depends-on** alle `Done` sind.
+- Aus dem Item-Body die **Spec-Referenz** lesen: `Spec: docs/specs/<feature>.md` + `implements: AC<…>` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Item-Titel).
 - Keins → weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
 
 ## 2. In Progress
 - Board-Item-Status → **In Progress**.
 
 ## 3. Build-Loop (max. 3 Iterationen, N = 1..3)
-1. **coder** (Task): `TASK #<n>` · `ACCEPTANCE` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Er editiert nur den Working-Tree.
-2. **reviewer** (Task): `git diff` + Acceptance. Lies sein `Review-Gate`:
+1. **coder** (Task): `TASK #<n>` · `SPEC: docs/specs/<feature>.md (AC<…>)` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Er editiert nur den Working-Tree (Code + ggf. kleine Spec-Präzisierung).
+2. **reviewer** (Task): `git diff` + die **Spec** (`docs/specs/<feature>.md`, AC<…>). Lies sein `Review-Gate`:
    - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` merken, N++ → zurück zu 3.1.
    - `PASS` → weiter zu 4.
+- **SPEC-LÜCKE:** meldet der coder eine strukturelle/Scope-Lücke (oder der reviewer verweist auf `requirement`) → Item → **Blocked** (+ Kommentar „Spec unvollständig — `/requirement` nötig"), dem User melden. Nicht im Loop raten.
 - **Schleifenschutz:** überlebt derselbe Befund N=3 → Item → **Blocked** (+ Kommentar), melde es dem User, frage ob mit den restlichen Items weiter. Dann 1.
 
 ## 4. Test-Gate
-- **tester** (Task): Working-Tree + Acceptance. Lies `Test-Gate`:
+- **tester** (Task): Working-Tree + die **Spec** (AC<…>). Lies `Test-Gate`:
   - `FAIL` → als Befund zurück an coder (zählt zum Schleifenschutz) → 3.1.
   - `PASS` → weiter zu 5.
 
 ## 5. Landen (gemäß `merge_policy`)
+- **Code UND etwaige `docs/specs/`-Deltas im selben Commit/PR** — zusammen oder gar nicht (Drift-Gate-Prinzip, CONCEPT §4d).
 - **`pr`:** Branch `item-<n>-<slug>` → commit (Message aus Item-Titel + coder-Summary) → push → `gh pr create` → Item → **In Review**. Nach deinem Merge → **Done** (+ PR verlinkt).
 - **`direct`:** commit auf `main` → push → Item → **Done** (+ Commit verlinkt).
 - Commit-Message endet mit der `Co-Authored-By`-Zeile.

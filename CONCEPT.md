@@ -47,9 +47,9 @@ per-Sprache-Wissen, das er zur Laufzeit liest). Sprach-Spezifika kommen aus dem 
 vom Training-Agent gepflegten Sprach-Wissensdateien.
 
 - **requirement** — verfeinert eine vage Anforderung in eindeutige, eigenständig umsetzbare TODOs und schreibt sie priorisiert aufs Board (Front-of-Funnel). Fragt **iterativ in Runden von max. 2–3 Fragen** nach, bis die Anforderung eindeutig UND in kleine Pakete zerlegbar ist. Schreibt KEINEN Code.
-- **architekt** (Design) — definiert die App-Architektur (Struktur/Komponenten/Layer/Tech) → bindende `.claude/architecture.md`. Kein Code.
-- **dba** (Design) — erarbeitet das Datenmodell (Entitäten/Relationen/RLS-Konzept) → bindende `.claude/data-model.md`; der `coder` implementiert es. Kein Code/keine Migrationen.
-- **designer** (Design, optional/UI) — definiert Design-System + UX/Visual-Vorgaben (Palette/Spacing/Typo/Komponenten/A11y) → bindende `.claude/design.md`. Kein Code. Design-Review macht der `reviewer` via UI-Pack-Checklist (kein eigener Design-Reviewer).
+- **architekt** (Design) — definiert die App-Architektur (Struktur/Komponenten/Layer/Tech) → bindende `docs/architecture.md`. Kein Code.
+- **dba** (Design) — erarbeitet das Datenmodell (Entitäten/Relationen/RLS-Konzept) → bindende `docs/data-model.md`; der `coder` implementiert es. Kein Code/keine Migrationen.
+- **designer** (Design, optional/UI) — definiert Design-System + UX/Visual-Vorgaben (Palette/Spacing/Typo/Komponenten/A11y) → bindende `docs/design.md`. Kein Code. Design-Review macht der `reviewer` via UI-Pack-Checklist (kein eigener Design-Reviewer).
 - **coder** — implementiert eine Aufgabe; liest Projekt-Kontext + Lessons + Profil + Design-Docs; testet selbst; übergibt zum Review.
 - **reviewer** — prüft, kategorisiert `Critical / Important / Suggestions`, gibt `Review-Gate: PASS | CHANGES-REQUIRED`. Critical+Important sind der Arbeitsauftrag zurück an den coder.
 - **tester** — der Abschluss nach Review-PASS: **Default „Build + Smoke"**, pro Projekt-Profil auf echte Test-Suite/E2E erweiterbar; eigenes Gate.
@@ -65,7 +65,7 @@ bis `PASS` → tester. **Schleifen-Schutz:** derselbe Befund überlebt max. 3 It
 
 Das GitHub-Board ist nicht nur Anzeige, sondern **Arbeits-Queue UND persistenter Zustand**:
 
-**Vorgelagert (Design):** `architekt` (+ `dba` bei DB-Domäne) erzeugen die bindenden Design-Docs `.claude/architecture.md` / `.claude/data-model.md`, *bevor* `requirement` zerlegt — `coder`/`reviewer` behandeln sie als Constraints.
+**Vorgelagert (Design):** `architekt` (+ `dba` bei DB-Domäne) erzeugen die bindenden Design-Docs `docs/architecture.md` / `docs/data-model.md`, *bevor* `requirement` zerlegt — `coder`/`reviewer` behandeln sie als Constraints.
 
 1. **`requirement`-Agent** verfeinert die Anforderung in einzelne, eigenständig umsetzbare TODOs und schreibt sie als Items aufs Board (Spalte **To Do**) — mit **Reihenfolge/Priority** und notierten harten Abhängigkeiten („braucht #3").
 2. **`/flow` (Orchestrator = die interaktive Haupt-Session)** liest das Board (To Do, in Reihenfolge) und arbeitet **Punkt für Punkt**:

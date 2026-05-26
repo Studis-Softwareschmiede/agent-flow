@@ -3,8 +3,8 @@
 *.plain
 cloudflare
 
-# transiente Build-Inputs
-specs/
+# (Hinweis: KEIN `specs/`-Ignore — seit CONCEPT §4d sind Specs durable und
+#  versioniert; `templates/_docs/specs/` und projekt-eigene `docs/specs/` werden committet.)
 
 # OS / Editor
 .DS_Store

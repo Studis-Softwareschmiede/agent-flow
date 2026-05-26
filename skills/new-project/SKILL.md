@@ -21,6 +21,11 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
    - `profile.md`: `language`, `domains`, `build`/`test`/`lint`/`smoke`, `merge_policy: pr`, `board: <nr>`, `deploy: docker`, `image: ghcr.io/studis-softwareschmiede/<name>`, `registry: ghcr`, `container_port: <EXPOSE aus dem Template-Dockerfile, z.B. 80|8080>` (für `/preview`; `preview_port` wird erst beim ersten `/preview up` vergeben).
    - `CLAUDE.md`: minimaler Kontext (Template + 1–2 Fragen).
    - `lessons/{coder,reviewer,tester}.md`: leer.
+4b. **`docs/` scaffolden** (Spec-getriebene Doku, CONCEPT §4d — aus `${CLAUDE_PLUGIN_ROOT}/templates/_docs/`, sprach-neutral):
+   - **Immer:** `docs/concept.md`, `docs/architecture.md`, `docs/glossary.md`, `docs/specs/_template.md` (Vorlage — bleibt liegen, `requirement` kopiert sie je Feature).
+   - **Bedingt:** `docs/data-model.md` nur wenn `profile.domains` `sql` enthält; `docs/design.md` nur bei UI (`language` ∈ flutter|angular|html oder Domäne `ui`/`accessibility`).
+   - `<App>`-Platzhalter durch den Projektnamen ersetzen; sonst leer lassen (füllen `architekt`/`dba`/`designer`/`requirement`). Diese Docs sind die **durable Source of Truth** (`.claude/` hält nur Prozess-State: profile, lessons).
+   - **Nur `/init` — „Spec aus Code ableiten" (einmalig, mensch-validiert):** bestehenden Code lesen und `docs/concept.md` + `docs/architecture.md` + je Capability `docs/specs/<feature>.md` als **Entwurf** (`status: draft`) füllen (bei Bedarf `architekt`/`requirement` via Task dispatchen). Die abgeleiteten Docs dem User zur Durchsicht/Korrektur **vorlegen, bevor sie verbindlich werden** — erst nach OK gelten sie als Source of Truth (dann ist die App portierbar + unter Drift-Gate).
 5. **Deploy scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
    - `Dockerfile`.
    - `.github/workflows/build.yml`: on push `main` → Image bauen + Push nach `ghcr.io/studis-softwareschmiede/<name>` via eingebautem `GITHUB_TOKEN` (`permissions: packages: write`).
@@ -32,5 +37,5 @@ Repo-URL · Board-URL · Profil · Image-Ziel → „bereit für `/requirement`"
 
 ## Grenzen
 - Kein App-Code.
-- `init`: bestehende `.claude/`-Dateien NICHT überschreiben (mergen/fragen) → idempotent.
+- `init`: bestehende `.claude/`- **und `docs/`**-Dateien NICHT überschreiben (mergen/fragen) → idempotent.
 - Minimal fragen.

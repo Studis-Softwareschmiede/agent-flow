@@ -24,10 +24,11 @@ gh auth setup-git                 # git-über-https nutzt GH_TOKEN
 ## Workflow
 
 ```
-new-project/init   → Repo + Board + .claude/-Scaffold + Dockerfile + CI
-  → architekt (+ dba bei DB, + designer bei UI)   → bindende Design-Docs
-  → requirement                                   → Board-Items (To Do)
+new-project/init   → Repo + Board + .claude/- & docs/-Scaffold + Dockerfile + CI
+  → architekt (+ dba bei DB, + designer bei UI)   → Detailkonzept (docs/architecture|data-model|design.md)
+  → requirement                                   → durable Specs (docs/specs/) + Board-Items (To Do)
   → /flow                                          → coder → reviewer ⇄ Loop → tester → Done
+                                                     (Spec = Source of Truth; hartes Drift-Gate)
 ```
 
 ## Architektur
@@ -39,8 +40,8 @@ agent-flow/
 │                · retro · train · teamLeader
 ├── knowledge/   Packs (Expertise pro Sprache/Domäne): flutter html css tailwind
 │                angular java js sql architecture  — Coder-Guidance / Reviewer-Checklist / Test-Approach
-├── templates/   Scaffolding pro Projekt-Typ (Dockerfile + CI + profile-Defaults)
-├── skills/      Entry-Points: flow · new-project · retro · train
+├── templates/   Scaffolding: pro Projekt-Typ (Dockerfile + CI + profile) + _docs/ (Spec-Doku-Skelette)
+├── skills/      Entry-Points: flow · new-project · requirement · preview · retro · train
 ├── scripts/     .env.gpg-Mechanik (decrypt/encrypt/load)
 ├── CONCEPT.md   Architektur & Entscheidungen
 ├── AGENTS.md    detaillierte Agenten-/Skill-Specs
@@ -53,7 +54,9 @@ agent-flow/
 - **Alles interaktiv** (unter Claude-Abo) — keine headless/Cloud-Ebene.
 - **Self-Improvement nur via PR + Gate:** `retro` (Lessons), `train` (Web), `teamLeader` (neue Rollen)
   ändern Skills NIE direkt → Branch → reviewer-Check + Mensch-Approve → merge.
+- **Spec-getrieben (§4d):** durable, sprach-neutrale `docs/` (Konzept → Detailkonzept → Spec) =
+  Source of Truth; Code ist nachgelagert (ein Sprach-Port baut aus den Specs, nicht aus dem Alt-Code).
 - **Per-Projekt-Zustand** liegt im Projekt-Repo (`CLAUDE.md`, `.claude/profile.md`, `.claude/lessons/*`,
-  Design-Docs, Board) — dieses Repo bleibt projekt-neutral.
+  `docs/` (Konzept/Spec), Board) — dieses Repo bleibt projekt-neutral.
 
 Details: `CONCEPT.md` · `AGENTS.md`.

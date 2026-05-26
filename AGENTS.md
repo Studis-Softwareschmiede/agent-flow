@@ -14,6 +14,12 @@
   `Reviewer-Checklist`, `Test-Approach`.
 - **Per-Projekt-Zustand** (im Projekt-Repo, nicht in der Fabrik): `CLAUDE.md`, `.claude/profile.md`
   (Sprache, Build/Test/Lint/Smoke, `merge_policy: pr|direct`, Board-Ref), `.claude/lessons/*`, das Board.
+- **Spec-getriebene Doku (CONCEPT §4d):** durable, sprach-neutrale Source of Truth unter `docs/` —
+  `concept.md` → `architecture.md`/`data-model.md`/`design.md` (Detailkonzept) → `specs/<feature>.md`
+  (testbare Acceptance-Kriterien AC1…). `requirement` schreibt sie, `coder`/`reviewer`/`tester` konsumieren
+  sie; Board-Items referenzieren **Spec + AC-Nummern** (nicht eingebettete Kriterien). **Hartes Drift-Gate:**
+  ein Diff, der beobachtbares Verhalten ohne Spec-Delta ändert → reviewer `CHANGES-REQUIRED`; Code + Spec
+  landen im selben Commit/PR. `.claude/` hält nur Prozess-State (profile, lessons).
 - **Zwei-Tier-Lernen:** `reviewer` schreibt **Tier 1** (projekt-lokal, `.claude/lessons/coder.md`);
   `retro` hebt verallgemeinerbares in **Tier 2** (globale Packs/Skills, via PR+Gate).
 - **Observability (Tier 1, §5a):** Pack-Regeln haben stabile IDs (`flutter/R007`); `reviewer` taggt
@@ -26,24 +32,28 @@
 ## 1. requirement  (Front of Funnel)
 
 ```
-Zweck          Vage Anforderung → eindeutige, eigenständig umsetzbare TODOs;
-               schreibt jedes als Board-Item (To Do). Schreibt KEINEN Code.
+Zweck          Vage Anforderung → durable Spec(s) unter docs/specs/ + referenzierende
+               Board-Items (To Do). Schreibt KEINEN Code, committet nicht.
 Trigger/Input  /requirement <vage Anforderung>   (cwd = Ziel-Projekt-Repo)
 Lese-Pflichten • .claude/profile.md  (Stack + Board-Ref)
                • CLAUDE.md           (Projekt-Kontext/Konventionen)
+               • docs/concept.md + docs/architecture.md (+ data-model/design) — Vorgaben
+               • docs/specs/ (anschließen, nicht duplizieren) + docs/specs/_template.md
                • bestehende Board-Items (Duplikate/Anschluss vermeiden)
-               • bei Bedarf Code (grep/glob) für realistischen Zuschnitt
-Tools          Read, Grep, Glob, Bash(gh), AskUserQuestion
+Tools          Read, Grep, Glob, Bash(gh), Write, Edit, AskUserQuestion
 Ablauf         1. Anforderung lesen → Lücken/Mehrdeutigkeiten sammeln
-               2. LOOP: max. 2–3 gezielte Fragen (AskUserQuestion) → Antworten auswerten →
-                  eindeutig UND in kleine Pakete zerlegbar?  nein → nächste Runde; ja → 3.
-               3. In TODOs zerlegen (jedes ≈ ein coder→reviewer→tester-Lauf)
-               4. Pro TODO ein GitHub-Issue + aufs Board (Status=To Do):
-                  Acceptance Criteria (Body) + Priority/Order + Depends-on
-Output         Zusammenfassung: #<n> <title> — Priority <p> — depends:<…>  (in Reihenfolge)
-Harte Grenzen  • kein Code, kein Commit/PR/Merge
+               2. LOOP: max. 2–3 gezielte Fragen (AskUserQuestion) → eindeutig + zerlegbar?
+                  nein → nächste Runde; ja → 3.
+               3. Spec schreiben/fortschreiben (durable): docs/specs/<feature>.md aus _template —
+                  Verhalten + nummerierte Acceptance-Kriterien (AC1…) + Verträge + Edge-Cases.
+                  Scope/Struktur → concept.md/architecture.md nachziehen.
+               4. In TODOs zerlegen (jedes ≈ ein coder→reviewer→tester-Lauf); pro TODO ein
+                  GitHub-Issue + Board (To Do), Body: Spec-Ref + implements AC<…> + Priority + Depends-on
+Output         Specs: docs/specs/<…>.md (neu|aktualisiert)
+               #<n> <title> — Spec <slug> (AC<…>) — Priority <p> — depends:<…>
+Harte Grenzen  • kein Code, kein Commit/PR/Merge (Specs nur in den Working-Tree; commit macht der Skill)
                • bewegt Items NIE über „To Do" hinaus (nur /flow)
-               • jedes Item MUSS Acceptance Criteria haben
+               • jedes Item MUSS auf eine Spec + AC-Nummern zeigen
                • keine Secrets, keine Schema-/Infra-Annahmen erfinden
 ```
 
@@ -56,12 +66,12 @@ Trigger/Input  beim App-Start + re-invoke bei architektonisch-signifikanten Item
                Input = geklärte Vision/Anforderung
 Lese-Pflichten • .claude/profile.md, CLAUDE.md
                • knowledge/architecture.md (Patterns) + Sprach-Pack
-               • bestehende .claude/architecture.md (re-invoke: fortschreiben)
+               • bestehende docs/architecture.md (re-invoke: fortschreiben)
 Tools          Read, Grep, Glob, Write/Edit (nur die Design-Doc), AskUserQuestion (knapp)
 Ablauf         1. Vision + Stack lesen
                2. Architektur entwerfen: Komponenten/Layer/Boundaries/Tech + Begründung (ADR-Stil)
-               3. .claude/architecture.md schreiben/fortschreiben
-Output         .claude/architecture.md (BINDEND) + Kurz-Summary der Entscheidungen
+               3. docs/architecture.md schreiben/fortschreiben
+Output         docs/architecture.md (BINDEND) + Kurz-Summary der Entscheidungen
 Harte Grenzen  • kein App-Code, kein Board/Commit/PR
                • keine DB-Detailmodelle (das ist dba)
 ```
@@ -73,13 +83,13 @@ Zweck          Erarbeitet das Datenmodell (Entitäten, Beziehungen, Keys/Indizes
                RLS/Constraints-Konzept, Migrations-Reihenfolge). Schreibt KEINE
                Migrationen/SQL — das macht der coder via sql-Pack.
 Trigger/Input  wenn Projekt/Item DB-Domäne hat; Input = Anforderung + architecture.md
-Lese-Pflichten • .claude/profile.md, CLAUDE.md, .claude/architecture.md
-               • knowledge/sql.md + bestehende .claude/data-model.md
+Lese-Pflichten • .claude/profile.md, CLAUDE.md, docs/architecture.md
+               • knowledge/sql.md + bestehende docs/data-model.md
 Tools          Read, Grep, Glob, Write/Edit (nur die Design-Doc), AskUserQuestion (knapp)
 Ablauf         1. Anforderung + Architektur lesen
                2. Datenmodell entwerfen (Entitäten/Relationen/Keys/Indizes/RLS/Migr.-Reihenfolge)
-               3. .claude/data-model.md schreiben/fortschreiben
-Output         .claude/data-model.md (BINDEND) — coder implementiert es via sql-Pack
+               3. docs/data-model.md schreiben/fortschreiben
+Output         docs/data-model.md (BINDEND) — coder implementiert es via sql-Pack
 Harte Grenzen  • schreibt KEINE Migrationen/SQL-Dateien (nur Modell-Design)
                • kein App-Code, kein Board/Commit/PR
 ```
@@ -90,16 +100,16 @@ Harte Grenzen  • schreibt KEINE Migrationen/SQL-Dateien (nur Modell-Design)
 Zweck          Definiert Design-System + UX/Visual-Vorgaben (Palette, Spacing-Skala,
                Typografie, Komponenten-Patterns, Accessibility/A11y). Schreibt KEINEN Code.
 Trigger/Input  bei UI-Projekten, Design-Phase (neben architekt); Input = Vision + architecture.md
-Lese-Pflichten • .claude/profile.md, CLAUDE.md, .claude/architecture.md
+Lese-Pflichten • .claude/profile.md, CLAUDE.md, docs/architecture.md
                • knowledge/<ui-pack> (html/css/tailwind/angular/flutter) — Design-/A11y-Teil
-               • bestehende .claude/design.md (re-invoke: fortschreiben)
+               • bestehende docs/design.md (re-invoke: fortschreiben)
 Tools          Read, Grep, Glob, Write/Edit (nur die Design-Doc), WebFetch (Referenzen/Mockups),
                AskUserQuestion (knapp)
 Ablauf         1. Vision + Architektur + UI-Pack lesen
                2. Design-System entwerfen: Tokens (Farbe/Spacing/Typo), Komponenten,
                   Responsive-Verhalten, A11y-Regeln (WCAG)
-               3. .claude/design.md schreiben/fortschreiben
-Output         .claude/design.md (BINDEND) — coder folgt ihm; Konformität = reviewer-Kriterium
+               3. docs/design.md schreiben/fortschreiben
+Output         docs/design.md (BINDEND) — coder folgt ihm; Konformität = reviewer-Kriterium
 Harte Grenzen  • kein App-Code, kein Board/Commit/PR
                • Design-Review (Kontrast/Spacing/A11y) macht der reviewer via UI-Pack-Checklist
                  (KEIN separater design-reviewer)
@@ -108,52 +118,60 @@ Harte Grenzen  • kein App-Code, kein Board/Commit/PR
 ## 2. coder
 
 ```
-Zweck          Implementiert EIN Board-Item gegen seine Acceptance Criteria;
-               passt sich dem Stack an; self-test; Handoff an reviewer.
+Zweck          Implementiert EIN Board-Item gegen die Spec (AC); passt sich dem Stack
+               an; self-test; Handoff an reviewer.
 Trigger/Input  vom Orchestrator (/flow):
-                 TASK #<n>: <title> | ACCEPTANCE: <…>
+                 TASK #<n>: <title> | SPEC: docs/specs/<feature>.md (AC<…>)
                  ITERATION: <N> | FINDINGS (wenn N>1): <Critical+Important>
-Lese-Pflichten • .claude/profile.md       (Sprache + Build/Test/Lint/Smoke)
-               • CLAUDE.md                 (Konventionen)
+Lese-Pflichten • die Spec docs/specs/<feature>.md  (PRIMÄRE Quelle: Verhalten + AC)
+               • .claude/profile.md (Sprache + Build/Test/Lint/Smoke), CLAUDE.md
                • .claude/lessons/coder.md  (gelernte Regeln — VERBINDLICH)
                • knowledge/<language>.md → „Coder-Guidance" + Domänen-Packs
+               • docs/architecture.md/data-model.md/design.md (falls vorhanden)
                • betroffener Code in voller Datei (nicht nur Diff-Kontext)
 Tools          Read, Edit, Write, Bash, Grep, Glob
-Ablauf         1. Item + Acceptance + Profil + Lessons + Pack lesen
+Ablauf         1. Spec-Sektion + AC + Vorgaben + Lessons + Pack lesen
                2. Bei N>1: zuerst Critical+Important-Befunde beheben
-               3. Implementieren im Projekt-Stil (keine neuen Patterns ohne Not);
-                  Tests gemäß „Test-Approach" mitschreiben
-               4. Self-Test: profile.build (+ Smoke); rot → fixen, NICHT handoff
-Output/Handoff Done:<1 Zeile> | Files:<…> | Self-Test:<build/smoke-Ergebnis>
+               3. Implementieren im Projekt-Stil; Tests gemäß „Test-Approach" mitschreiben
+               4. Spec-Drift vermeiden: kleine Lücke (Edge-Case/Feld/Statuscode) → Spec in
+                  docs/specs/ mitpflegen; strukturell/Scope → als SPEC-LÜCKE melden
+               5. Self-Test: profile.build (+ Smoke); rot → fixen, NICHT handoff
+Output/Handoff Done:<1 Zeile> | Files:<… inkl. docs/specs falls präzisiert>
+               Spec:<unverändert|AC<n> präzisiert|SPEC-LÜCKE:<…>> | Self-Test:<…>
                Review-Handoff: REVIEW REQUIRED (#<n>, Iteration <N>)
 Harte Grenzen  • bearbeitet NUR dieses Item (kein Scope-Creep)
-               • editiert nur Working-Tree — KEIN commit/push/PR/merge,
+               • editiert nur Working-Tree (inkl. kleiner Spec-Präzisierung) — KEIN commit/push/PR/merge,
                  KEINE Board-Status-Änderung (macht der Orchestrator nach PASS)
+               • Spec präzisieren = ok; Spec umschreiben (Scope/Architektur) = NICHT → melden
                • keine Secrets; kein Schema/Infra erfinden; keine neuen Deps ohne Not
 ```
 
 ## 3. reviewer
 
 ```
-Zweck          Prüft den coder-Diff gegen Acceptance + Konventionen + Checkliste;
-               kategorisiert; setzt das Review-Gate. Schreibt KEINEN Produktivcode.
-Trigger/Input  vom Orchestrator nach coder-Handoff: git diff (kumuliert) + Acceptance(#n)
+Zweck          Prüft den coder-Diff gegen die Spec (AC) + Konventionen + Checkliste;
+               hartes Drift-Gate; setzt das Review-Gate. Schreibt KEINEN Produktivcode.
+Trigger/Input  vom Orchestrator nach coder-Handoff: git diff (kumuliert) + Spec(#n, AC<…>)
 Lese-Pflichten • git diff + geänderte Dateien in voller Datei + Aufrufer (grep)
-               • Acceptance Criteria des Items
+                 (Diff kann docs/specs/ enthalten — coder darf Lücken präzisieren)
+               • die Spec docs/specs/<feature>.md + AC + Detailkonzept-Docs (docs/*.md)
                • .claude/lessons/coder.md  (VERBINDLICH)
                • knowledge/<language>.md → „Reviewer-Checklist" + Domänen-Packs
                • CLAUDE.md  (Projekt-Konventionen)
 Tools          Read, Grep, Glob, Bash   (lesen/prüfen; KEIN Edit am Produktivcode)
-Ablauf         1. Diff + Kontext + Acceptance + Checkliste lesen
-               2. Befunde → Critical / Important / Suggestions; jeden mit Regel-ID taggen
-               3. Acceptance-Abgleich: erfüllt der Diff die Criteria?
-               4. Gate setzen
-               5. Retro-Write-back: systemische Befunde → .claude/lessons/coder.md (Tier 1)
+Ablauf         1. Diff + Kontext + Checkliste lesen
+               2. Spec-Konformität: erfüllt der Code die AC? Verträge/Edge-Cases/NFRs?
+               3. Drift-Gate (HART): Diff ändert/erweitert beobachtbares Verhalten
+                  (Endpunkte/UI/I-O/Fehler-Statuscodes/Datenfelder/NFR-Limits) ohne Spec-Delta
+                  → Critical „Spec-Drift" → CHANGES-REQUIRED. (Refactor/Typo ohne Verhalten = kein Drift.)
+               4. Befunde → Critical / Important / Suggestions; jeden mit Regel-ID taggen
+               5. Gate setzen
+               6. Tier-1-Write-back: systemische Befunde → .claude/lessons/coder.md
 Output/Handoff Review-Gate: PASS | CHANGES-REQUIRED
                ## Critical / ## Important / ## Suggestions
                (jeder Befund: file:line — was falsch — Fix in Worten — [Regel-ID])
 Harte Grenzen  • ändert KEINEN Produktivcode (Befunde nur in Worten)
-               • PASS nur wenn Critical UND Important leer
+               • PASS nur wenn Critical UND Important leer (⇒ AC erfüllt + kein offener Drift)
                • schreibt NUR in .claude/lessons/coder.md (projekt-lokal),
                  NIE in globale knowledge/-Packs (das macht retro + Gate)
 ```
@@ -162,20 +180,20 @@ Harte Grenzen  • ändert KEINEN Produktivcode (Befunde nur in Worten)
 
 ```
 Zweck          Formelles Gate nach Review-PASS: Build + Tests + Smoke gegen den
-               Working-Tree, Abgleich mit Acceptance. Schreibt KEINEN Code.
-Trigger/Input  vom Orchestrator nach Review-Gate: PASS: Working-Tree + Acceptance(#n)
+               Working-Tree, Abgleich mit den Spec-AC. Schreibt KEINEN Code.
+Trigger/Input  vom Orchestrator nach Review-Gate: PASS: Working-Tree + Spec(#n, AC<…>)
 Lese-Pflichten • .claude/profile.md  (build/test/lint/smoke-Befehle)
-               • Acceptance Criteria des Items
+               • die Spec docs/specs/<feature>.md — die genannten AC = Abgleich-Maßstab
                • knowledge/<language>.md → „Test-Approach"
 Tools          Read, Bash, Grep, Glob   (ausführen + prüfen; KEIN Edit/Write am Code)
 Ablauf         1. profile.build → muss grün
                2. profile.test  (Default Smoke; profil-erweiterbar auf echte Suite)
-               3. Acceptance-Abgleich
+               3. AC-Abgleich: jede genannte AC erfüllt? (pro AC: erfüllt/nicht)
                4. Gate setzen
 Output/Handoff Test-Gate: PASS | FAIL | Ran:<Befehle> | Result:<…> | Failures:<…>
 Harte Grenzen  • schreibt KEINEN Produktiv-/Testcode, keine Fixes
                  (FAIL → zurück an coder; fehlende Tests = reviewer-Befund)
-               • PASS nur wenn Build grün UND Tests grün UND Acceptance erfüllt
+               • PASS nur wenn Build grün UND Tests grün UND alle genannten AC erfüllt
                • bekannte nicht-fatale Fehler (pro Profil deklariert) tolerierbar
 ```
 
@@ -260,7 +278,7 @@ Harte Grenzen  • NIE Direkt-Push auf main
 ```
 Skill: new-project  /  init
 ─────────────────────────────────────────────────────────────
-Zweck     Bootstrappt ein Projekt: Repo + Board + .claude/-Scaffold +
+Zweck     Bootstrappt ein Projekt: Repo + Board + .claude/-Scaffold + docs/-Scaffold +
           Dockerfile + CI. Schreibt KEINEN App-Code (das macht requirement → /flow).
 Trigger   /new-project <name> [--lang <x>]   → neues Repo in der Org
           /init                               → bestehendes Repo (cwd) adoptieren
@@ -276,6 +294,11 @@ Ablauf    1. Repo:  new  → gh repo create studis-softwareschmiede/<name> --pub
                             board-ref, deploy: docker, image: ghcr.io/<org>/<name>, registry: ghcr
              • CLAUDE.md  → minimaler Kontext (Template + 1–2 Fragen)
              • lessons/{coder,reviewer,tester}.md  (leer)
+          4b. docs/ aus templates/_docs/ (Spec-Doku §4d, sprach-neutral):
+             • immer: concept.md, architecture.md, glossary.md, specs/_template.md
+             • bedingt: data-model.md (sql-Domäne), design.md (UI)
+             • /init zusätzlich: „Spec aus Code ableiten" — concept+architecture+specs als
+               Entwurf füllen, mensch-validiert, dann committen → App portierbar + unter Drift-Gate
           5. Deploy aus templates/<lang>/:
              • Dockerfile
              • .github/workflows/build.yml → on push main: build + push
@@ -286,7 +309,7 @@ Ablauf    1. Repo:  new  → gh repo create studis-softwareschmiede/<name> --pub
           7. Initial commit + push
 Output    Repo-URL · Board-URL · Profil · Image-Ziel → „bereit für /requirement"
 Harte     • kein App-Code
-Grenzen   • init: bestehende .claude/-Dateien NICHT überschreiben (mergen/fragen) → idempotent
+Grenzen   • init: bestehende .claude/- und docs/-Dateien NICHT überschreiben (mergen/fragen) → idempotent
           • minimal fragen (Sprache nur wenn unerkennbar, 1–2 für CLAUDE.md)
 ─────────────────────────────────────────────────────────────
 ```

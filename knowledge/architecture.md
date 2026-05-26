@@ -11,7 +11,7 @@ Patterns für Software-Architektur. Vom `architekt` geladen (sprach-übergreifen
 ## Reviewer-Checklist
 - Cross-Layer-Leak / zyklische Abhängigkeit → **Important**.
 - Komponente ohne klare Verantwortung / God-Object → **Important**.
-- Signifikante Entscheidung undokumentiert (nicht in `.claude/architecture.md`) → **Suggestion**.
+- Signifikante Entscheidung undokumentiert (nicht in `docs/architecture.md`) → **Suggestion**.
 
 ## Test-Approach
-- n/a (Design-Doc). Konformität wird beim Code-Review gegen `.claude/architecture.md` geprüft.
+- n/a (Design-Doc). Konformität wird beim Code-Review gegen `docs/architecture.md` geprüft.
