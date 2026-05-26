@@ -40,7 +40,10 @@ Argument optional (sonst `app` aus dem Profil).
 4. **NIE anfassen:** ghcr-Image, Repo, Board, Issues.
 
 ## list
-- `docker ps -a --filter label=agent-flow.preview --format 'table {{.Names}}\t{{.Ports}}\t{{.Status}}\t{{.Image}}'`.
+- `docker ps -a --filter label=agent-flow.preview --format '{{.Names}}\t{{.Ports}}\t{{.Status}}\t{{.Image}}'`.
+- Daraus eine Markdown-Tabelle mit **klickbarer URL-Spalte** rendern (die URL gehört **in die Tabelle**, nicht als Zeile darunter): Spalten **Name · URL · Status · Image**. Die URL pro Zeile aus dem veröffentlichten Host-Port ableiten und als blanke URL in die Zelle schreiben (GFM verlinkt sie automatisch → klickbar):
+  - `local` → `http://localhost:<hostport>` (Host-Port aus `Ports`, z.B. `0.0.0.0:8080->80/tcp` → `8080`).
+  - `vps` → `https://<name>.<PREVIEW_DOMAIN>`.
 - `role=vps`: zusätzlich aktive Tunnel-Routen auflisten.
 
 ## Grenzen
