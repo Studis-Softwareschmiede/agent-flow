@@ -39,7 +39,8 @@ agent-flow/
 │                requirement · architekt · dba · designer · coder · reviewer · tester
 │                · retro · train · teamLeader
 ├── knowledge/   Packs (Expertise pro Sprache/Domäne): flutter html css tailwind
-│                angular java js sql architecture  — Coder-Guidance / Reviewer-Checklist / Test-Approach
+│                angular java js sql architecture security  — Coder-Guidance / Reviewer-Checklist / Test-Approach
+│                (security = querschnittlich: ⚑ Floor immer aktiv, auch ohne domains)
 ├── templates/   Scaffolding: pro Projekt-Typ (Dockerfile + CI + profile) + _docs/ (Spec-Doku-Skelette)
 ├── skills/      Entry-Points: flow · new-project · requirement · preview · retro · train
 ├── scripts/     .env.gpg-Mechanik (decrypt/encrypt/load)

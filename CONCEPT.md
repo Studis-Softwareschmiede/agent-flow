@@ -109,7 +109,8 @@ agent-flow/knowledge/  flutter.md  html.md  java.md  js.md  sql.md  …
 - **Pack-Aufbau** (Abschnitte je Rolle): `## Coder-Guidance` (Idiome/Patterns/Fallen) · `## Reviewer-Checklist` (sprachspez. Critical/Important) · `## Test-Approach`.
 - **Domänen statt nur Sprachen:** DBA/Security/A11y/Architektur sind Packs (`sql.md`, `security.md`, `architecture.md`, …), die die jeweilige Rolle dazulädt (`architekt`→`architecture.md`, `dba`→`sql.md`, `coder` bei berührter Domäne) — ersetzt das Brewing-`dba-coder` sauber.
 - **Selbst-verbessernd:** `train` recherchiert neue Patterns je Sprache → schreibt (PR+Gate) in `knowledge/<x>.md`; `retro` hebt wiederkehrende Projekt-Lessons in die Packs. **Neue Sprache = neue Datei, kein neuer Agent.**
-- **Seed-Packs zu Beginn:** `flutter`, `html`, `css`, `tailwind`, `angular`, `java`, `js`, `sql` (+ `architecture` als Domäne). UI-Frameworks (Angular/Tailwind/CSS/HTML) sind **Packs**, kein eigener Agent.
+- **Seed-Packs zu Beginn:** `flutter`, `html`, `css`, `tailwind`, `angular`, `java`, `js`, `sql` (+ `architecture` und `security` als Domänen). UI-Frameworks (Angular/Tailwind/CSS/HTML) sind **Packs**, kein eigener Agent.
+- **Security ist querschnittlich + angehoben** (gebaut): `knowledge/security.md` mit **⚑ Floor**, den `coder`/`reviewer` **immer** anwenden (auch ohne `domains:[security]`, weil Build/Smoke Sicherheitslücken nicht sehen); voller Pack bei `domains:[security]`. Dazu automatisch: CI-**Secret-Scan** (gitleaks, harter Gate vor dem Image) + `tester`-Security-Smoke (Secret-Scan + Dependency-Audit); security-relevante Anforderungen werden **AC** (→ Drift-Gate). KEIN eigener security-reviewer-Agent (Pack-Prinzip).
 
 ## 4d. Spec-getriebene Entwicklung: Concept → Detailkonzept → Spec → Code (durable Docs)
 

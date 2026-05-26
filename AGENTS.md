@@ -12,6 +12,13 @@
 - **Knowledge Packs:** `coder`/`reviewer`/`tester` laden zur Laufzeit `knowledge/<profile.language>.md`
   (+ `knowledge/<domain>.md` je `profile.domains`). Pack-Abschnitte: `Coder-Guidance`,
   `Reviewer-Checklist`, `Test-Approach`.
+- **Security (querschnittlich, angehoben):** `knowledge/security.md` mit **⚑ Floor**, den `coder` (sicher
+  bauen) und `reviewer` (Floor-Befunde = Critical) **IMMER** anwenden — auch ohne `domains:[security]`,
+  weil Build/Smoke/AC Sicherheitslücken nicht sehen. Voller Pack bei `domains:[security]`. Automatik:
+  CI-**Secret-Scan** (gitleaks, harter Gate vor dem Image, `build.yml`) + `tester`-Security-Smoke
+  (Secret-Scan + Dependency-Audit). Security-Anforderungen werden **AC** (→ Drift-Gate). KEIN eigener
+  security-reviewer (Pack-Prinzip). Floor ≠ Gold-Plating (`coder/R01`): Hygiene ist Pflicht, fügt aber
+  keine user-sichtbaren Features hinzu.
 - **Per-Projekt-Zustand** (im Projekt-Repo, nicht in der Fabrik): `CLAUDE.md`, `.claude/profile.md`
   (Sprache, Build/Test/Lint/Smoke, `merge_policy: pr|direct`, Board-Ref), `.claude/lessons/*`, das Board.
 - **Spec-getriebene Doku (CONCEPT §4d):** durable, sprach-neutrale Source of Truth unter `docs/` —
