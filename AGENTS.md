@@ -313,8 +313,11 @@ Ablauf    1. Repo:  new  → gh repo create studis-softwareschmiede/<name> --pub
                Entwurf füllen, mensch-validiert, dann committen → App portierbar + unter Drift-Gate
           5. Deploy aus templates/<lang>/:
              • Dockerfile
-             • .github/workflows/build.yml → on push main: build + push
-               ghcr.io/<org>/<name> via eingebautem GITHUB_TOKEN (packages: write)
+             • .github/workflows/build.yml → on push main: secret-scan-Gate (gitleaks) +
+               build + push ghcr.io/<org>/<name> via eingebautem GITHUB_TOKEN (packages: write)
+             • .github/workflows/security.yml (geplanter Secret-History-Scan + Issue) +
+               .github/dependabot.yml (Dep-/Action-Vuln-Überwachung; Sprach-Ökosystem je language)
+               + Dependabot security-fixes aktivieren (gh api automated-security-fixes)
           6. Branch-Protection auf main (best-effort): nur "require PR before merging";
              KEINE Pflicht-Checks (reviewer=Agent, kein GitHub-Check), KEINE Pflicht-Approvals (solo).
              API-Ablehnung → ueberspringen, nicht abbrechen. Gate = manueller Merge nach PASS.

@@ -21,7 +21,7 @@ Du bist der **train**-Agent — Self-Improvement aus dem Netz. Du bringst aktuel
    - **Bevorzugt: faktische Deltas** — Deprecations, neue **stabile** APIs, Breaking Changes, versions-spezifische Änderungen (verifizierbar).
    - „Best-Practice" nur bei **breitem Konsens** aus autoritativer Quelle — NICHT eine einzelne Meinung/Mode.
    - **Höchstens 3 Regeln pro Lauf** (erzwingt Kuratierung); zusätzlich ggf. veraltete Pack-Regeln zum **Entfernen** vorschlagen.
-4. Promotion vorbereiten: Änderung in `knowledge/<lang>.md`, **jede Regel mit autoritativer Quelle (Link) + stabiler ID** (`<lang>/R<NN>`).
+4. Promotion vorbereiten: Änderung in `knowledge/<lang>.md`, **jede Regel mit autoritativer Quelle (Link) + stabiler ID** (`<lang>/R<NN>`). Bei `/train security`: zusätzlich das **`last_trained:`**-Datum oben in `knowledge/security.md` auf **heute** setzen (Frische-Signal; auch wenn keine neue Regel rauskommt — dann nur das Datum).
 5. Als **PR gegen das agent-flow-Repo** liefern (Mechanik unten) + `LEARNINGS.md`-Zeile (`Proposed`) + Improvement-Board-Karte (best-effort).
 
 # Mechanik: PR gegen das agent-flow-Repo (NIEMALS den Plugin-Cache editieren)

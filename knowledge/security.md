@@ -1,5 +1,7 @@
 # Knowledge Pack: security  (Domäne — querschnittlich)
 
+> **last_trained:** 2026-05-26 — Frische-Signal für durable Sicherheits-Prinzipien. `train` setzt das Datum bei jedem `/train security` auf heute; `/flow` nudged, wenn es > 90 Tage her ist. (Tagesaktuelle CVEs/Exploits gehören NICHT hierher → Dependabot + geplanter Scan.)
+
 Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains: [security]`) für die *Tiefe*; die mit **⚑** markierten Punkte sind der **Security-Floor**, den der `reviewer` **IMMER** anwendet (auch ohne `domains:[security]`) und der `coder` immer befolgt. Regel-IDs: `security/R<NN>`. Orientierung: OWASP Top 10.
 
 ## Coder-Guidance
