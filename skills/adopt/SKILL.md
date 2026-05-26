@@ -13,6 +13,7 @@ Bringt ein bestehendes Repo auf Fabrik-Standard: **clone/fork → adopt → audi
 ## 1. Beschaffen (clone / fork)
 - **Org-eigen** (`<owner>` = `studis-softwareschmiede`): `gh repo clone studis-softwareschmiede/<repo>` → cwd = Klon. App hat Schreibrecht → Branch/PR direkt.
 - **Fremd** (anderer Owner → kein Schreibrecht): **in die Org forken + klonen** — `gh repo fork <owner>/<repo> --org studis-softwareschmiede --clone --remote` (Original bleibt als `upstream`). Gearbeitet wird am **Org-Fork** (App-schreibbar); PRs gehen an den Fork; ein Upstream-PR ist optional und braucht deinen Approve.
+  - **Issues am Fork einschalten** (Pflicht): GitHub liefert Forks mit **deaktivierten Issues** → direkt `gh repo edit studis-softwareschmiede/<repo> --enable-issues`. **Ohne das scheitert das Backlog** (Schritt 4, `gh issue create`). Issues/Board entstehen am **Fork**, nie am Upstream.
 
 ## 2. Adoptieren (= `init`-Pfad des `new-project`-Skills, idempotent)
 Im Klon den **`/init`-Ablauf** ausführen — bestehende Dateien NICHT überschreiben:
