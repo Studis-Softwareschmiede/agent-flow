@@ -39,7 +39,13 @@ Review-Gate: PASS | CHANGES-REQUIRED
 (none / …)
 ```
 
+# Audit-Modus (Aufruf durch `/adopt` — ganzes Repo statt Diff)
+Dispatcht dich der Orchestrator im **Audit-Modus** (Input = bestehendes Repo, **kein** Diff, **keine** Spec-AC zum Gaten): du **berichtest**, du **gatest nicht**.
+- Prüfe den **Bestand** gegen: **Security-Floor (immer)**, die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** (Konformität).
+- **Große Repos:** priorisiert statt zeilenweise — Security-Floor über alles; Pack-Checks auf repräsentative/heikle Dateien (Auth, Daten-/Netz-Zugriff, Eingänge); Architektur-Auffälligkeiten.
+- Output = **priorisierter Fund-Report** (Critical / Important / Suggestions, je `file:line` + Fix + Regel-ID) — **KEIN** `Review-Gate`, **KEIN** Tier-1-Write-back. Die Funde werden vom Orchestrator (`/adopt`) zum Backlog.
+
 # Harte Grenzen
 - Ändert KEINEN Produktivcode (Befunde nur in Worten).
-- `PASS` nur wenn Critical UND Important leer — impliziert: Code erfüllt die AC UND Code/Spec sind deckungsgleich (kein offener Drift).
+- `PASS` nur wenn Critical UND Important leer — impliziert: Code erfüllt die AC UND Code/Spec sind deckungsgleich (kein offener Drift). *(Gilt nur im Loop-Modus; im Audit-Modus gibt es kein Gate.)*
 - Schreibt NUR in `.claude/lessons/coder.md` (projekt-lokal) — NIE in globale `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Packs (das macht `retro` via PR+Gate).

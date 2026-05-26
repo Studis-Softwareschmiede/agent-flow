@@ -42,7 +42,7 @@ agent-flow/
 │                angular java js sql architecture security  — Coder-Guidance / Reviewer-Checklist / Test-Approach
 │                (security = querschnittlich: ⚑ Floor immer aktiv, auch ohne domains)
 ├── templates/   Scaffolding: pro Projekt-Typ (Dockerfile + CI + profile) + _docs/ (Spec-Doku-Skelette)
-├── skills/      Entry-Points: flow · new-project · requirement · preview · retro · train
+├── skills/      Entry-Points: flow · new-project · adopt · requirement · preview · retro · train
 ├── scripts/     .env.gpg-Mechanik (decrypt/encrypt/load)
 ├── CONCEPT.md   Architektur & Entscheidungen
 ├── AGENTS.md    detaillierte Agenten-/Skill-Specs
