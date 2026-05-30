@@ -106,7 +106,7 @@ profile.db_dialect = postgres → knowledge/sql.md
 
 **Apply-Tracking — Marker-Tabelle pro Dialekt:**
 
-| Dialekt | Tabelle/Collection | Schema |
+| Dialekt | Tabelle/Collection | Schema (Pflicht-Spalten) |
 |---|---|---|
 | postgres | `public._schema_migrations` | `(version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())` |
 | mysql | `_schema_migrations` | `(version VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)` |
@@ -114,6 +114,19 @@ profile.db_dialect = postgres → knowledge/sql.md
 | mongodb | Collection `_schema_migrations` | Document `{ _id: "<version>", applied_at: ISODate }` |
 
 **Annahme (begründet):** Marker-Name `_schema_migrations` (Unterstrich-Präfix; angelehnt an Rails/Sqitch-Tradition, signalisiert „internes Tooling"). Bewusst nicht der Flyway/Liquibase-Default — wir betreiben einen schlanken eigenen Runner (keine Java-Runtime im Postgres-/JS-Container).
+
+**Optionale Drift-Detection-Spalte `checksum` (Standard-Empfehlung, Spec-konform auch ohne).** Dialekt-Packs **dürfen** die Marker-Tabelle um eine dritte Spalte erweitern:
+
+| Dialekt | Spalte (optional) |
+|---|---|
+| postgres | `checksum TEXT NULL` |
+| mysql | `checksum VARCHAR(128) NULL` |
+| sqlite | `checksum TEXT NULL` |
+| mongodb | Feld `checksum: <string \| null>` im Document |
+
+Der Wert ist ein Hash (z.B. SHA-256) des Migration-File-Inhalts, beim Apply vom Runner geschrieben. Nutzen: ein erneuter Run vergleicht den Datei-Hash gegen den gespeicherten Wert und erkennt, wenn eine bereits-applied Migration nachträglich editiert wurde (Spec-Verstoß gegen „forward-only" oben) — der Runner bricht dann mit einer klaren Fehlermeldung ab statt still drüberzugehen. Optional, weil kleine Projekte/Demos den Wert nicht brauchen; die Spalte kostet aber praktisch nichts (ein nullable Text-Feld) und ist Industry-Standard (Liquibase, Flyway, Alembic).
+
+**Spec-Konformität:** Implementierungen, die `checksum` NICHT führen, sind weiterhin Spec-konform. Die Spalte ist `NULL`-erlaubt, ihre Befüllung ist Sache des Migration-Runners (`db_scripts/run-migrations.sh`), nicht des App-Codes. Ein Pack-Loader oder Reviewer **darf nicht** das Fehlen der Spalte als Verstoß werten.
 
 **SQLite-Sonderfall (geklärt):** Marker-Tabelle **funktioniert** — SQLite kann CREATE TABLE und Filter wie jeder SQL-Dialekt. Der Sonderfall ist nicht die Tabelle, sondern dass SQLite **kein Service** ist (eine Datei). Der Runner wird also nicht in einem DB-Container gestartet, sondern im **App-Container** ausgeführt (oder einem one-shot init-Container, der das Volume teilt).
 
@@ -459,5 +472,6 @@ Die in §15 aufgeworfenen offenen Fragen wurden vom User entschieden — die Wel
 - **R1 — Polyglott:** **Entschieden: P1 = nur 1 DB pro Projekt.** `profile.db_dialect` bleibt Single-Value-Enum. Companion-Services wie Redis werden außerhalb des DB-Subsystems als Sidecar-Templates geführt. Polyglott (mehrere primäre DBs in einem Projekt) wird in P2 evaluiert, falls echter Bedarf entsteht.
 - **R2 — SQLite-Skalierungsgrenze:** **Entschieden: Ja, prominent dokumentieren.** `knowledge/sql-sqlite.md` erhält eine sichtbare Warn-Sektion zur Single-File-Lock-Limitierung; der DBA-Agent erhält eine Regel (z.B. `sqlite/R0X`), Items mit Multi-Replica-Deployment-Anforderung bei `db_dialect: sqlite` als Critical zu flaggen.
 - **R4 — Migration-CLI-Ort:** **Entschieden: Separates `migrations`-Image.** Der DB-Client (psql/mysql/sqlite3/mongo) wird NICHT ins App-Image gebacken. Stattdessen pro Dialekt ein schlankes `migrations`-Image (z.B. `postgres:16-alpine` mit `run-migrations.sh` als ENTRYPOINT), das im Compose als one-shot-Service zwischen DB-Healthy und App-Start läuft. Saubere Trennung App ↔ DB-Admin.
+- **R5 — Optionale `checksum`-Spalte in `_schema_migrations` (Amendment, 2026-05-30):** **Entschieden: Spec §4 erlaubt eine optionale dritte Spalte `checksum TEXT NULL` (bzw. dialekt-äquivalent).** Verursacht durch Pack-Diff in PR #24 (Postgres-Pack), das diese Spalte für Drift-Detection einführte und damit gegen die ursprüngliche zwei-spaltige Tabellen-Definition driftete. Spec hatte `checksum` weder eingeführt noch bewusst ausgeschlossen — die saubere Lösung ist „optional dokumentiert", sodass jeder Dialekt-Pack frei wählt. Implementierungen ohne `checksum` bleiben Spec-konform. Detail in §4. Unblockt PR #24 + Folge-Packs.
 
 Mit diesen Festlegungen ist die Spec vollständig — Welle 1 kann nach Merge dieses PRs starten.
