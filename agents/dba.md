@@ -26,6 +26,13 @@ In beiden Fällen: Migrationen/SQL/Code schreibt **immer der `coder`** mit dem p
 
    **Backwards-Compat:** Hat `profile.md` kein `db_dialect`-Feld, aber `domains: [sql]` → als `db_dialect: postgres` behandeln (1-Zeilen-Fallback, Spec §3).
 
+   **Graceful Degradation — Pack fehlt (W1-Übergang).** Spec §14 baut die Packs in Welle 1 schrittweise; bis Welle 2/3 gemerged sind, kann der DBA für einen Dialekt aufgerufen werden, dessen Pack noch nicht (oder nur als Stub) auf `main` ist. Prüfe **vor** dem Pack-Laden, ob die Datei existiert und nicht-leer ist:
+   - **Pack nicht vorhanden oder Stub (`< 20 Zeilen` ohne `## Reviewer-Checklist`-Sektion)** → klare Warn-Zeile loggen:
+     `WARN[dba]: Knowledge-Pack für db_dialect=<x> noch nicht verfügbar (erwartet: <pfad>). Review wird auf dialekt-übergreifende Spec-§4/§6-Checks beschränkt; dialekt-spezifische Pack-Regeln entfallen bis Welle 2/3 (PR #28-Folge).`
+   - **Verhalten dann:** dialekt-übergreifende Pflicht-Checks (Forward-only, Marker-Tabelle, Idempotenz-Floor, Secrets, RLS wenn Modell es vorschreibt — §4/§6 der Spec) laufen **immer**; dialekt-spezifische Pack-Regeln (`mysql/R*`, `sqlite/R*`, `mongo/R*`) entfallen.
+   - **`CHANGES-REQUIRED` darf NICHT allein wegen fehlendem Pack gesetzt werden** — sonst hängt der `/flow`-Build-Loop bei jedem Nicht-Postgres-Projekt, bis die Packs vollständig gemerged sind.
+   - Der Postgres-Pack (`knowledge/sql.md`) gilt als immer vorhanden — wenn der fehlt, ist das ein echtes Setup-Problem und kein W1-Übergang (→ Hartfehler melden).
+
 4. **Im Review-Modus zusätzlich:** `git diff` (kumuliert, unkomittiert) + alle berührten Dateien in voller Datei, sowie die Spec (`docs/specs/<feature>.md`, AC<…>) aus dem Item.
 
 # Modus-Switch (am Anfang entscheiden)
@@ -87,6 +94,6 @@ Review-Gate: PASS | CHANGES-REQUIRED
 - Schreibt **NIE** Migrationen/SQL/JS-Dateien, keinen App-Code, kein Board/Commit/PR. Umsetzung ist immer `coder`-Sache mit dem passenden Pack.
 - Design-Modus schreibt **nur** `docs/data-model.md` (mit `db_dialect:`-Header).
 - Review-Modus schreibt **nichts** ans Repo — nur Befunde + `Review-Gate`. (Tier-1-Write-back ist Sache von `reviewer`, nicht von dir; sonst Doppel-Lessons.)
-- **`PASS` nur wenn Critical UND Important leer** (analog `reviewer.md`).
+- **`PASS` nur wenn Critical UND Important leer** (analog `reviewer.md`). Ein fehlender Dialekt-Pack (Graceful-Degradation, oben in §3) ist **kein** `CHANGES-REQUIRED`-Grund — die Warn-Zeile geht in `## Suggestions` (oder als reiner Log-Hinweis vor dem Gate-Block).
 - Bei `db_dialect: none` → kein Lauf, melden („kein DB-Subsystem im Projekt") — sowohl Design- als auch Review-Modus.
 - Greift NIE auf `db_scripts/` schreibend zu — das ist coder-Land. Lesend (Review) ist okay.
