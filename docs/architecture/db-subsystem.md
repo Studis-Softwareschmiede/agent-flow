@@ -443,6 +443,16 @@ Drei Wellen mit klaren Abhängigkeiten — die zweite hängt von der ersten, die
 
 **Cross-Wellen:** Welle 2 darf erst beginnen, wenn Welle 1 (zumindest die jeweils referenzierten Pack-Regeln) gemerged ist. Welle 3 erst, wenn Welle 2 vollständig gemerged ist (Smoke-Tests in Welle 3 brauchen die Templates).
 
+**Amendment (PR #28-Folge, 2026-05-30) — kontrollierte Wellen-Sprünge erlaubt mit Graceful Degradation.** In der Praxis können einzelne Wellen-3-Items (z.B. ein `agents/`- oder Skill-Edit, das nur eine bestehende Dispatch-Regel schärft) **vorgezogen** werden, **wenn** und **nur wenn** der vorgezogene Code sich gegen fehlende Welle-1-/Welle-2-Artefakte **graceful** verhält. Konkrete Anforderung:
+
+1. Der vorgezogene Code muss explizit prüfen, ob das benötigte Artefakt (Pack, Template, Fragment) auf `main` existiert, und im Fehlfall eine klare Warn-Zeile loggen, statt zu scheitern.
+2. Der Build-Loop darf durch ein fehlendes Artefakt **nicht** hängen bleiben (kein `CHANGES-REQUIRED`/Exit-Code-Fehler nur wegen Fehlbestand).
+3. Dialekt-übergreifende Pflicht-Checks (§4 Forward-only / §6 Marker / Secrets) müssen weiterhin laufen, sodass das Gate nie ungeprüft auf `PASS` fällt.
+
+Vorbild-Fall: PR #28 (Welle 1) hat den `/flow`-Dispatch aus §11 vorgezogen; der DBA-Agent enthält den Graceful-Degradation-Guard (`agents/dba.md` §3, „Pack fehlt"). Damit ist die Wartungsverträglichkeit gewahrt und die Drift gegenüber §14 ist dokumentiert statt versteckt.
+
+Diese Amendment-Regel ist explizit eng: sie deckt nur Disziplin-/Wiring-Edits ab, **nicht** das Vorziehen von Pack-Inhalten oder Templates (deren Abhängigkeitskette bleibt strikt linear, weil dort kein „graceful Fallback" möglich ist).
+
 ---
 
 ## 15. Risiken & offene Fragen
