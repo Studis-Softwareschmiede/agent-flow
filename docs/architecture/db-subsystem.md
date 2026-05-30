@@ -449,3 +449,15 @@ Drei Wellen mit klaren Abhängigkeiten — die zweite hängt von der ersten, die
 **R7 — Sicherheits-Surface durch DB-Port-Mapping.** Compose-Fragmente mappen DB-Ports nach `localhost:<port>`. In Preview-Mode ist das ok (Dev-Maschine). Wenn das Compose je in Production wandert, ist das ein **Critical** (DB nach außen). **Mitigation:** Welle-2-Fragmente bekommen einen Kommentar „`ports:`-Block für Preview; in Production ENTFERNEN" — und ein `reviewer`-Regel-Eintrag im jeweiligen Pack.
 
 **R8 — Backup-Default-Pfad.** Die Backup-Skripte sind nur Vorlagen, nicht standardmäßig im Projekt-`db_scripts/`. Für Bestandsprojekte aus dem Brewing-Umfeld (wo Backup kritisch ist) könnte das überraschen. Aber: Plugin bleibt minimal, Brewing hat sein eigenes Backup-Setup. **Entscheidung: stays as drafted, Brewing-Pfad nicht koppeln.**
+
+---
+
+## §16 — Resolutions (Mensch-Entscheidungen, 2026-05-30)
+
+Die in §15 aufgeworfenen offenen Fragen wurden vom User entschieden — die Wellen 1-3 starten mit diesen Festlegungen:
+
+- **R1 — Polyglott:** **Entschieden: P1 = nur 1 DB pro Projekt.** `profile.db_dialect` bleibt Single-Value-Enum. Companion-Services wie Redis werden außerhalb des DB-Subsystems als Sidecar-Templates geführt. Polyglott (mehrere primäre DBs in einem Projekt) wird in P2 evaluiert, falls echter Bedarf entsteht.
+- **R2 — SQLite-Skalierungsgrenze:** **Entschieden: Ja, prominent dokumentieren.** `knowledge/sql-sqlite.md` erhält eine sichtbare Warn-Sektion zur Single-File-Lock-Limitierung; der DBA-Agent erhält eine Regel (z.B. `sqlite/R0X`), Items mit Multi-Replica-Deployment-Anforderung bei `db_dialect: sqlite` als Critical zu flaggen.
+- **R4 — Migration-CLI-Ort:** **Entschieden: Separates `migrations`-Image.** Der DB-Client (psql/mysql/sqlite3/mongo) wird NICHT ins App-Image gebacken. Stattdessen pro Dialekt ein schlankes `migrations`-Image (z.B. `postgres:16-alpine` mit `run-migrations.sh` als ENTRYPOINT), das im Compose als one-shot-Service zwischen DB-Healthy und App-Start läuft. Saubere Trennung App ↔ DB-Admin.
+
+Mit diesen Festlegungen ist die Spec vollständig — Welle 1 kann nach Merge dieses PRs starten.
