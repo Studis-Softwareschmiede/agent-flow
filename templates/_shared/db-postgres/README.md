@@ -10,8 +10,8 @@ Welle-2-Template-Satz fürs DB-Subsystem (Spec [`db-subsystem.md`](../../../docs
 | `.env.db.example` | Vorlage für die DB-spezifischen env-Variablen (POSTGRES_USER/PASSWORD/DB/PGDATA). |
 | `db_scripts/run-migrations.sh` | Migration-Runner: läuft im one-shot `migrations`-Container, applied `db_scripts/<NNN>_*.sql` numerisch, schreibt Marker + Checksum. |
 | `db_scripts/000_init_meta.sql` | Erste Migration: legt Marker-Tabelle `_schema_migrations` an (idempotent). |
-| `scripts/db-backup.sh` | Ad-hoc-Backup via `docker compose exec db pg_dump | gzip`. |
-| `scripts/db-restore.sh` | Restore eines `.sql.gz`-Dumps; bricht bei nicht-leerer DB ab (ohne `--force`). |
+| `scripts/db-backup.sh` | Ad-hoc-Backup via `docker compose exec db pg_dump -Fc` (custom format, intern komprimiert) → `.dump`. |
+| `scripts/db-restore.sh` | Restore eines `.dump`-Files via `pg_restore --clean --if-exists`; verlangt interaktiv den DB-Namen als Bestätigung (`--force` zum Skippen). |
 
 ## Verwendung
 
@@ -32,17 +32,17 @@ docker compose up -d app
 **Backup/Restore:**
 
 ```bash
-./scripts/db-backup.sh                          # → backups/db-<UTC>.sql.gz
-./scripts/db-backup.sh path/to/custom.sql.gz    # expliziter Pfad
-./scripts/db-restore.sh backups/db-<UTC>.sql.gz # bricht ab, wenn DB nicht leer
-./scripts/db-restore.sh backup.sql.gz --force   # override
+./scripts/db-backup.sh                          # → backups/db-<UTC>.dump (pg_dump -Fc)
+./scripts/db-backup.sh path/to/custom.dump      # expliziter Pfad
+./scripts/db-restore.sh backups/db-<UTC>.dump   # fragt nach DB-Namen zur Bestätigung
+./scripts/db-restore.sh backup.dump --force     # skip-confirmation (CI / Smoke)
 ```
 
 ## Konventionen (Spec-Referenz)
 
 - Migrationen forward-only + 3-stellig nullgepaddet (§4).
 - Marker-Tabelle `public._schema_migrations(version, applied_at, checksum)` — `checksum` optional, hier aktiv für Drift-Detection (§16-R5).
-- Migrationen laufen im separaten `migrations`-Image (`postgres:16-alpine`), NICHT im App-Container (§16-R4).
+- Migrationen laufen im separaten `migrations`-Image (`postgres:17-alpine`), NICHT im App-Container (§16-R4).
 - Compose-Pflichten: `restart: unless-stopped`, healthcheck (`pg_isready`), benanntes Volume, kein hartkodiertes Passwort (§5).
 - Production: Port-Mapping aus `compose.fragment.yml` ENTFERNEN (§15-R7).
 

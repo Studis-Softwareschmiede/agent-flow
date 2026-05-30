@@ -14,13 +14,13 @@
 #   - Passwort via env_file (NIE hardkodiert; .env.gpg ist Source of Truth)
 #
 # Migrations-Service (Spec §16-R4):
-#   - separates one-shot Image (gleicher postgres:16-alpine-Tag → image-reuse)
+#   - separates one-shot Image (gleicher postgres:17-alpine-Tag → image-reuse)
 #   - bringt psql mit, ohne dass die App-Images einen DB-Client backen müssen
 #   - läuft NACH `db: service_healthy`, BEVOR App-Services starten
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: ${PROJECT_NAME:-app}_db
     restart: unless-stopped
     env_file:
@@ -37,7 +37,7 @@ services:
     # ^ Preview/Dev nur. In Production ENTFERNEN (Spec §15-R7).
 
   migrations:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: ${PROJECT_NAME:-app}_migrations
     restart: "no"
     depends_on:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-migrations.sh — Migration-Runner für Postgres (Spec §6 + §16-R5)
 #
-# Läuft im separaten `migrations`-Container (postgres:16-alpine; Spec §16-R4),
+# Läuft im separaten `migrations`-Container (postgres:17-alpine; Spec §16-R4),
 # nachdem der `db`-Service healthy ist. Iteriert `db_scripts/<NNN>_*.sql`
 # numerisch sortiert und appliziert ungeapplizte Migrationen in einer
 # Transaktion. Schreibt Marker (version + applied_at + checksum) in
