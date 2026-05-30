@@ -152,7 +152,8 @@ templates/_shared/
   db-mysql/
     compose.fragment.yml
   db-sqlite/
-    README.md                  # erklärt: kein Service, nur Volume-Mount
+    README.md                  # erklärt: kein db-Service, nur Volume-Mount + migrations-Sidecar
+    compose.fragment.yml      # NUR migrations-Service (one-shot, file-DB) + Volume — KEIN db-Service
   db-mongodb/
     compose.fragment.yml
 ```
@@ -186,7 +187,7 @@ volumes:
 
 **MySQL-Fragment** — Image `mariadb:11`, Healthcheck `healthcheck.sh --connect`, Port `3306`, Volume `/var/lib/mysql`. **Mongo-Fragment** — Image `mongo:7`, Healthcheck `mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'`, Port `27017`, Volume `/data/db`.
 
-**SQLite-Sonderfall.** Kein Service. Stattdessen ein **named Volume** im App-Service:
+**SQLite-Sonderfall.** Kein **db**-Service (SQLite ist eine Datei, kein Server). Stattdessen ein **named Volume** im App-Service + ein optionaler one-shot **migrations**-Service im selben Fragment (Alpine + sqlite-CLI), der `db_scripts/run-migrations.sh` einmalig vor App-Start ausführt (`depends_on: service_completed_successfully`). Das migrations-Service-Fragment lebt parallel zu den anderen Dialekten in `db-sqlite/compose.fragment.yml` (saubere Trennung App ↔ DB-Admin, §16-R4):
 
 ```yaml
 services:
@@ -421,7 +422,7 @@ Drei Wellen mit klaren Abhängigkeiten — die zweite hängt von der ersten, die
 **Welle 2 — Templates** (braucht Welle 1, damit Packs Templates referenzieren können):
 - `templates/_shared/db-postgres/` (compose-fragment + backup/restore-Skripte).
 - `templates/_shared/db-mysql/`.
-- `templates/_shared/db-sqlite/` (README + Volume-Snippet; keine compose-fragment).
+- `templates/_shared/db-sqlite/` (README + Volume-Snippet + `compose.fragment.yml` mit **NUR** migrations-Service (one-shot Alpine + sqlite-CLI) + `db_data`-Volume — KEIN db-Service, weil SQLite eine Datei ist; das Fragment realisiert §16-R4 (separater migrations-Container, depends_on `service_completed_successfully`) parallel zu den anderen Dialekten).
 - `templates/_shared/db-mongodb/`.
 - `db_scripts/run-migrations.sh`-Vorlagen pro Dialekt (in den `db-<dialect>/`-Ordnern).
 - `templates/<lang>/Dockerfile` um optionale CLI-Clients ergänzen (commented-in/out je nach Wiring).

@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# SQLite backup — File-Copy mit vorausgehendem WAL-Checkpoint.
+# SQLite backup — sqlite3 `.backup`-Kommando (online-safe, hot backup).
 #
-# Hintergrund (Spec §7, sqlite/Reviewer-Checklist):
-#   Im WAL-Modus (sqlite/R03) leben uncommittete UND committete-aber-
-#   nicht-gemergte Writes in der `<db>-wal`-Sidecar-Datei. Ein nackter `cp`
-#   auf die `<db>`-Hauptdatei kann daher inkonsistent sein (jüngste Writes
-#   fehlen). Mit `PRAGMA wal_checkpoint(TRUNCATE)` werden alle Frames in
-#   die Hauptdatei geschrieben und das WAL gekürzt — anschließend ist
-#   ein `cp` der Hauptdatei konsistent.
+# Hintergrund (Spec §7-Tabelle, Verbatim-Pflicht / coder/L07):
+#   Spec §7 mandatiert für SQLite explizit:
+#     sqlite3 "$DB_PATH" ".backup '$OUT/app.sqlite'"   (online-safe; nicht plain `cp`)
+#   Das `.backup`-Kommando nutzt die SQLite Online Backup API
+#   (https://www.sqlite.org/backup.html) — es kopiert die Datenbank-Seiten
+#   page-by-page mit korrekter Lock-Koordination und liefert auch bei
+#   laufenden Writes eine konsistente Snapshot-Kopie. Kein vorheriger
+#   wal_checkpoint nötig — `.backup` integriert WAL-Frames automatisch in
+#   die Backup-Datei.
 #
 # Annahme: Der `migrations`-Service aus compose.fragment.yml ist als
 # one-shot-Container definiert und hat sqlite3-CLI + das `db_data`-Volume.
 # `docker compose run --rm` startet einen ephemeren Container mit denselben
-# Mounts. Falls ein anderer Container parallel SCHREIBT, ist auch mit
-# Checkpoint kein Single-Point-in-Time garantiert — für saubere Backups
-# entweder die App kurz stoppen oder `db-restore.sh`-Pfad (online .backup)
-# verwenden.
+# Mounts plus zusätzlichem Bind-Mount für das Backup-Output-Verzeichnis.
 #
 # Aufruf:
 #   ./db-backup.sh                  # → ./backups/db-YYYYMMDD-HHMMSS.sqlite
@@ -35,7 +34,7 @@ echo "[backup] DB_PATH (in container) = $DB_PATH"
 echo "[backup] out-dir (on host)      = $abs_out"
 echo "[backup] file                   = $NAME"
 
-# Checkpoint + cp in einem migrations-Container-Run.
+# `.backup` in einem migrations-Container-Run.
 # `/backup` wird vom Host als bind-mount eingehängt, damit die Kopie auf
 # dem Host landet (das DB-Volume bleibt unangetastet).
 docker compose run --rm \
@@ -43,8 +42,7 @@ docker compose run --rm \
   -e DB_PATH="$DB_PATH" \
   migrations \
   sh -c "apk add --no-cache sqlite >/dev/null \
-    && sqlite3 \"\$DB_PATH\" 'PRAGMA wal_checkpoint(TRUNCATE);' \
-    && cp \"\$DB_PATH\" \"/backup/${NAME}\" \
+    && sqlite3 \"\$DB_PATH\" \".backup '/backup/${NAME}'\" \
     && echo '[backup] wrote /backup/${NAME}'"
 
 echo "[backup] done: $abs_out/$NAME"

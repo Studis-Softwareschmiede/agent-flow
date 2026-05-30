@@ -65,8 +65,9 @@ services:
 
 WAL-Sidecars (`app.db-wal`, `app.db-shm`) liegen automatisch neben der
 Hauptdatei im selben Volume — die müssen mitkopiert werden, wenn man das
-Volume klont (nicht aber, wenn man via `db-backup.sh` arbeitet, das macht
-vorher `wal_checkpoint(TRUNCATE)`).
+Volume klont (nicht aber, wenn man via `db-backup.sh` arbeitet, das nutzt
+das `sqlite3 .backup`-Kommando und integriert WAL-Frames automatisch in
+die Backup-Datei).
 
 ---
 
@@ -110,7 +111,7 @@ nichts mehr an (Marker filtert).
 
 ---
 
-## Backup = File-Copy (mit WAL-Checkpoint!)
+## Backup = `sqlite3 .backup`-Kommando (online-safe, hot backup)
 
 ```bash
 ./scripts/db-backup.sh                  # → ./backups/db-YYYYMMDD-HHMMSS.sqlite
@@ -118,10 +119,12 @@ nichts mehr an (Marker filtert).
 ```
 
 Warum nicht nackter `cp`? Im WAL-Modus liegen jüngste Writes in der
-`<db>-wal`-Sidecar-Datei. `db-backup.sh` ruft vor dem Copy
-`PRAGMA wal_checkpoint(TRUNCATE)` auf → WAL ist nach dem Checkpoint leer,
-Hauptdatei ist konsistent. Plain `cp` ohne Checkpoint riskiert Datenverlust
-(Reviewer-Checklist `knowledge/sql-sqlite.md`).
+`<db>-wal`-Sidecar-Datei — ein `cp` der Hauptdatei wäre inkonsistent.
+Spec §7 mandatiert für SQLite das **`sqlite3 .backup`-Kommando** (Online
+Backup API, https://www.sqlite.org/backup.html): kopiert die DB Page-by-
+Page mit Lock-Koordination, integriert WAL-Frames automatisch, ist auch
+bei laufenden Writes atomar+konsistent. Kein vorgelagerter `wal_checkpoint`
+nötig.
 
 Restore:
 
@@ -144,7 +147,7 @@ Bestätigung (kein silent destroy).
 | `.env.db.example` | `DB_PATH=/data/app.db` (keine Credentials) |
 | `db_scripts/000_init_meta.sql` | PRAGMAs (WAL, FK) + `_schema_migrations` STRICT-Table |
 | `db_scripts/run-migrations.sh` | Forward-only Runner mit SHA-256 Drift-Detection |
-| `scripts/db-backup.sh` | WAL-Checkpoint + File-Copy auf Host |
+| `scripts/db-backup.sh` | `sqlite3 .backup`-Kommando (online-safe) auf Host |
 | `scripts/db-restore.sh` | App stoppen → Volume überschreiben → integrity_check → starten |
 | `README.md` | Diese Datei |
 

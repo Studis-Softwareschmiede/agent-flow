@@ -36,6 +36,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 log "DB_PATH=$DB_PATH"
 log "script-dir=$SCRIPT_DIR"
 
+# SQL-Literal-Escaping (security/R03 + sqlite/no-shell-interpolation):
+# Die sqlite3-CLI akzeptiert KEINE positionellen Bind-Werte als zusätzliche
+# Argumente nach der SQL-Anweisung (Test: alpine:3.20 + sqlite 3.45 → syntax error).
+# `.parameter set` evaluiert den Wert als SQL-Expression und ist daher gegen
+# Shell-Injection ebenso angreifbar. Robuste, dialekt-portable Lösung:
+# Single-Quotes verdoppeln und den Wert als SQL-String-Literal in das Query
+# einsetzen. Das ist die kanonische SQL-Escape-Regel (vgl. SQLite docs
+# https://www.sqlite.org/lang_expr.html#literal_values_constants_):
+#   Eingabe `O'Brien`  → Literal `'O''Brien'`
+#   Eingabe `'; DROP …`→ Literal `'''; DROP …'`  (komplett innerhalb des Strings)
+# Deterministisch für JEDE Eingabe, kein Restrisiko.
+sql_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
+}
+
 # 1) DB-Datei sicherstellen (Verzeichnis + leere Datei). VACUUM materialisiert
 #    eine valide (leere) SQLite-Datei, falls touch nur eine 0-Byte-Datei erzeugt.
 db_dir="$(dirname "$DB_PATH")"
@@ -69,8 +84,11 @@ SQL
 applied="$(sqlite3 "$DB_PATH" "SELECT version FROM _schema_migrations ORDER BY version;")"
 
 # Hilfs-Funktion: liefert checksum für gegebene Version (leer, wenn nicht gesetzt).
+# Version wird via sql_quote() escaped — keine Shell-Interpolation direkt in SQL.
 checksum_of() {
-  sqlite3 "$DB_PATH" "SELECT COALESCE(checksum,'') FROM _schema_migrations WHERE version='$1';"
+  local qv
+  qv="$(sql_quote "$1")"
+  sqlite3 "$DB_PATH" "SELECT COALESCE(checksum,'') FROM _schema_migrations WHERE version=${qv};"
 }
 
 # 5+6) Iterieren, Drift-Check, Apply.
@@ -109,8 +127,12 @@ for f in "${files_sorted[@]}"; do
   # selbst. Bei Fehler: set -e stoppt sofort, Marker wird NICHT geschrieben →
   # nächster Lauf wendet die Migration erneut an (Idempotenz-Pflicht, sqlite/R06).
   sqlite3 -bail "$DB_PATH" ".read $f"
+  # Marker-INSERT mit SQL-Literal-Escaping (security/R03) — version und hash
+  # über sql_quote(), keine Shell-Interpolation direkt in SQL.
+  qver="$(sql_quote "$version")"
+  qhash="$(sql_quote "$hash")"
   sqlite3 -bail "$DB_PATH" \
-    "INSERT INTO _schema_migrations(version, checksum) VALUES ('$version', '$hash');"
+    "INSERT INTO _schema_migrations(version, checksum) VALUES (${qver}, ${qhash});"
   log "ok    $base"
 done
 
