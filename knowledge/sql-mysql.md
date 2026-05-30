@@ -1,7 +1,7 @@
 # MySQL / MariaDB Knowledge Pack — pluggable DB-Subsystem (Spec §3)
 
 > **Dialekt:** `mysql` (`profile.db_dialect: mysql`). Engine target: **MariaDB 11 LTS** (preferred FOSS path) and **MySQL 8.0 / 8.4 LTS** (compatible).
-> See also: Postgres-Pack → `knowledge/sql.md` | MongoDB-Pack → `knowledge/mongodb.md`.
+> See also: Postgres-Pack → `knowledge/sql.md` | SQLite-Pack → `knowledge/sql-sqlite.md` | other dialects → `knowledge/`.
 > Regel-IDs: `mysql/R<NN>`.
 
 ---
@@ -12,11 +12,11 @@
 
 - `mysql/R02` — **`CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`** explizit auf jeder neuen Tabelle (und bei Bedarf auf Spalten) setzen. `utf8` / `utf8mb3` ist **deprecated seit MySQL 8.0** (alias für 3-Byte-Encoding, das supplementäre Zeichen inkl. Emojis nicht speichern kann) und wird in einem zukünftigen Major-Release entfernt. MySQL 8.0 default-collation `utf8mb4_0900_ai_ci` und MariaDB-11.6+-Default `utf8mb4_uca1400_ai_ci` unterscheiden sich — explizit `utf8mb4_unicode_ci` setzen gewährleistet portables Verhalten über beide Engines. Quelle: [MySQL 8.0 §12.9.1 utf8mb4](https://dev.mysql.com/doc/refman/8.0/en/charset-unicode-utf8mb4.html) · [MySQL 8.0 §12.9.2 utf8mb3 deprecated](https://dev.mysql.com/doc/refman/8.0/en/charset-unicode-utf8mb3.html) · [MariaDB Character Set Overview](https://mariadb.com/docs/server/reference/data-types/string-data-types/character-sets/character-set-and-collation-overview)
 
-- `mysql/R03` — **Primary Keys: `BIGINT UNSIGNED NOT NULL AUTO_INCREMENT`**. `INT` läuft bei ~2,1 Mrd. Rows über; `BIGINT UNSIGNED` trägt ~18,4 × 10¹⁸ Werte. MySQL-spezifisch: `AUTO_INCREMENT`-Attribut (kein `SERIAL`-Alias wie Postgres); Spalte muss indiziert sein (PRIMARY KEY genügt). Quelle: [MySQL 8.0 §5.6.9 Using AUTO_INCREMENT](https://dev.mysql.com/doc/refman//8.0/en/example-auto-increment.html)
+- `mysql/R03` — **Primary Keys: `BIGINT UNSIGNED NOT NULL AUTO_INCREMENT`**. `INT` läuft bei ~2,1 Mrd. Rows über; `BIGINT UNSIGNED` trägt ~18,4 × 10¹⁸ Werte. MySQL-spezifisch: `AUTO_INCREMENT`-Attribut (kein `SERIAL`-Alias wie Postgres); Spalte muss indiziert sein (PRIMARY KEY genügt). Quelle: [MySQL 8.0 §5.6.9 Using AUTO_INCREMENT](https://dev.mysql.com/doc/refman/8.0/en/example-auto-increment.html)
 
 - `mysql/R04` — **`updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`** für automatisch aktualisierte Zeitstempel-Spalten verwenden. Das `ON UPDATE CURRENT_TIMESTAMP`-Attribut ist MySQL/MariaDB-spezifisch (kein Standard-SQL); es aktualisiert die Spalte beim `UPDATE` automatisch auf den aktuellen Server-Zeitstempel — ohne Trigger. Quelle: [MySQL 8.0 §13.2.5 Automatic Initialization and Updating for TIMESTAMP](https://dev.mysql.com/doc/refman/8.0/en/timestamp-initialization.html) · [MariaDB TIMESTAMP Docs](https://mariadb.com/docs/server/reference/data-types/date-and-time-data-types/timestamp)
 
-- `mysql/R05` — **SQL_MODE `STRICT_TRANS_TABLES` nie deaktivieren.** `STRICT_TRANS_TABLES` ist in MySQL 8.0 und MariaDB standardmäßig aktiv und verhindert silent type-coercion (z.B. leere Strings statt NULL, gekürzte Strings). Migrations oder App-Code dürfen `SET sql_mode = …` nicht nutzen, um Strict Mode zu umgehen — das versteckt Daten-Integritätsprobleme. Quelle: [MySQL 8.0 §7.1.11 Server SQL Modes](https://dev.mysql.com/doc/refman/8.0/en/sql-mode.html)
+- `mysql/R05` — **SQL_MODE `STRICT_TRANS_TABLES` nie deaktivieren.** `STRICT_TRANS_TABLES` ist in MySQL 8.0 standardmäßig aktiv und verhindert silent type-coercion (z.B. leere Strings statt NULL, gekürzte Strings). Für MariaDB: prüfe den effektiven Default via `SELECT @@global.sql_mode;` — der Wert ist versionsabhängig und nicht per öffentlichem Curl-Fetch verifizierbar. Migrations oder App-Code dürfen `SET sql_mode = …` nicht nutzen, um Strict Mode zu umgehen — das versteckt Daten-Integritätsprobleme. Quelle: [MySQL 8.0 §7.1.11 Server SQL Modes](https://dev.mysql.com/doc/refman/8.0/en/sql-mode.html)
 
 ---
 
@@ -50,11 +50,11 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 **Idempotenz-Regeln (mysql-Dialekt, Spec §4):**
 
 - `CREATE TABLE IF NOT EXISTS` — supported.
-- `CREATE INDEX` hat **kein** `IF NOT EXISTS` in MySQL < 8.0.29 / MariaDB < 10.1.4. Ab MySQL 8.0.29+ und MariaDB 10.1.4+ ist `CREATE INDEX IF NOT EXISTS` verfügbar — prüfen, welche Engine-Version deployt ist; alternativ den Marker als alleinige Schutz gegen Doppel-Apply einsetzen.
+- `CREATE INDEX` hat **kein** `IF NOT EXISTS` in MySQL (keiner Version — nicht in 8.0, nicht in 8.4; verifiziert via `curl https://dev.mysql.com/doc/refman/8.0/en/create-index.html | grep -i "IF NOT EXISTS"` → 0 Treffer). MariaDB dokumentiert `CREATE INDEX IF NOT EXISTS`, eine exakte Einführungsversion ist jedoch nicht per öffentlichem Curl-Fetch aus den MariaDB-Docs verifizierbar. Empfehlung: **Idempotenz für Indexes generell über den Marker steuern** (Marker-Tabelle als einzige Schutzschicht gegen Doppel-Apply) oder per explizitem Check: `SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='...' AND INDEX_NAME='...'` vor dem `CREATE INDEX`.
 - `ALTER TABLE` ist nicht idempotent — Migrationen mit `ALTER` ausschließlich per Marker steuern (nicht zweimal anwenden).
 - Transaktion um jede Migration wrappen (`START TRANSACTION … COMMIT`); Rollback bei Fehler. DDL in MySQL/MariaDB ist **nicht** automatisch transaktional für metadata — dennoch explizit wrappen, weil DML-Teile der Migration transaktional sind.
 
-**Compose-Service-Referenz** (Spec §5, Welle 2):
+**Compose-Service-Referenz** (Spec §5, Welle 2 — das vollständige Compose-Fragment inklusive Runner-Integration kommt in Welle 2):
 
 ```yaml
 services:
