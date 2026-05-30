@@ -2,11 +2,14 @@
 # Restore-Vorlage für MariaDB/MySQL-DB (Spec §7).
 #
 # Verwendung:
-#   ./scripts/db-restore.sh backups/db-20260530-120000.sql.gz
-#   ./scripts/db-restore.sh backups/db-...sql.gz --force   # überschreibt non-empty DB
+#   ./scripts/db-restore.sh backups/db-20260530-120000.sql
+#   ./scripts/db-restore.sh backups/db-...sql --force   # überschreibt non-empty DB
 #
 # Pflicht-ENV (analog .env.db):
 #   MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE
+#
+# Format (Spec §7 verbatim): plain SQL erwartet. Für komprimierte Archive
+# vor dem Aufruf manuell entpacken: `gunzip backups/db-*.sql.gz`.
 #
 # Security-Floor (Spec §7): KEIN silent destroy.
 #  1. Empty-DB-Check (zählt Tabellen ausser _schema_migrations) — wenn non-empty
@@ -18,7 +21,7 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $0 <backup.sql.gz> [--force]
+Usage: $0 <backup.sql> [--force]
 
 ENV:
   MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE  (required)
@@ -69,10 +72,11 @@ fi
 printf '[db-restore] restoring %s → service "%s" db "%s" user "%s"\n' \
   "$BACKUP_FILE" "$COMPOSE_SERVICE" "$MARIADB_DATABASE" "$MARIADB_USER"
 
-gunzip -c "$BACKUP_FILE" | \
-  docker compose exec -T \
+# Plain SQL (Spec §7): `mysql … < backup.sql` — kein gunzip-Wrapper.
+docker compose exec -T \
     -e MYSQL_PWD="$MARIADB_PASSWORD" \
     "$COMPOSE_SERVICE" \
-    mariadb -u "$MARIADB_USER" "$MARIADB_DATABASE"
+    mariadb -u "$MARIADB_USER" "$MARIADB_DATABASE" \
+  < "$BACKUP_FILE"
 
 printf '[db-restore] done.\n'

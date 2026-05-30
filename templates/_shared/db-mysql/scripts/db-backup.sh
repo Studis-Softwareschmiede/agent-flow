@@ -2,8 +2,8 @@
 # Backup-Vorlage für MariaDB/MySQL-DB (Spec §7).
 #
 # Verwendung:
-#   ./scripts/db-backup.sh            # backup nach ./backups/db-<ts>.sql.gz
-#   OUT=/tmp/snap.sql.gz ./scripts/db-backup.sh   # explizites Ziel
+#   ./scripts/db-backup.sh            # backup nach ./backups/db-<ts>.sql
+#   OUT=/tmp/snap.sql ./scripts/db-backup.sh   # explizites Ziel
 #
 # Pflicht-ENV (analog .env.db):
 #   MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE
@@ -15,6 +15,10 @@
 #  - KEIN Plaintext-Passwort in argv / Repo / Log.
 #  - Credentials via --defaults-extra-file (tempfile, chmod 600).
 #  - Backup-Datei nie ins Repo committen (in .gitignore aufnehmen).
+#
+# Format (Spec §7 verbatim): plain SQL (kein gzip-Wrapper).
+# Für Archivierung lokal manuell `gzip backups/*.sql` aufrufen —
+# getrennte Verantwortlichkeit von dump und compression.
 
 set -euo pipefail
 
@@ -26,7 +30,7 @@ DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
 
 ts="$(date -u +%Y%m%d-%H%M%S)"
-OUT_DEFAULT="backups/db-${ts}.sql.gz"
+OUT_DEFAULT="backups/db-${ts}.sql"
 OUT="${OUT:-$OUT_DEFAULT}"
 
 mkdir -p "$(dirname "$OUT")"
@@ -48,6 +52,7 @@ printf '[db-backup] dumping %s@%s:%s/%s → %s\n' \
 # --single-transaction = konsistenter Snapshot ohne Tabellen-Locks (InnoDB).
 # --quick              = streamt zeilenweise, kein Memory-Buffer für grosse Tabellen.
 # --routines / --triggers = stored procedures + trigger mitnehmen.
+# Plain SQL (Spec §7): `mysqldump … > backup.sql` — kein gzip-Wrapper.
 mariadb-dump \
   --defaults-extra-file="$CNF" \
   --single-transaction \
@@ -55,6 +60,6 @@ mariadb-dump \
   --routines \
   --triggers \
   "$MARIADB_DATABASE" \
-  | gzip > "$OUT"
+  > "$OUT"
 
 printf '[db-backup] done: %s (%s bytes)\n' "$OUT" "$(wc -c <"$OUT" | tr -d ' ')"

@@ -30,8 +30,8 @@ templates/_shared/db-mysql/
     000_init_meta.sql          # _schema_migrations (Marker-Tabelle)
     run-migrations.sh          # Idempotenter Runner (Spec §6 mysql-Dialekt)
   scripts/
-    db-backup.sh               # mariadb-dump --single-transaction --quick | gzip
-    db-restore.sh              # gunzip | docker compose exec db mariadb
+    db-backup.sh               # mariadb-dump --single-transaction --quick > backup.sql
+    db-restore.sh              # docker compose exec db mariadb < backup.sql
 ```
 
 ---
@@ -103,14 +103,18 @@ docker compose run --rm migrations
 
 | Skript | Was | Ausgabe |
 |---|---|---|
-| `scripts/db-backup.sh` | `mariadb-dump --single-transaction --quick --routines --triggers \| gzip` | `backups/db-YYYYMMDD-HHMMSS.sql.gz` |
-| `scripts/db-restore.sh <file>` | `gunzip \| docker compose exec -T db mariadb` mit Empty-DB-Check + interaktiver Bestätigung (oder `--force`) | restored in `$MARIADB_DATABASE` |
+| `scripts/db-backup.sh` | `mariadb-dump --single-transaction --quick --routines --triggers > backup.sql` | `backups/db-YYYYMMDD-HHMMSS.sql` |
+| `scripts/db-restore.sh <file>` | `docker compose exec -T db mariadb < backup.sql` mit Empty-DB-Check + interaktiver Bestätigung (oder `--force`) | restored in `$MARIADB_DATABASE` |
 
 Beide Skripte:
 
 - lesen Credentials aus den `MARIADB_*`-Env-Variablen (kein hartkodiertes Passwort),
 - verwenden `--defaults-extra-file` oder `MYSQL_PWD`-Env — **niemals** Plaintext in `argv` (sichtbar im Prozess-Listing),
 - `db-restore.sh` druckt **vor** dem Apply eine Warnung und verlangt die DB-Name als Bestätigung (Spec §7 Security-Floor), `--force` umgeht den Prompt für scripted Restores.
+
+**Format:** Plain SQL gemäss Spec §7 verbatim (`mysqldump … > backup.sql` / `mysql … < backup.sql`).
+Kein automatischer gzip-Wrapper — getrennte Verantwortlichkeit von dump und compression.
+Für Archivierung lokal manuell `gzip backups/*.sql` aufrufen; vor dem Restore entsprechend `gunzip backups/db-*.sql.gz`.
 
 ---
 
