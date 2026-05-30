@@ -1,4 +1,4 @@
-# Knowledge Pack: mongodb — MongoDB Knowledge Pack — pluggable DB-Subsystem (Spec §3)
+# mongodb — Knowledge Pack — pluggable DB-Subsystem (Spec §3)
 
 > **Dialekt-Auswahl:** Dieses Pack wird geladen wenn `profile.db_dialect: mongodb`. Für **relationale Workloads** (strukturierte, tabellarisch verknüpfte Daten) sind PostgreSQL/MySQL die richtige Wahl. MongoDB hier **nur** für **explizit dokumenten-orientierte Modelle**: Event-Logs, CMS-Content, polymorphe Inhalte, hierarchische Dokumente mit tiefer Einbettung.
 >
@@ -10,7 +10,7 @@ Regel-IDs: `mongo/R<NN>`. (Modell-DESIGN macht `dba`, Migrationen schreibt `code
 
 ## Coder-Guidance
 
-- `mongo/R01` — **Schema-Validation per `$jsonSchema`** auf jeder Collection. `validationLevel: "strict"` (alle Inserts + Updates validieren) + `validationAction: "error"` (Operation abweisen, nicht nur loggen). Validation beim `db.createCollection()`-Call setzen; nachträglich per `collMod` ergänzbar. Regel: ohne `$jsonSchema` ist eine Collection ungeprüft — das ist kein Feature, sondern ein Risiko. Quelle: [MongoDB Manual — Schema Validation](https://www.mongodb.com/docs/manual/core/schema-validation/) · [Specify JSON Schema](https://www.mongodb.com/docs/manual/core/schema-validation/specify-json-schema/)
+- `mongo/R01` — **Schema-Validation per `$jsonSchema`** auf jeder Collection. `validationLevel: "strict"` (alle Inserts + Updates validieren — bereits Default, explizit setzen schützt vor zukünftigen Default-Änderungen) + `validationAction: "error"` (Operation abweisen, nicht nur loggen — bereits Default, ebenfalls explizit setzen). Validation beim `db.createCollection()`-Call setzen; nachträglich per `collMod` ergänzbar. Regel: ohne `$jsonSchema` ist eine Collection ungeprüft — das ist kein Feature, sondern ein Risiko. Quelle: [MongoDB Manual — Schema Validation](https://www.mongodb.com/docs/manual/core/schema-validation/) · [Specify JSON Schema](https://www.mongodb.com/docs/manual/core/schema-validation/specify-json-schema/)
 
 - `mongo/R02` — **Indexes als Code**: alle Indexes via Migration (Datei in `db_scripts/`) definieren, **nicht** ad-hoc in der Shell oder per App-Startup-Hook. Mindestens ein Index auf jede Property, die in einer Query-`filter`-Achse vorkommt. Compound-Index-Reihenfolge nach der **ESR-Regel** (Equality → Sort → Range): Equality-Felder zuerst, dann Sort-Felder, dann Range-Felder (`$gt`, `$lt`, `$in` mit ≥201 Elementen, `$regex`). `createIndex()` ist idempotent wenn Name + Optionen identisch sind; Umbenennung eines bestehenden Index erfordert `dropIndex` + `createIndex`. Quelle: [MongoDB Manual — ESR Guideline](https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-rule/) · [createIndex](https://www.mongodb.com/docs/manual/reference/method/db.collection.createIndex/)
 
@@ -28,13 +28,15 @@ Regel-IDs: `mongo/R<NN>`. (Modell-DESIGN macht `dba`, Migrationen schreibt `code
 
 **Marker-Collection `_schema_migrations`:**
 ```js
-// Document-Struktur (Spec §4):
+// Document-Struktur (Spec §4 inkl. optionalem checksum aus §16-R5):
 { _id: "<version>", applied_at: new Date(), checksum: "<sha256>" }
+// Hinweis: checksum ist optional — fehlt das Feld, wenn der Migration-Runner es nicht setzt.
+// JSON/BSON erlaubt fehlende optionale Felder; kein default-Wert nötig.
 ```
 
 **Idempotenz-Regeln für MongoDB (Spec §4 — mongo):**
 
-- `db.createCollection(name, options)` — idempotent wenn Name + Options identisch; gibt `{ ok: 1 }` zurück wenn Collection bereits existiert mit gleichen Einstellungen. Achtung: andere `options` (z.B. anderer `validator`) → Fehler (`MongoServerError: Collection already exists`). Migrations müssen daher Schema-Änderungen an bestehenden Collections via `collMod` durchführen, nicht via erneutes `createCollection`.
+- `db.createCollection(name, options)` — idempotent wenn Name + Options identisch; gibt `{ ok: 1 }` zurück wenn Collection bereits existiert mit gleichen Einstellungen. Achtung: andere `options` (z.B. anderer `validator`) → Serverfehler ("Collection already exists" — driver-spezifische Fehlerklasse, z.B. `MongoServerError` im Node-Driver: *"An error coming from the mongo server"*, [Node Driver API](https://mongodb.github.io/node-mongodb-native/6.0/classes/MongoServerError.html)). Migrations müssen daher Schema-Änderungen an bestehenden Collections via `collMod` durchführen, nicht via erneutes `createCollection`.
 - `db.collection.createIndex(keys, {name: 'idx_x'})` — idempotent (silent no-op wenn Index mit gleichem Namen + Spec existiert).
 - `updateMany` mit `{upsert: true}` — idempotent.
 - `insertOne`/`insertMany` — **nicht** idempotent; bei Seed-Daten `replaceOne({_id: ...}, doc, {upsert: true})` verwenden.
@@ -106,5 +108,5 @@ print('Migration ' + VERSION + ' applied.');
 ## Test-Approach
 
 - Migration läuft sauber **und** idempotent: `mongosh --file 001_init.js` zweimal ausführen → beide Läufe `exit 0`; Marker `_schema_migrations.findOne({_id: '001'})` existiert genau einmal.
-- Schema-Validation-Probe: Insert eines invaliden Dokuments (fehlendes Pflichtfeld) → `MongoServerError` mit Validation-Failure erwartet.
+- Schema-Validation-Probe: Insert eines invaliden Dokuments (fehlendes Pflichtfeld) → Serverfehler mit Validation-Failure erwartet (im Node-Driver: `MongoServerError`).
 - Connection-Pool-Probe: MongoClient-Singleton nachweisen (keine mehrfache Instanziierung im App-Code).
