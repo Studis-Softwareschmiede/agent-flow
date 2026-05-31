@@ -20,12 +20,12 @@ DIALECT="mysql"
 
 PROJECT="smoke-${DIALECT}-$$"
 
-TMPDIR="$(mktemp -d "/tmp/smoke-${DIALECT}-XXXXXX")"
+SMOKE_DIR="$(mktemp -d "/tmp/smoke-${DIALECT}-XXXXXX")"
 cleanup() {
   local rc=$?
-  if [ -d "$TMPDIR" ]; then
-    ( cd "$TMPDIR" && docker compose -p "$PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true )
-    rm -rf "$TMPDIR"
+  if [ -d "$SMOKE_DIR" ]; then
+    ( cd "$SMOKE_DIR" && docker compose -p "$PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true )
+    rm -rf "$SMOKE_DIR"
   fi
   exit "$rc"
 }
@@ -40,18 +40,18 @@ command -v docker >/dev/null || fail "docker CLI not found"
 docker info >/dev/null 2>&1 || fail "docker daemon not reachable"
 [ -d "$TEMPLATE_DIR" ] || fail "template not found: $TEMPLATE_DIR"
 
-log "TMPDIR=$TMPDIR"
+log "SMOKE_DIR=$SMOKE_DIR"
 log "PROJECT=$PROJECT"
 
 # ---- 1. Template kopieren (Compose-Fragment + db_scripts/) ----
-mkdir -p "$TMPDIR/db_scripts"
-cp "$TEMPLATE_DIR/compose.fragment.yml" "$TMPDIR/docker-compose.yml"
-cp "$TEMPLATE_DIR/db_scripts/000_init_meta.sql" "$TMPDIR/db_scripts/"
-cp "$TEMPLATE_DIR/db_scripts/run-migrations.sh" "$TMPDIR/db_scripts/"
-chmod +x "$TMPDIR/db_scripts/run-migrations.sh"
+mkdir -p "$SMOKE_DIR/db_scripts"
+cp "$TEMPLATE_DIR/compose.fragment.yml" "$SMOKE_DIR/docker-compose.yml"
+cp "$TEMPLATE_DIR/db_scripts/000_init_meta.sql" "$SMOKE_DIR/db_scripts/"
+cp "$TEMPLATE_DIR/db_scripts/run-migrations.sh" "$SMOKE_DIR/db_scripts/"
+chmod +x "$SMOKE_DIR/db_scripts/run-migrations.sh"
 
 # Test-Migration anlegen (MySQL/MariaDB: ENGINE=InnoDB + utf8mb4 gemäß mysql/R01+R02)
-cat >"$TMPDIR/db_scripts/001_smoke.sql" <<'SQL'
+cat >"$SMOKE_DIR/db_scripts/001_smoke.sql" <<'SQL'
 CREATE TABLE IF NOT EXISTS smoke (
   id    INT         NOT NULL,
   label VARCHAR(64) NOT NULL,
@@ -61,14 +61,14 @@ INSERT IGNORE INTO smoke (id, label) VALUES (1, 'ok');
 SQL
 
 # .env.db mit Test-Credentials
-cat >"$TMPDIR/.env.db" <<'ENV'
+cat >"$SMOKE_DIR/.env.db" <<'ENV'
 MARIADB_DATABASE=smokedb
 MARIADB_USER=smoke
 MARIADB_PASSWORD=smoke-test-pw
 MARIADB_ROOT_PASSWORD=smoke-root-pw
 ENV
 
-cd "$TMPDIR"
+cd "$SMOKE_DIR"
 
 # ---- 2. DB starten + warten ----
 log "starting db service (mariadb:11)"
@@ -139,7 +139,7 @@ log "idempotenz ok"
 
 # ---- 5. Drift — MySQL-Runner hard-fails ----
 log "VERTRAG 3: drift — edit applied migration → runner exit != 0"
-echo "-- drift marker $(date +%s)" >>"$TMPDIR/db_scripts/001_smoke.sql"
+echo "-- drift marker $(date +%s)" >>"$SMOKE_DIR/db_scripts/001_smoke.sql"
 
 set +e
 run_log_3="$(docker compose -p "$PROJECT" run --rm migrations 2>&1)"

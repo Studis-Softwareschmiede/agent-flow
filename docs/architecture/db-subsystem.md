@@ -378,32 +378,36 @@ Der Orchestrator dispatcht `dba` (im Review-Modus, nicht Design-Modus) **wenn ei
 
 ## 13. Test-Verträge — Selbsttest der Fabrik
 
-Die DB-Subsystem-Erweiterung wird in der Fabrik durch **vier Smoke-Projekte** verifiziert (eines pro Dialekt). Diese leben in `tests/smoke-db/` innerhalb des `agent-flow`-Repos und werden von einem neuen Workflow `tests/smoke-db.yml` (Welle 3) bei jedem PR ausgeführt, der `knowledge/sql*.md`, `knowledge/mongodb.md`, `templates/_shared/db-*` oder `skills/preview/SKILL.md` berührt.
+Die DB-Subsystem-Erweiterung wird in der Fabrik durch **vier Smoke-Skripte** verifiziert (eines pro Dialekt). Diese leben in `tests/db-subsystem/` innerhalb des `agent-flow`-Repos und werden von einem neuen Workflow `.github/workflows/smoke-db.yml` (Welle 3) bei jedem PR ausgeführt, der `knowledge/sql*.md`, `knowledge/mongodb.md`, `templates/_shared/db-*` oder `skills/preview/SKILL.md` berührt.
 
-**Smoke-Projekt-Struktur** (gilt für alle 4):
+**Smoke-Suite-Struktur** (kanonisch, umgesetzt in PR #36):
 
 ```
-tests/smoke-db/<dialect>/
-  docker-compose.yml         # App + (für 3 von 4 Dialekten) db
-  Dockerfile                 # minimaler curl/echo-Service
-  db_scripts/
-    001_init.sql|js          # CREATE TABLE foo / createCollection
-    run-migrations.sh
-  expected.txt               # "ok" — Output des Smoke-SELECTs
+tests/db-subsystem/
+  run-all.sh                 # sequentieller Runner über alle 4 Dialekte, sammelt Exit-Codes
+  smoke-postgres.sh          # monolithisches Per-Dialekt-Skript (apply + idempotenz + drift)
+  smoke-mysql.sh
+  smoke-sqlite.sh
+  smoke-mongodb.sh
+  README.md                  # lokales Ausführungs-/Voraussetzungs-Doc
 ```
 
-**Smoke-Verlauf** (ein Skript `tests/smoke-db/run.sh`, vom CI-Job pro Dialekt aufgerufen):
+Jedes `smoke-<dialect>.sh` ist **monolithisch + selbst-validierend** (keine separate `expected.txt`): es scaffoldet eine Wegwerf-Testumgebung in `SMOKE_DIR=$(mktemp -d /tmp/smoke-<dialect>-XXXXXX)` aus den `templates/_shared/db-<dialect>/`-Artefakten, startet den Stack, prüft alle Stufen inline und räumt im `trap` wieder ab.
+
+**Begründung für monolithische Struktur (gegenüber dem ursprünglichen `tests/smoke-db/<dialect>/{run.sh, expected.txt}`-Layout):** Per-Dialekt-Skripte sind übersichtlich, portabel (kein gemeinsamer `run.sh` mit case/switch pro Dialekt), validieren erwartete Outputs inline (kein File-Diff-Roundtrip nötig) und haben in PR #36 echte Drift-Bugs in den Compose-Fragmenten gefunden. Eine separate `expected.txt` würde nur sehr triviale „ok"-Vergleiche kapseln; der Mehrwert rechtfertigt das zusätzliche File-Layout nicht.
+
+**Smoke-Verlauf** (ein Skript `tests/db-subsystem/smoke-<dialect>.sh`, vom CI-Job pro Dialekt aufgerufen):
 
 1. `docker compose -p smoke-<dialect> up -d`.
 2. Auf DB-Healthcheck warten (außer sqlite).
-3. `run-migrations.sh` ausführen → muss exit 0.
-4. **Idempotenz-Test:** `run-migrations.sh` ein zweites Mal ausführen → muss exit 0 (Marker filtert).
-5. Smoke-Query gegen den DB-Service: ein `SELECT 1` / `db.foo.findOne()` aus einem Throwaway-Client-Container.
-6. Output vergleichen mit `expected.txt`.
-7. `docker compose -p smoke-<dialect> down -v`.
-8. PASS = alle 4 Dialekte grün; ein roter = PR rot.
+3. `run-migrations.sh` ausführen → muss exit 0 + Marker in `_schema_migrations` erscheinen.
+4. **Idempotenz-Test:** `run-migrations.sh` ein zweites Mal ausführen → muss exit 0, Marker-Count bleibt gleich.
+5. **Drift-Test:** Migrations-Datei mutieren (Trailing-Kommentar), Runner ein drittes Mal → muss erkennen + sauber abbrechen oder warnen (Pack-spezifisch).
+6. Smoke-Query gegen den DB-Service inline im Skript.
+7. `docker compose -p smoke-<dialect> down -v` im `trap`.
+8. PASS = alle 4 Dialekte grün; ein roter = PR rot. `run-all.sh` aggregiert "N/4 PASS".
 
-**Annahme (begründet):** Smoke testet **die Mechanik** (Runner, Marker, Idempotenz, Compose-Fragment), nicht den Pack-Inhalt (Pack-Korrektheit ist `reviewer`-/Mensch-Sache; bei wir testen würden, müssten wir den ganzen `/flow` simulieren — zu schwer für CI).
+**Annahme (begründet):** Smoke testet **die Mechanik** (Runner, Marker, Idempotenz, Drift-Erkennung, Compose-Fragment), nicht den Pack-Inhalt (Pack-Korrektheit ist `reviewer`-/Mensch-Sache; wenn wir das testen würden, müssten wir den ganzen `/flow` simulieren — zu schwer für CI).
 
 ---
 
@@ -434,7 +438,7 @@ Drei Wellen mit klaren Abhängigkeiten — die zweite hängt von der ersten, die
 - `skills/flow/SKILL.md`: DBA-Review-Dispatch bei Trigger §11.
 - `skills/preview/SKILL.md`: DB-Service-Start, Migrations-Apply, Isolations-Compose-Projekt-Namen.
 - `templates/<lang>/profile.md`: `db_dialect: <bei Scaffold gesetzt>` Zeile.
-- `tests/smoke-db/<dialect>/` + `.github/workflows/smoke-db.yml`.
+- `tests/db-subsystem/smoke-<dialect>.sh` + `tests/db-subsystem/run-all.sh` + `.github/workflows/smoke-db.yml` (siehe §13 für die kanonische Struktur, umgesetzt in PR #36).
 - **Output:** End-to-end nutzbar.
 
 **Parallelisierbarkeit:**
@@ -468,7 +472,7 @@ Diese Amendment-Regel ist explizit eng: sie deckt nur Disziplin-/Wiring-Edits ab
 
 **R5 — `tests/smoke-db.yml` läuft Docker-in-Docker auf GitHub Actions.** Funktioniert (DinD ist Standard), kostet aber Minuten. Bei langer Smoke-Pipeline → Lauf nur auf Pfad-Änderungen filtern (`paths:` in der workflow-Trigger-Config). **Geklärt:** Filter ist Pflicht (in Welle 3 spezifiziert).
 
-**R6 — `domains: [sql]` Backwards-Compat.** Der einzeilige Fallback (`domains: [sql]` ohne `db_dialect` ⇒ `postgres`) muss in `coder`/`reviewer`/`tester`/`dba` konsistent geschrieben sein, sonst zerfällt der Bestand. **Frage:** Eigene Test-Datei dafür? — Ja, ein 5. Smoke-Projekt `tests/smoke-db/legacy-sql-domain/` in Welle 3.
+**R6 — `domains: [sql]` Backwards-Compat.** Der einzeilige Fallback (`domains: [sql]` ohne `db_dialect` ⇒ `postgres`) muss in `coder`/`reviewer`/`tester`/`dba` konsistent geschrieben sein, sonst zerfällt der Bestand. **Frage:** Eigener Smoke-Test dafür? — Ja, ein 5. Skript `tests/db-subsystem/smoke-legacy-sql-domain.sh` in Welle 3 (analog zur Per-Dialekt-Struktur aus §13).
 
 **R7 — Sicherheits-Surface durch DB-Port-Mapping.** Compose-Fragmente mappen DB-Ports nach `localhost:<port>`. In Preview-Mode ist das ok (Dev-Maschine). Wenn das Compose je in Production wandert, ist das ein **Critical** (DB nach außen). **Mitigation:** Welle-2-Fragmente bekommen einen Kommentar „`ports:`-Block für Preview; in Production ENTFERNEN" — und ein `reviewer`-Regel-Eintrag im jeweiligen Pack.
 
@@ -484,5 +488,6 @@ Die in §15 aufgeworfenen offenen Fragen wurden vom User entschieden — die Wel
 - **R2 — SQLite-Skalierungsgrenze:** **Entschieden: Ja, prominent dokumentieren.** `knowledge/sql-sqlite.md` erhält eine sichtbare Warn-Sektion zur Single-File-Lock-Limitierung; der DBA-Agent erhält eine Regel (z.B. `sqlite/R0X`), Items mit Multi-Replica-Deployment-Anforderung bei `db_dialect: sqlite` als Critical zu flaggen.
 - **R4 — Migration-CLI-Ort:** **Entschieden: Separates `migrations`-Image.** Der DB-Client (psql/mysql/sqlite3/mongo) wird NICHT ins App-Image gebacken. Stattdessen pro Dialekt ein schlankes `migrations`-Image (z.B. `postgres:16-alpine` mit `run-migrations.sh` als ENTRYPOINT), das im Compose als one-shot-Service zwischen DB-Healthy und App-Start läuft. Saubere Trennung App ↔ DB-Admin.
 - **R5 — Optionale `checksum`-Spalte in `_schema_migrations` (Amendment, 2026-05-30):** **Entschieden: Spec §4 erlaubt eine optionale dritte Spalte `checksum TEXT NULL` (bzw. dialekt-äquivalent).** Verursacht durch Pack-Diff in PR #24 (Postgres-Pack), das diese Spalte für Drift-Detection einführte und damit gegen die ursprüngliche zwei-spaltige Tabellen-Definition driftete. Spec hatte `checksum` weder eingeführt noch bewusst ausgeschlossen — die saubere Lösung ist „optional dokumentiert", sodass jeder Dialekt-Pack frei wählt. Implementierungen ohne `checksum` bleiben Spec-konform. Detail in §4. Unblockt PR #24 + Folge-Packs.
+- **R8 — Smoke-Suite-Struktur (Amendment, 2026-05-31, PR #36):** **Entschieden: monolithische Per-Dialekt-Skripte unter `tests/db-subsystem/smoke-<dialect>.sh` statt `tests/smoke-db/<dialect>/{run.sh, expected.txt}`.** Begründung: Per-Dialekt-Skripte sind übersichtlich, portabel (keine Branches in einem gemeinsamen Runner), validieren erwartete Outputs inline (keine separate `expected.txt` nötig) und haben in PR #36 echte Drift-Bugs in den Compose-Fragmenten zutage gefördert. Aggregation läuft über `tests/db-subsystem/run-all.sh`. Spec §13 + §14 wurden in PR #36 entsprechend amended.
 
 Mit diesen Festlegungen ist die Spec vollständig — Welle 1 kann nach Merge dieses PRs starten.

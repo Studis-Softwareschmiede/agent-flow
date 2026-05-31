@@ -88,7 +88,7 @@ Einzel-Skripte loggen direkt nach stdout, schreiben **kein** Log-File —
 10. **Drift**: editiere `001_smoke.*`, re-run → erwartet Drift-Reaktion
     (exit !=0 oder Output `DRIFT …` je nach Dialekt-Runner).
 11. Cleanup über `trap`: `docker compose down -v --remove-orphans` +
-    `rm -rf $TMPDIR`. Greift auch bei Fehler.
+    `rm -rf $SMOKE_DIR`. Greift auch bei Fehler.
 
 ## Spec-Verweis
 

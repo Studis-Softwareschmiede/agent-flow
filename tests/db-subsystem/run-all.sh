@@ -12,7 +12,7 @@
 # Voraussetzungen: Docker-Daemon läuft, mind. 2 GB freier RAM (mongo
 # + mariadb sind die Speicherschwergewichte). Spec §13.
 
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

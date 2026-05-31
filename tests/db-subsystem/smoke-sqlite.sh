@@ -26,12 +26,12 @@ DIALECT="sqlite"
 
 PROJECT="smoke-${DIALECT}-$$"
 
-TMPDIR="$(mktemp -d "/tmp/smoke-${DIALECT}-XXXXXX")"
+SMOKE_DIR="$(mktemp -d "/tmp/smoke-${DIALECT}-XXXXXX")"
 cleanup() {
   local rc=$?
-  if [ -d "$TMPDIR" ]; then
-    ( cd "$TMPDIR" && docker compose -p "$PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true )
-    rm -rf "$TMPDIR"
+  if [ -d "$SMOKE_DIR" ]; then
+    ( cd "$SMOKE_DIR" && docker compose -p "$PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true )
+    rm -rf "$SMOKE_DIR"
   fi
   exit "$rc"
 }
@@ -46,18 +46,18 @@ command -v docker >/dev/null || fail "docker CLI not found"
 docker info >/dev/null 2>&1 || fail "docker daemon not reachable"
 [ -d "$TEMPLATE_DIR" ] || fail "template not found: $TEMPLATE_DIR"
 
-log "TMPDIR=$TMPDIR"
+log "SMOKE_DIR=$SMOKE_DIR"
 log "PROJECT=$PROJECT"
 
 # ---- 1. Template kopieren ----
-mkdir -p "$TMPDIR/db_scripts"
-cp "$TEMPLATE_DIR/compose.fragment.yml" "$TMPDIR/docker-compose.yml"
-cp "$TEMPLATE_DIR/db_scripts/000_init_meta.sql" "$TMPDIR/db_scripts/"
-cp "$TEMPLATE_DIR/db_scripts/run-migrations.sh" "$TMPDIR/db_scripts/"
-chmod +x "$TMPDIR/db_scripts/run-migrations.sh"
+mkdir -p "$SMOKE_DIR/db_scripts"
+cp "$TEMPLATE_DIR/compose.fragment.yml" "$SMOKE_DIR/docker-compose.yml"
+cp "$TEMPLATE_DIR/db_scripts/000_init_meta.sql" "$SMOKE_DIR/db_scripts/"
+cp "$TEMPLATE_DIR/db_scripts/run-migrations.sh" "$SMOKE_DIR/db_scripts/"
+chmod +x "$SMOKE_DIR/db_scripts/run-migrations.sh"
 
 # Test-Migration — sqlite-Idiome (sqlite/R04: STRICT, sqlite/R03: WAL ist persistent)
-cat >"$TMPDIR/db_scripts/001_smoke.sql" <<'SQL'
+cat >"$SMOKE_DIR/db_scripts/001_smoke.sql" <<'SQL'
 CREATE TABLE IF NOT EXISTS smoke (
   id    INTEGER NOT NULL PRIMARY KEY,
   label TEXT    NOT NULL
@@ -66,11 +66,11 @@ INSERT OR IGNORE INTO smoke (id, label) VALUES (1, 'ok');
 SQL
 
 # .env.db — sqlite hat keine Credentials, nur DB_PATH
-cat >"$TMPDIR/.env.db" <<'ENV'
+cat >"$SMOKE_DIR/.env.db" <<'ENV'
 DB_PATH=/data/app.db
 ENV
 
-cd "$TMPDIR"
+cd "$SMOKE_DIR"
 
 # Volume vor dem ersten Lauf explizit anlegen (compose erstellt es auto bei `up`,
 # aber für den `run --rm migrations`-Pfad ohne up brauchen wir es vorher).
@@ -130,7 +130,7 @@ log "idempotenz ok"
 
 # ---- 4. Drift — SQLite-Runner hard-fails per `die DRIFT detected` ----
 log "VERTRAG 3: drift — edit applied migration → runner exit != 0"
-echo "-- drift marker $(date +%s)" >>"$TMPDIR/db_scripts/001_smoke.sql"
+echo "-- drift marker $(date +%s)" >>"$SMOKE_DIR/db_scripts/001_smoke.sql"
 
 set +e
 run_log_3="$(docker compose -p "$PROJECT" run --rm migrations 2>&1)"
