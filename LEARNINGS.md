@@ -3,10 +3,9 @@
 Eine Zeile pro Promotion (von `retro`/`train`/`teamLeader`, via PR). Status:
 `Proposed → Merged → Measuring → Validated | Reverted`. Spiegelt das Improvement-Board.
 
-- [PROPOSED] feat(knowledge): Pilot-Packs `frameworks/spring-boot-3` + `build/maven` mit 3-Sektionen-Aufbau (A/B/C + Coder/Reviewer/Test) — PR-E
-
 | ID | Datum | Pack/Skill | Regel | Quelle | PR | Status |
 |----|-------|------------|-------|--------|----|--------|
+| `knowledge/pilot-packs-spring-boot-maven` | 2026-05-31 | `knowledge/frameworks/spring-boot-3.md` + `knowledge/build/maven.md` | feat(knowledge): Pilot-Packs spring-boot-3 + maven mit 3-Sektionen-Aufbau (A=train/B=retro/C=Floor + Coder/Reviewer/Test) — PR-E (Welle 5 des framework-build-subsystem-Epics) | PR-E, Welle 5 | feat/pilot-packs-spring-boot-maven | Proposed |
 | `adopt+new-project/framework-detection` | 2026-05-31 | `skills/{adopt,new-project}/SKILL.md` | feat(adopt+new-project): Framework/Build-Detection-Heuristik + Polyglott-Trigger-Wiederverwendung (Companions ausgenommen) — PR-D | PR-D, Welle 4 | feat/adopt-newproject-framework-detection | Proposed |
 | `tester/build-dispatch` | 2026-05-31 | `agents/tester.md` | feat(tester): kanonische Build-Tool-Dispatch-Tabelle (maven/gradle/npm/pnpm/uv/cargo/none + Freitext-Fallback) — PR-C | PR-C, Welle 3 | feat/tester-build-dispatch | Proposed |
 | `schema/loader-resolver` | 2026-05-31 | `agents/{coder,reviewer,tester,train,retro}.md` + `skills/train/SKILL.md` | 3-Achsen-Pack-Loader in coder/reviewer/tester + train/retro Sektions-Disziplin (A=train, B=retro, C=User-Approval) + `/train <pack-id>`-Resolver mit Ambiguitäts-Stopp — PR-B (Welle 2 des framework-build-subsystem-Epics). Templates `templates/<lang>/profile.md` werden separat in PR-D/PR-E nachgezogen. | PR-B, Welle 2 | feat/schema-loader-resolver | Proposed |

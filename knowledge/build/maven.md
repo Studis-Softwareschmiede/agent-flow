@@ -27,11 +27,13 @@ Apache Maven (Build-Tool, primär Java/Kotlin/Scala). Geladen bei `profile.build
 
 ## B. Anti-Patterns aus Einsatz
 
-> Felderfahrung (`retro`-Land). Initial leer.
+> Felderfahrung (`retro`-Land). Schreibt: `agent-flow:retro` ab ≥2 Projekten × ≥2 Stellen (siehe `docs/architecture/framework-build-subsystem.md` §9 Schutzgitter). Stand initial: leer — füllt sich, wenn Projekte real damit arbeiten.
 
 _(noch keine Einträge; siehe Schutzgitter in der Spec)_
 
 ## C. Konventionen (Floor)
+
+> Stabile Konventionen, manuell gepflegt (User-Approval Pflicht für Edits durch `train`/`retro`).
 
 - `maven/C01` — **Maven-Wrapper (`mvnw`) ins Repo committen.** `mvn:wrapper`-Plugin generiert `mvnw`/`mvnw.cmd` + `.mvn/wrapper/`-Konfiguration. CI und neue Entwickler nutzen den exakt gepinnten Maven, kein Globaler-Maven-Mismatch.
 - `maven/C02` — **`dependencyManagement` in Parent-POM bei Multi-Module.** Versionen genau einmal definieren, Sub-Module nur `<dependency>` ohne `<version>`. Verhindert Versions-Drift zwischen Modulen.

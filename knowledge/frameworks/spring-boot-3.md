@@ -27,7 +27,7 @@ Spring-Boot 3.x (Major-Range `>=3.0, <4.0`). Geladen bei `profile.frameworks` en
 - `spring-boot-3/A02` — **Java 17 Minimum (since 3.0), Java 21 empfohlen (since 3.2).** Spring-Boot 3.x baut nicht mehr unter Java 11 oder 8. CI-Toolchain entsprechend pinnen. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Release-Notes, since: 3.0]
 - `spring-boot-3/A03` — **`@ConfigurationProperties` mit Java Records (since 3.0).** Records werden als immutable Konfigurations-Holder unterstützt; kein Setter-Boilerplate mehr. Beispiel: `@ConfigurationProperties("app") public record AppProps(String host, int port) {}`. [src: https://docs.spring.io/spring-boot/reference/features/external-config.html, since: 3.0]
 - `spring-boot-3/A04` — **Virtual Threads opt-in (since 3.2).** `spring.threads.virtual.enabled=true` aktiviert Virtual Threads für Tomcat/Jetty/RestClient/JdbcClient. JDK 21 Pflicht. [src: https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.virtual-threads, since: 3.2]
-- `spring-boot-3/A05` — **`RestClient` als bevorzugter HTTP-Client (since 3.2).** Synchroner Nachfolger des deprecaten `RestTemplate` (immer noch funktional, aber kein neuer Code mehr). [src: https://docs.spring.io/spring-boot/reference/io/rest-client.html, since: 3.2]
+- `spring-boot-3/A05` — **`RestClient` als bevorzugter HTTP-Client (since 3.2).** Synchroner Nachfolger des im Maintenance-Mode befindlichen `RestTemplate` (RestTemplate ist NICHT `@Deprecated`, wird aber laut Spring-Doku nur noch in Bug-Fix-Modus gepflegt — kein neuer Code mehr). [src: https://docs.spring.io/spring-boot/reference/io/rest-client.html, since: 3.2]
 
 ## B. Anti-Patterns aus Einsatz
 
