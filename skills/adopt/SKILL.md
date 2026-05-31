@@ -282,6 +282,68 @@ Wiederverwendung des in Schritt 2a für DB-Dialekte etablierten Mechanismus ([`d
 
 **Spec-Verweise:** [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §7 (Framework-Polyglott) + [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §16-R1 (Pattern-Quelle).
 
+## 2f. Migration-Tool-Detection (`profile.db_migration_tool`)
+Spec [`docs/architecture/migration-tool-subsystem.md`](../../docs/architecture/migration-tool-subsystem.md) §6 (Heuristik) + §5 (Default-Mapping) + §8 (Konfliktpunkt mit `db_scripts/`). Läuft **nach** der Framework/Build-Detection (2c) und Polyglott-Eskalation (2d), und **vor** dem Audit (3) — damit `reviewer`/`tester` den richtigen Migration-Pack laden können (Spec §7 Pack-Auswahl-Regel).
+
+**Sonderfall `db_dialect: none`:** Migration-Tool-Detection wird **übersprungen** (kein db_dialect ⇒ keine Migrations). `profile.db_migration_tool` wird nicht geschrieben (bleibt fehlend ⇒ Default `skeleton` per Backwards-Compat §11).
+
+**a) Auto-Detection — erstes Match gewinnt** (Reihenfolge: spezifische Tool-Coordinates vor generischen Verzeichnis-Signalen; Major-Version aus Dep-Version):
+
+| Signal (Quelle → Wert) | → `db_migration_tool` | Confidence |
+|---|---|---|
+| `pom.xml`/`build.gradle*` dep `org.flywaydb:flyway-core` (Version → Major) | `flyway@<major>` | high |
+| `pom.xml`/`build.gradle*` dep `org.liquibase:liquibase-core` (Version → Major) | `liquibase@<major>` | high |
+| `package.json` dep `prisma` ODER `@prisma/client` | `prisma` | high |
+| `package.json` dep `knex` | `knex` | high |
+| `package.json` dep `typeorm` | `typeorm` | high |
+| `package.json` dep `sequelize` ODER `sequelize-cli` | `sequelize` | high |
+| `requirements.txt`/`pyproject.toml` dep `alembic` | `alembic` | high |
+| `requirements.txt`/`pyproject.toml` dep `django` UND Verzeichnis `*/migrations/__init__.py` (Django-Auto-Generated) | `django-migrations` | high |
+| `pubspec.yaml` dep `sqflite` | `sqflite` | high |
+| Verzeichnis `supabase/migrations/` UND `supabase/config.toml` | `supabase` | high |
+| `Cargo.toml` dep `sqlx` UND Verzeichnis `migrations/` mit `*.sql` | `sqlx-cli` | high |
+| `Cargo.toml` dep `refinery` | `refinery` | high |
+| `migrate`-Binary-Aufrufe in `Makefile`/CI-Scripts ODER Repo enthält `migrate.exe`/`migrate` direkt | `golang-migrate` | medium |
+| Verzeichnis `db_scripts/` MIT `run-migrations.sh` UND `[0-9][0-9][0-9]_*.sql`-Dateien UND Marker `_schema_migrations` in den Files | `skeleton` | high |
+| Kein Treffer | (kein Eintrag → fallback per §5 Default-Mapping nach `lang`+`db_dialect`, dann User-Bestätigung) | — |
+
+**b) Default-Mapping bei Kein-Treffer** (Spec §5): wenn die Auto-Detection nichts findet UND `db_dialect != none`, schlägt der Skill das Default-Tool gemäß `profile.lang` + `profile.db_dialect` vor:
+
+| `lang` | `db_dialect` | Default-Vorschlag |
+|---|---|---|
+| `java` | `postgres`/`mysql`/`sqlite` | `flyway@10` (Spring-Standard) |
+| `ts`/`js` | `postgres`/`mysql`/`sqlite` | `skeleton` (kein dominantes Tool im Node-Ökosystem) |
+| `py` | `postgres`/`mysql`/`sqlite` | `alembic` (SQLAlchemy-Standard; bei Django: `django-migrations`) |
+| `flutter` | `sqlite` (mobile) | `sqflite` (in-app) |
+| `flutter` | `supabase` | `supabase` |
+| `rust` | `postgres`/`mysql`/`sqlite` | `sqlx-cli` |
+| `go` | `postgres`/`mysql`/`sqlite` | `golang-migrate` |
+| sonst | sonst | `skeleton` |
+
+Für **Multi-Lang-Profile** (`profile.lang: [java, ts]`, PR-K): Default-Mapping greift auf die **erste** gelistete Sprache + den `db_dialect` — der User kann via AskUserQuestion bestätigen/ändern (z.B. wenn das Java-Sub-Modul Flyway nutzt, aber das TS-Sub-Modul Prisma — Tool-Mix ist Anti-Pattern, siehe Spec §13).
+
+**c) User-Bestätigung — Pflicht, auch bei `high`-Confidence** (AskUserQuestion, single-select):
+```
+Detected db_migration_tool: flyway@10 (confidence: high, evidence: api/pom.xml:42 [org.flywaydb:flyway-core:10.0.0])
+Confirm? [Y/n/skeleton/flyway@9/flyway@10/liquibase@4/prisma/alembic/knex/typeorm/sequelize/django-migrations/supabase/golang-migrate/sqlx-cli/refinery/sqflite]
+```
+
+**d) Evidence sammeln.** Pfad + Zeilennummer (oder Datei-Pfad) merken — wird in `profile.md` als Kommentar mitgegeben.
+
+**e) In `.claude/profile.md` schreiben:**
+```yaml
+db_migration_tool: <wert>   # auto-detected from <evidence>, confirmed <YYYY-MM-DD>
+```
+
+**f) Konfliktpunkt mit `db_scripts/`-Skeleton** (Spec §8):
+- **Wenn `db_migration_tool == skeleton`** (Default oder explizit): `db_scripts/`-Skeleton wird angelegt (siehe Schritt 2a-e — heutiges Verhalten).
+- **Wenn `db_migration_tool != skeleton`**: `db_scripts/`-Skeleton wird **NICHT** angelegt (das Tool bringt seine eigene Konvention mit, z.B. Flyway nutzt `src/main/resources/db/migration/`). Stattdessen Backlog-Item „Tool-spezifische Konvention prüfen — siehe `knowledge/migration/<tool>.md`".
+
+**g) Pack-Vorhandensein-Check + Backlog-Items** (Standard-Priorität Important):
+- **Migration-Pack fehlt:** wenn `db_migration_tool != skeleton` UND `${CLAUDE_PLUGIN_ROOT}/knowledge/migration/<tool>[-<major>].md` nicht existiert: Backlog-Item „Pack `migration/<tool>` anlegen (via `/train migration/<tool>` oder manuelle Spec)".
+- **Tool-Mix erkannt:** wenn die Detection-Heuristik 2+ Tools mit `high`-Confidence findet (z.B. flyway-Dep UND prisma-Dep im selben Repo), Backlog-Item „Tool-Mix erkannt: <X>+<Y> — Anti-Pattern (Spec §13), Architektur-Entscheidung dokumentieren". Im Profil das Tool des dominanten Sub-Moduls eintragen (per AskUserQuestion).
+- **Kein Auto-Fix.** Wie der ganze `/adopt`-Pfad: 2f schreibt nur `profile.db_migration_tool`, erzeugt Backlog-Items, fasst Tool-spezifische Verzeichnisse (Flyway-Migrations, Prisma-Schema, etc.) **niemals** an.
+
 ## 3. Auditieren (gegen den Fabrik-Standard)
 - **Automatik zuerst (objektiv, billig):** `gitleaks detect --source=. --no-git` (Secrets) + Dependency-Audit gemäß Sprache (`npm audit --omit=dev` / `pip-audit` / …) → Funde notieren.
 - **`reviewer` im Audit-Modus** (Task — s. `reviewer.md` „Audit-Modus"): prüft den **Bestand** (kein Diff) gegen **Security-Floor** (immer), die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** → priorisierte Funde (Critical/Important/Suggestions). Bei großen Repos **priorisiert** (Security-Floor überall; Pack-Checks auf repräsentative/heikle Dateien — Auth, Daten-/Netz-Zugriff, Eingänge; Architektur-Auffälligkeiten), NICHT zeilenweise.
