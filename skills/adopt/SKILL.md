@@ -55,7 +55,66 @@ Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.
 | `db_scripts/*.js` enthält `db.createCollection` | `mongodb` | low |
 | Kein Treffer | `none` (Vorschlag) | low |
 
-**b) Evidence sammeln.** Für den höchsten Hit Pfad + Zeilennummer (oder Datei-Pfad bei File-Signalen) merken — die Evidence wird der User-Frage UND der `profile.md` als Kommentar mitgegeben („Audit-Trail").
+**a.1) Polyglott-Trigger — Eskalation bei 2+ primären DB-Dialekten (Spec §16-R1).** Spec hält `profile.db_dialect` als **Single-Value-Enum** (P1, Polyglott vertagt auf P2). Trotzdem muss `/adopt` Polyglott-Repos **erkennen** und sichtbar **eskalieren**, damit die P2-Erweiterung vom realen Bedarf getrieben wird statt vergessen zu werden.
+
+**Definition Primär-Store vs. Companion.** Die Polyglott-Heuristik zählt **nur primäre Datastores** (`postgres`, `mysql`, `sqlite`, `mongodb` — die Enum-Werte aus §2). **Companions** sind Cache-/Search-/Index-Schichten, die **nie** als primärer Store eingesetzt werden und in der Detection-Heuristik gar nicht erst auftauchen:
+
+| Companion-Klasse | Beispiel-Signale | Rolle |
+|---|---|---|
+| Cache | `redis`, `memcached` | flüchtiger Key-Value |
+| Search/Index | `elasticsearch`, `meilisearch`, `typesense` | sekundärer Index über den primären Store |
+
+Companions werden **nicht** als `db_dialect`-Kandidaten gewertet (Postgres + Redis ist die Standard-Web-App, **nicht** Polyglott) — sie werden in `.claude/profile.md` separat als `companions: [redis, …]` getrackt (additive Liste, keine Behandlungs-Pflicht in P1). Die Detection-Tabelle in §2 listet bewusst keine Companion-Signale; sollte das künftig nachgezogen werden (z.B. `package.json` deps: `ioredis` → `companions: [redis]`), gehört das in einen separaten Pfad und **nicht** in die Dialekt-Spalte.
+
+**Trigger-Bedingung.** Polyglott-Eskalation **nur**, wenn die Detection in Schritt **a)** im selben Repo **2 oder mehr verschiedene primäre Dialekte mit `high`-Confidence** trifft (z.B. `postgres` aus `package.json: pg` UND `mongodb` aus `package.json: mongoose`). Treffer in `medium`/`low` reichen **nicht**, weil dort die false-positive-Rate zu hoch ist (z.B. env-ref ohne aktive Nutzung).
+
+**Edge-Case 2 SQL-Dialekte (typisches Test-Setup, kein echtes Polyglott).** Wenn die 2 high-Treffer beide SQL-Dialekte sind (`postgres` + `sqlite`, `mysql` + `sqlite`, oder selten `postgres` + `mysql`), ist das meist ein App+Test-Setup (Production-Postgres, In-Memory-SQLite für Tests) — **nicht** echtes Polyglott. In dem Fall: die Polyglott-Eskalation **downgraden** auf `medium`-Confidence, sichtbarer Log-Hinweis („Likely test-/embedded-DB combo, not true polyglott — confirm with user"), kein Auto-Issue. Echtes Polyglott (cross-paradigm) ist erst `postgres|mysql|sqlite` × `mongodb`.
+
+**Bei echtem Polyglott — 3-Schritt-Eskalation:**
+
+1. **User wählt trotzdem EINEN Dialekt für P1.** Die AskUserQuestion in Schritt **c)** bleibt 1-aus-5; vor der Frage explizit anzeigen, welche Dialekte mit welcher Evidence erkannt wurden, damit der User informiert wählt. `profile.db_dialect` bleibt Single-Value (Spec §2 + §16-R1).
+2. **Automatisch GitHub-Issue im aktuellen Repo (Fork) anlegen.** Vor `gh issue create` sicherstellen, dass Issues am Fork aktiviert sind (vgl. Schritt 1 — Forks haben Issues default-off):
+   - **Titel:** `⚠ POLYGLOTT-BEDARF: <X> + <Y> primär — P2-Architektur-Erweiterung nötig` (X/Y alphabetisch sortiert für Idempotenz)
+   - **Body:**
+     ```
+     ## Polyglott-Erkennung in /adopt
+
+     Repo nutzt **2 oder mehr primäre DB-Dialekte** gleichzeitig:
+
+     - **<X>** (high-Confidence) — Evidence: <Pfad:Zeile + Signal>
+     - **<Y>** (high-Confidence) — Evidence: <Pfad:Zeile + Signal>
+
+     ## Konsequenz für P1
+     `/adopt` hat `<gewählter Dialekt>` als `profile.db_dialect` gesetzt (Single-Value, Spec §2).
+     **<anderer Dialekt>-Integration ist in der aktuellen Fabrik nicht abgedeckt** —
+     der DB-Pack, das Compose-Fragment und der Migration-Runner für <anderer Dialekt>
+     werden NICHT ausgerollt; die Datenzugriffs-Schicht im App-Code wird vom `reviewer`
+     ausschließlich gegen den `<gewählter>`-Pack geprüft.
+
+     ## P2-Trigger
+     Siehe `docs/architecture/db-subsystem.md` §16-R1 — Polyglott-Support
+     (`db_dialects: [a, b]` Liste + Pack-Mehrfach-Laden + multi-Compose-Fragmente)
+     ist explizit auf P2 vertagt; **dieses Issue ist die Eskalation, die den P2-Bedarf belegt**.
+     Sobald 2+ unabhängige Projekte diesen Issue produzieren, ist P2 zu starten.
+
+     ## Companions ausgeschlossen
+     Redis/Memcached/Elasticsearch & Co. zählen NICHT als Polyglott (sind Cache/Index,
+     keine primären Stores). Dieses Issue ist **nur** dann gerechtfertigt, wenn beide
+     erkannten Dialekte echte Datastores sind.
+     ```
+   - **Labels:** `polyglott-needed`, `architecture` (bei Bedarf vorher mit `gh label create` anlegen — fehlende Labels dürfen Issue-Erstellung **nicht** blockieren; Fallback: ohne Labels anlegen + Hinweis loggen).
+3. **Console-Output beim Adopt-Lauf** (eigene Zeile, deutlich abgesetzt — **nicht** in einer Loglinie zwischen Dutzend Detection-Zeilen verstecken):
+   ```
+   ============================================================
+   ⚠ Polyglott detected: this repo uses <X> + <Y>.
+     Adopted <chosen> for P1. Issue #<N> created for polyglott support.
+   ============================================================
+   ```
+   Erscheint **zusätzlich** zum normalen Detection-Output und wird am Ende des `/adopt`-Reports (Schritt 5) wiederholt, damit der User es im Final-Report nicht übersieht.
+
+**Nicht-Pflicht / Out-of-Scope für die Polyglott-Eskalation.** Es wird **nichts** für den nicht-gewählten Dialekt gescaffolded (kein zweites Compose-Fragment, kein zweites `db_scripts/`, kein zweiter Pack-Reviewer-Lauf). Wer den zweiten Dialekt produktiv betreiben will, muss heute manuell außerhalb der Fabrik nachziehen und auf P2 warten — genau das macht die Eskalation sichtbar.
+
+**b) Evidence sammeln.** Für den höchsten Hit Pfad + Zeilennummer (oder Datei-Pfad bei File-Signalen) merken — die Evidence wird der User-Frage UND der `profile.md` als Kommentar mitgegeben („Audit-Trail"). Bei Polyglott (a.1): Evidence für **alle** high-Treffer separat sammeln (für den Issue-Body).
 
 **c) User-Bestätigung — Pflicht, auch bei `high`-Confidence** (AskUserQuestion, 5 Enum-Werte vorselektiert):
 ```
