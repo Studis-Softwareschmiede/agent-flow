@@ -397,7 +397,7 @@ Der Orchestrator dispatcht `dba` (im Review-Modus, nicht Design-Modus) **wenn ei
 
 ## 13. Test-Verträge — Selbsttest der Fabrik
 
-Die DB-Subsystem-Erweiterung wird in der Fabrik durch **vier Smoke-Skripte** verifiziert (eines pro Dialekt). Diese leben in `tests/db-subsystem/` innerhalb des `agent-flow`-Repos und werden von einem neuen Workflow `.github/workflows/smoke-db.yml` (Welle 3) bei jedem PR ausgeführt, der `knowledge/sql*.md`, `knowledge/mongodb.md`, `templates/_shared/db-*` oder `skills/preview/SKILL.md` berührt.
+Die DB-Subsystem-Erweiterung wird in der Fabrik durch **vier Smoke-Skripte** verifiziert (eines pro Dialekt). Diese leben in `tests/db-subsystem/` innerhalb des `agent-flow`-Repos und werden vom **`tester`-Agent im `/flow`-Loop** ausgeführt, sobald ein PR `templates/_shared/db-*/**` oder die Smoke-Skripte selbst (`tests/db-subsystem/*.sh`) berührt. Pfad-basierte Auswahl (nur der betroffene Dialekt; bei Edits am Runner selbst alle vier) ist im Agent kodifiziert — siehe `agents/tester.md` Abschnitt „DB-Subsystem-Smoke (bei Template-Diffs)". Kein GitHub-Actions-Workflow nötig (keine Actions-Minuten, kein DinD-Overhead, unabhängig von Org-Budget-Politik).
 
 **Smoke-Suite-Struktur** (kanonisch, umgesetzt in PR #36):
 
@@ -415,7 +415,7 @@ Jedes `smoke-<dialect>.sh` ist **monolithisch + selbst-validierend** (keine sepa
 
 **Begründung für monolithische Struktur (gegenüber dem ursprünglichen `tests/smoke-db/<dialect>/{run.sh, expected.txt}`-Layout):** Per-Dialekt-Skripte sind übersichtlich, portabel (kein gemeinsamer `run.sh` mit case/switch pro Dialekt), validieren erwartete Outputs inline (kein File-Diff-Roundtrip nötig) und haben in PR #36 echte Drift-Bugs in den Compose-Fragmenten gefunden. Eine separate `expected.txt` würde nur sehr triviale „ok"-Vergleiche kapseln; der Mehrwert rechtfertigt das zusätzliche File-Layout nicht.
 
-**Smoke-Verlauf** (ein Skript `tests/db-subsystem/smoke-<dialect>.sh`, vom CI-Job pro Dialekt aufgerufen):
+**Smoke-Verlauf** (ein Skript `tests/db-subsystem/smoke-<dialect>.sh`, vom `tester`-Agent pro betroffenem Dialekt aufgerufen):
 
 1. `docker compose -p smoke-<dialect> up -d`.
 2. Auf DB-Healthcheck warten (außer sqlite).
@@ -427,6 +427,8 @@ Jedes `smoke-<dialect>.sh` ist **monolithisch + selbst-validierend** (keine sepa
 8. PASS = alle 4 Dialekte grün; ein roter = PR rot. `run-all.sh` aggregiert "N/4 PASS".
 
 **Annahme (begründet):** Smoke testet **die Mechanik** (Runner, Marker, Idempotenz, Drift-Erkennung, Compose-Fragment), nicht den Pack-Inhalt (Pack-Korrektheit ist `reviewer`-/Mensch-Sache; wenn wir das testen würden, müssten wir den ganzen `/flow` simulieren — zu schwer für CI).
+
+**Aufruf-Wiring (Amendment, 2026-05-31):** Die Smoke-Skripte werden vom **`tester`-Agent** im `/flow`-Loop gefahren — nicht von einem GitHub-Actions-Workflow. Pfad-basierte Auswahl (nur der betroffene Dialekt; bei Edits am Runner selbst alle vier) ist im Agent kodifiziert — siehe `agents/tester.md` Abschnitt „DB-Subsystem-Smoke (bei Template-Diffs)". Der `/flow`-Orchestrator behandelt `Test-Gate: PASS` als harte Vorbedingung für Merge bei Template-Diffs (`skills/flow/SKILL.md` §4). Begründung gegenüber der ursprünglich angedachten `.github/workflows/smoke-db.yml`: lokaler Tester-Run ist schneller (kein DinD-Overhead), kostet keine Actions-Minuten, ist unabhängig von Org-Budget-Politik und integriert sich nativ in die bestehende Coder→Reviewer→Tester-Sequenz.
 
 ---
 
@@ -457,7 +459,7 @@ Drei Wellen mit klaren Abhängigkeiten — die zweite hängt von der ersten, die
 - `skills/flow/SKILL.md`: DBA-Review-Dispatch bei Trigger §11.
 - `skills/preview/SKILL.md`: DB-Service-Start, Migrations-Apply, Isolations-Compose-Projekt-Namen.
 - `templates/<lang>/profile.md`: `db_dialect: <bei Scaffold gesetzt>` Zeile.
-- `tests/db-subsystem/smoke-<dialect>.sh` + `tests/db-subsystem/run-all.sh` + `.github/workflows/smoke-db.yml` (siehe §13 für die kanonische Struktur, umgesetzt in PR #36).
+- `tests/db-subsystem/smoke-<dialect>.sh` + `tests/db-subsystem/run-all.sh` + `tester`-Agent-Dispatch in `agents/tester.md` + `/flow`-Trigger in `skills/flow/SKILL.md` §4 (siehe §13 für die kanonische Struktur, umgesetzt in PR #36; Wiring auf `tester`-Agent statt GH-Actions umgestellt in PR #41).
 - **Output:** End-to-end nutzbar.
 
 **Parallelisierbarkeit:**
@@ -489,7 +491,7 @@ Diese Amendment-Regel ist explizit eng: sie deckt nur Disziplin-/Wiring-Edits ab
 
 **R4 — CLI-Clients im App-Image.** Ein `psql`/`mongosh` im Production-Image vergrößert Surface und Image-Größe. Mitigations-Optionen: (a) Multi-Stage-Build mit `migrations-Stage` (CLI nur im Build, nicht im Runtime); (b) Separater `init`-Container nur mit der CLI, der die App-Image-Größe nicht aufbläht. **Empfehlung: (b) ab Welle 2 — ein generisches `migrations`-Image (z.B. `alpine` + dialekt-CLI) statt CLI im App-Image.** Soll ich die Welle-2-Specs entsprechend umstellen? — User-Entscheid offen, default in dieser Spec ist noch (a).
 
-**R5 — `tests/smoke-db.yml` läuft Docker-in-Docker auf GitHub Actions.** Funktioniert (DinD ist Standard), kostet aber Minuten. Bei langer Smoke-Pipeline → Lauf nur auf Pfad-Änderungen filtern (`paths:` in der workflow-Trigger-Config). **Geklärt:** Filter ist Pflicht (in Welle 3 spezifiziert).
+**R5 — Smoke-Pipeline-Kosten.** Ursprünglich war ein GitHub-Actions-Workflow `tests/smoke-db.yml` (DinD) geplant. **Aufgelöst (PR #41):** Smoke läuft lokal über den `tester`-Agent — keine Actions-Minuten, kein DinD-Overhead, kein Org-Budget-Risiko. Pfad-basierter Filter (nur betroffener Dialekt; ganze Suite bei Runner-Edits) ist im Agent kodifiziert (`agents/tester.md` + `skills/flow/SKILL.md` §4).
 
 **R6 — `domains: [sql]` Backwards-Compat.** Der einzeilige Fallback (`domains: [sql]` ohne `db_dialect` ⇒ `postgres`) muss in `coder`/`reviewer`/`tester`/`dba` konsistent geschrieben sein, sonst zerfällt der Bestand. **Frage:** Eigener Smoke-Test dafür? — Ja, ein 5. Skript `tests/db-subsystem/smoke-legacy-sql-domain.sh` in Welle 3 (analog zur Per-Dialekt-Struktur aus §13).
 
