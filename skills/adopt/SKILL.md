@@ -38,7 +38,7 @@ Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.
 | `pubspec.yaml` deps: `postgres`, `supabase_flutter` | `postgres` | high |
 | `pubspec.yaml` deps: `sqflite`, `drift`, `sembast_sqflite` | `sqlite` | high |
 | `pom.xml`/`build.gradle`: `org.postgresql:postgresql` | `postgres` | high |
-| `pom.xml`/`build.gradle`: `mysql:mysql-connector-j`, `org.mariadb.jdbc:mariadb-java-client` | `mysql` | high |
+| `pom.xml`/`build.gradle`: `mysql:mysql-connector-j` ODER `mysql:mysql-connector-java` (legacy coords, pre-Mai-2023 — B7-Fix), `org.mariadb.jdbc:mariadb-java-client` | `mysql` | high |
 | `pom.xml`/`build.gradle`: `org.mongodb:mongodb-driver-sync`, `org.springframework.data:spring-data-mongodb` | `mongodb` | high |
 | `requirements.txt`/`pyproject.toml`: `psycopg`, `psycopg2`, `asyncpg` | `postgres` | high |
 | `requirements.txt`/`pyproject.toml`: `pymongo`, `motor` | `mongodb` | high |
