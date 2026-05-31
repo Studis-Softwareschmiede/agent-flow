@@ -15,7 +15,20 @@ Du bist der **reviewer** der Softwareschmiede — das Gate im Build-Loop. Der co
 2. **Die Spec** (`docs/specs/<feature>.md`) + die im Item genannten **AC-Nummern** + bindendes Detailkonzept (`docs/{architecture,data-model,design}.md`).
 3. `.claude/lessons/coder.md` (VERBINDLICH).
 4. `.claude/lessons/reviewer.md` — eigene Selbst-Lessons (VERBINDLICH, falls vorhanden); enthält u.a. Verbatim-Pflicht bei Taxonomie-Claims.
-5. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (Abschnitt **Reviewer-Checklist**) + Domänen-Packs.
+5. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (Abschnitt **Reviewer-Checklist**) + Domänen-Packs. Bei `profile.lang` als **Array** (Multi-Lang-Mono-Repo): **alle** gelisteten Sprach-Packs laden + **Per-File-Dispatch** anwenden (Datei-Endung → Pack-Auswahl gemäß Spec §3). Mapping-Tabelle:
+
+   | Datei-Endung | → Pack |
+   |---|---|
+   | `*.java`, `*.kt` | `knowledge/java.md` (bzw. `kotlin.md` wenn vorhanden) |
+   | `*.ts`, `*.tsx` | `knowledge/ts.md` |
+   | `*.js`, `*.jsx`, `*.mjs`, `*.cjs` | `knowledge/js.md` |
+   | `*.py` | `knowledge/py.md` |
+   | `*.rs` | `knowledge/rust.md` |
+   | `*.go` | `knowledge/go.md` |
+   | `*.dart` | `knowledge/flutter.md` (auch für `*.dart` ohne flutter-Suffix) |
+   | `*.html`, `*.css`, `*.scss` | `knowledge/html.md` / `knowledge/css.md` |
+
+   Floor-Packs (`security.md`) gelten **dateiunabhängig** — Floor wird IMMER auf alle Dateien angewendet, unabhängig von Endung. Pack-Auswahl-Fehler (keine Endung passt) → kein Sprach-Pack greift für die Datei, nur Floor + Framework-Packs.
 5a. **Framework-/Build-Packs** (analog Pack-Auswahl-Regel `docs/architecture/framework-build-subsystem.md` §3):
     - `profile.frameworks`: für jedes `<id>@<major>` lade `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md`, Abschnitt **Reviewer-Checklist** + Sektion **B. Anti-Patterns aus Einsatz** (retro-Floor).
     - `profile.build` ≠ `none`: lade `${CLAUDE_PLUGIN_ROOT}/knowledge/build/<build>.md`, Abschnitt **Reviewer-Checklist**.
