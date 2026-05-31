@@ -50,6 +50,27 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 - **`direct`:** commit auf `main` → push → Item → **Done** (+ Commit verlinkt).
 - Commit-Message endet mit der `Co-Authored-By`-Zeile.
 
+## 5a. Validate-Flag-Invalidierung (Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §18)
+**Nach erfolgreichem Landen** prüfen, ob der gerade gelandete Diff den Validate-Cache invalidiert:
+
+**Trigger.** Eines davon trifft zu:
+1. Item-Diff ändert `profile.db_dialect` oder `profile.companions[]` (`yq` vor/nach vergleichen).
+2. Item-Diff berührt Pfade, die das **gepullte** Template-Snapshot ersetzen würden: `db_scripts/run-migrations.sh`, `db_scripts/000_init_meta.{sql|js}`, `docker-compose.yml` Diff-Lines innerhalb der `# --- db-<dialect> (…)`- oder `# --- companion-<name> (…)`-Sektion.
+3. Plugin-Update wurde gepullt: `git -C "$CLAUDE_PLUGIN_ROOT" log -1 --format=%H templates/_shared/db-<dialect>/` ≠ der in `.claude/profile.md` notierten `adoption_validated_plugin_sha` (falls dort getrackt — best-effort, fehlender Wert = kein Trigger).
+
+**Aktion bei Trigger.**
+- `adoption_validated_at: null` in `.claude/profile.md` setzen (Key bleibt — explizites null statt löschen, damit der "wurde mal validiert"-Audit-Trail nicht verloren geht; `/preview` Cache-Check liest `validated_at: ""` und fällt auf `CACHE_HIT=false`).
+- `adoption_validated_dialect` und `adoption_validated_companions` **unverändert lassen** (Audit-Trail: was war zuletzt validiert).
+- **Diesen Profile-Edit als Folge-Commit** auf demselben Branch/PR landen (`chore: invalidate adoption_validated_at (db-setup changed)`) — vor dem `gh pr create` aus §5 oder als amend, falls schon committed.
+- Klar-Output:
+  ```
+  ⚠ DB-Setup geändert (item #<n>) — adoption_validated invalidated.
+    Re-validation läuft beim nächsten /preview up (mini, best-effort)
+    oder explizit via /adopt re-validate.
+  ```
+
+**Kein Trigger.** Items, die nur App-Code/Doku ändern (kein DB-/Companion-Profile-Diff, kein Template-Pfad), lassen das Flag unangetastet — Cache bleibt valide.
+
 ## 6. Nächstes
 - Zurück zu 1, bis das Board leer ist oder der User stoppt.
 
@@ -64,3 +85,4 @@ Dann stoppen mit Zusammenfassung (gelandete Items + Test-URL).
 ## Grenzen
 - NUR der Orchestrator schreibt Board-Status + committet/PRt; die Agenten editieren nur / berichten.
 - Bei Unklarheit oder `Blocked`: dem User vorlegen, nicht raten.
+- **Validate-Flag (§5a) nur invalidieren, nicht setzen:** das Setzen von `adoption_validated_at` lebt ausschließlich in `/adopt` §6 (volle Validation mit Coder-Fix-Loop) und `/preview` §6 (Mini-Re-Validate). `/flow` invalidiert nur — kein eigenes Dispatch des `tester` für Adoption-Validate (würde den Build-Loop §3 verzerren).

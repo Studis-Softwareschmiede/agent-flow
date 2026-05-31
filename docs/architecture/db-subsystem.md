@@ -582,3 +582,74 @@ companions: [redis]   # Liste, additiv; Default beim Scaffold: []
 **Heute (P1) verfügbar:** `redis`. Weitere Companions kommen additiv in eigenen PRs — die Spec-Sektion ist so geschnitten, dass eine neue Engine nur §17a um Signale ergänzt und ein neues `templates/_shared/companion-<name>/`-Bundle hinzukommt; die Skill-Wiring-Schritte sind generisch über `<name>` parametrisiert.
 
 Mit dieser Sektion ist die Companion-Klasse als eigener Vertrag etabliert — sauber abgegrenzt zum DB-Subsystem, additive Erweiterbarkeit, klarer Scope-Lock.
+
+---
+
+## §18 — Adoption-Validate (E2E-Smoke + Cache-Flag)
+
+**Zweck.** Eingeführt mit dem Validate-PR (2026-05-31). Stellt sicher, dass das von `/adopt` bzw. `/new-project` angelegte Skeleton (Compose-Fragment + `db_scripts/`-Marker + Companion-Fragmente) **mechanisch trägt** — DB startet healthy, Marker-Migration appliziert, App-Container erreichbar. Das Ergebnis wird als Cache-Flag in `.claude/profile.md` persistiert, damit Folge-Aufrufe (`/preview up`) den teuren E2E-Smoke skippen können, solange das DB-/Companion-Setup unverändert ist.
+
+**User-Konzept (Original-Vorgabe).** „Beim ersten Adopt einen E2E-Test, wenn fail → Loop, wenn ok → künftig überspringen oder beschleunigen, ggf. invalidieren bei DB-Wechsel."
+
+**`profile.md`-Schema** (drei neue optionale Keys, alle Default leer):
+
+```yaml
+adoption_validated_at:         <ISO-8601-Datum oder null>   # leer = noch nie validiert; null = invalidated
+adoption_validated_dialect:    <postgres|mysql|sqlite|mongodb>   # was zuletzt validiert wurde
+adoption_validated_companions: [<liste>]                    # was zuletzt validiert wurde
+```
+
+`adoption_validated_dialect` und `adoption_validated_companions` halten den **Snapshot zum Zeitpunkt des Validate-PASS**. Bei Cache-Check vergleicht `/preview` diese gegen die aktuellen `db_dialect`/`companions` aus dem Profil — ein Unterschied zwingt zum Re-Validate.
+
+**Konstanten.**
+
+| Konstante | Wert | Wirkung |
+|---|---|---|
+| `MAX_VALIDATE_RETRIES` | `3` | Cap für den Coder-Fix-Loop in `/adopt` §6.c und `/new-project` §8. Danach human-handoff + Backlog-Issue. |
+
+### Wer setzt / liest / invalidiert?
+
+| Skill | Rolle | Pfad |
+|---|---|---|
+| `/adopt` §6 | **Setzt** (volle Validation mit Coder-Fix-Loop, max 3 Retries) | dispatch `tester` Adoption-Validate → bei PASS Flag schreiben |
+| `/adopt re-validate` | **Setzt** (re-Run der vollen Validation, gleicher Loop) | identisch zu §6, ohne vorgelagerten Adopt-Aufwand |
+| `/new-project` §8 | **Setzt** (volle Validation analog, post initial-commit) | dispatch `tester` → bei PASS Flag schreiben |
+| `/preview up` §0 | **Liest** (Cache-Check) | vergleicht `adoption_validated_dialect`+`_companions` gegen aktuelles Profil |
+| `/preview up` §6 | **Setzt** (Mini-Re-Validate, best-effort, kein Coder-Fix-Loop) | bei Cache-Miss und Stack-Up: tester-Mini-Smoke → bei PASS Flag refreshen |
+| `/flow` §5a | **Invalidiert** (setzt auf `null`) | bei DB-/Companion-Profile-Diff oder Template-Pfad-Diff nach erfolgreichem Landen |
+
+**Wichtig:** `/flow` **invalidiert nur**, setzt nie auf PASS. Das Setzen-Recht liegt ausschließlich bei `/adopt`/`/new-project` (volle Validation) und `/preview up` Mini-Re-Validate (kürzer, ohne Fix-Loop).
+
+### Cache-Logik in `/preview up` (Cache-Hit vs Cache-Miss vs Invalidierung)
+
+| Zustand | Bedingung | Verhalten |
+|---|---|---|
+| **Cache-Hit** | `adoption_validated_at` gesetzt UND `adoption_validated_dialect` == aktueller `db_dialect` UND `adoption_validated_companions` == aktuelle `companions` | Schneller preview-up (DB+App hoch, **keine** Trivial-Query / Marker-Verify). Output: `cache-hit: skip E2E re-validate`. |
+| **Cache-Miss (Drift)** | Dialect oder Companions seit Validate geändert | Normaler preview-up + Mini-Re-Validate (Schritt 6). Bei PASS: Flag-Refresh. Bei FAIL: Warn, kein Abbruch. |
+| **Cache-Miss (nie validiert)** | `adoption_validated_at` leer (z.B. erster `/preview up` nach `/adopt` ohne Validate-PASS) | Wie Drift — Mini-Re-Validate post-up. |
+| **Invalidiert** | `adoption_validated_at: null` (von `/flow` §5a gesetzt) | Wie Drift — Mini-Re-Validate post-up. |
+| **N/A** | `db_dialect: none` UND `companions: []` | Cache-Check skip — nichts zu validieren. |
+
+### Invalidierungs-Regeln in `/flow` (§5a)
+
+`/flow` setzt `adoption_validated_at: null` nach erfolgreichem Landen eines Items, **wenn** eines davon zutrifft:
+
+1. Item-Diff ändert `profile.db_dialect` oder `profile.companions[]`.
+2. Item-Diff berührt `db_scripts/run-migrations.sh`, `db_scripts/000_init_meta.{sql|js}`, oder den `# --- db-<dialect> (…)`-/`# --- companion-<name> (…)`-Bereich im Projekt-`docker-compose.yml` (Source-of-Truth-Marker, vom `/adopt`/`/new-project`-Append gesetzt).
+3. Plugin-Update wurde gepullt, das `templates/_shared/db-<dialect>/` oder `templates/_shared/companion-<name>/` ändert (best-effort via Plugin-SHA-Tracking; fehlender Track-Wert = kein Trigger).
+
+`adoption_validated_dialect` und `adoption_validated_companions` werden **nicht** gelöscht — sie bleiben als Audit-Trail erhalten ("was war zuletzt validiert"). Der `/preview`-Cache-Check liest `validated_at == null` als Cache-Miss und triggert Mini-Re-Validate.
+
+### Fix-Loop-Disziplin
+
+- **`/adopt` §6.c und `/new-project` §8:** voller Coder-Fix-Loop mit `MAX_VALIDATE_RETRIES = 3`. Coder darf **nur** das gerade gescaffoldete Skeleton (Marker-Migration, Run-Skript, Compose-Fragment-Append, `.env.db.example`) anpassen — keine Business-Code-Edits, keine Bestand-`db_scripts/`-Patches. Bei FAIL nach 3 Iterationen → human-handoff + GitHub-Issue (`adopt-validate-fail`/`new-project-validate-fail`-Label).
+- **`/preview` §6:** Mini-Re-Validate **ohne** Coder-Fix-Loop — bei FAIL nur Warn-Output, preview-up bleibt nutzbar. Begründung: `/preview` ist ein Dev-Loop-Befehl, der nicht durch Verifikation blockieren darf; der schwergewichtige Fix-Pfad lebt in `/adopt re-validate`.
+- **`/flow` §5a:** kein Fix-Loop — `/flow` invalidiert nur, dispatcht den `tester` nicht für Adoption-Validate (würde den Build-Loop §3 verzerren).
+
+### Verhältnis zu den anderen Spec-Sektionen
+
+- **§13 (DB-Subsystem-Smoke).** Komplett separates Konstrukt: §13 prüft die **Fabrik-Templates** (Tester-Agent läuft im `agent-flow`-Repo selbst). §18 prüft das **adoptierte/neue Projekt** (Tester-Agent läuft im Projekt-Repo, im Adoption-Validate-Modus). Kein Overlap — die `tester`-Definition (`agents/tester.md`) muss beide Modi unterstützen: bei Aufruf im agent-flow-Repo → DB-Subsystem-Smoke; bei Aufruf in einem Projekt-Repo mit Adoption-Validate-Auftrag → Adoption-Validate.
+- **§14 (Build-Wellen).** §18 ist Welle-3-äquivalent (Wiring auf bestehende Templates + Skills + Agent) und folgt der Graceful-Degradation-Regel (§14-Amendment): wenn `tester`-Agent nicht erreichbar oder Adoption-Validate-Modus noch nicht implementiert, läuft `/adopt`/`/new-project` **ohne** Validate (Output „Validate skipped — tester unavailable") statt zu scheitern.
+- **§16-R6 (`/adopt` darf scaffolden).** Validate ist die **Mechanik-Verifikation** für das Scaffolding aus R6 — schließt den Kreis: Scaffold → Validate → Cache → optional Re-Validate. Ohne Validate war R6 ein „wir hoffen, das Skeleton funktioniert"; mit §18 ist es „wir wissen, das Skeleton funktioniert".
+
+Mit dieser Sektion ist der Validate-Mechanismus vollständig spezifiziert — additive Erweiterung der bestehenden Skill-Pipeline, kein Breaking Change für Projekte ohne DB/Companions (Validate skip), klare Trennung volle vs Mini-Validation.
