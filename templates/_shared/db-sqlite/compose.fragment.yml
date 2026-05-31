@@ -8,8 +8,11 @@
 #
 # Pattern (Spec §5 SQLite-Sonderfall, §16-R4 separates migrations-Image):
 #   - KEIN `db`-Service (SQLite ist eine Datei, kein Server).
-#   - `migrations`-Service (one-shot) baked sqlite-CLI in Alpine, applied
+#   - `migrations`-Service (one-shot) baked sqlite-CLI + bash in Alpine, applied
 #     `db_scripts/*.sql` einmalig und beendet sich (`restart: "no"`).
+#     `bash` ist Pflicht-Dependency: run-migrations.sh nutzt bash-Features
+#     (shopt nullglob, process substitution, here-strings, ${var:0:3}) —
+#     Alpines busybox-`ash` reicht NICHT (Smoke-Test PR #36 hat das aufgedeckt).
 #   - Volume `db_data` hält das DB-File (`/data/app.db`).
 #   - Der APP-Container MUSS dasselbe Volume mounten und `DB_PATH=/data/app.db`
 #     als Env setzen, sonst sieht die App keine Daten.
@@ -36,7 +39,7 @@ services:
       - ./db_scripts:/db_scripts:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - "apk add --no-cache sqlite >/dev/null && /db_scripts/run-migrations.sh"
+      - "apk add --no-cache bash sqlite >/dev/null && /db_scripts/run-migrations.sh"
 
 volumes:
   db_data: {}
