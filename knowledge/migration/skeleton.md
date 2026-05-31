@@ -48,6 +48,6 @@ _(noch keine Einträge; siehe Spec `migration-tool-subsystem.md` §4 + framework
 
 ## Test-Approach
 
-- Smoke-Apply: `bash db_scripts/run-migrations.sh` muss exit 0 + Marker in `_schema_migrations` erscheinen (Spec `db-subsystem.md` §13 Smoke-Skripte).
-- Idempotenz-Test: zweimaliger Lauf → identischer Marker-Count.
-- Drift-Test (falls `checksum`-Spalte): Datei-Hash gegen gespeicherten Wert vergleichen.
+- **Apply-Befehl (kanonisch, siehe `agents/tester.md` Migration-Apply-Dispatch):** `bash db_scripts/run-migrations.sh` muss exit 0 + Marker in `_schema_migrations` erscheinen (Spec `db-subsystem.md` §13 Smoke-Skripte).
+- **Idempotenz-Test:** zweimaliger Lauf → identischer Marker-Count.
+- **Drift-Test (falls `checksum`-Spalte):** Datei-Hash gegen gespeicherten Wert vergleichen.

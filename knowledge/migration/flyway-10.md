@@ -6,7 +6,7 @@ pack_date: 2026-05-31
 primary_sources:
   - https://documentation.red-gate.com/fd
   - https://github.com/flyway/flyway/releases
-  - https://documentation.red-gate.com/fd/release-notes-flyway-engine-179732891.html
+  - https://documentation.red-gate.com/fd/release-notes-flyway-engine-179732572.html
 non_sources:
   - baeldung.com
   - dev.to
@@ -22,7 +22,7 @@ Flyway 10.x — Java-Migration-Tool, Current-Major mit **Java 17 als Mindest-Ver
 
 > Quellen-getrieben (`train`-Land).
 
-- `flyway-10/A01` — **Java 17 Mindest-Version (since 10.0).** Flyway-10-Core läuft NICHT mehr unter Java 8/11. Bei Migration aus 9.x: Toolchain auf Java 17+ heben. Quelle: [Flyway 10.0.0 Release Notes — Breaking-Changes](https://documentation.red-gate.com/fd/release-notes-flyway-engine-179732891.html) — verbatim aus den Release-Notes: „Retired Java 8 from use. Java 17 is now required for development".
+- `flyway-10/A01` — **Java 17 Mindest-Version (since 10.0).** Flyway-10-Core läuft NICHT mehr unter Java 8/11. Bei Migration aus 9.x: Toolchain auf Java 17+ heben. Quelle: [Flyway 10.0.0 Release Notes — Breaking-Changes](https://documentation.red-gate.com/fd/release-notes-flyway-engine-179732572.html) — verbatim aus den Release-Notes: „Retired Java 8 from use. Java 17 is now required for development".
 - `flyway-10/A02` — **Versioned Migrations** unverändert zu 9.x: `V<version>__<description>.sql`.
 - `flyway-10/A03` — **Repeatable Migrations** unverändert: `R__<description>.sql`.
 - `flyway-10/A04` — **Undo Migrations** weiterhin Enterprise-only.
@@ -58,6 +58,6 @@ _(noch keine Einträge)_
 
 ## Test-Approach
 
-- **Apply-Befehl**: `mvn -B -ntp flyway:migrate` ODER `flyway migrate` (CLI/Docker `flyway/flyway:10-alpine`).
+- **Apply-Befehl (kanonisch, siehe `agents/tester.md` Migration-Apply-Dispatch):** `mvn -B -ntp flyway:migrate` (Maven-Plugin) ODER `flyway migrate` (CLI/Docker `flyway/flyway:10-alpine`).
 - **Idempotenz-Test:** zweimaliger Lauf → identischer Schema-History-Count.
 - **TestContainers** für DB-Integration (siehe `frameworks/spring-boot-3.md` Test-Approach).
