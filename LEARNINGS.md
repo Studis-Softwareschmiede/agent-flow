@@ -5,6 +5,7 @@ Eine Zeile pro Promotion (von `retro`/`train`/`teamLeader`, via PR). Status:
 
 | ID | Datum | Pack/Skill | Regel | Quelle | PR | Status |
 |----|-------|------------|-------|--------|----|--------|
+| `retro/4-schutzgitter` | 2026-05-31 | `agents/retro.md` + `skills/retro/SKILL.md` | feat(retro): 4 Schutzgitter (Frequenz ≥2×2, Provenance, Cooldown 1×/Woche, Reviewer-Gate) + Sektions-Disziplin (nur B in Framework-/Build-Packs) + Cross-Pack-Bündelung — PR-F (Welle 6 des framework-build-subsystem-Epics) | PR-F, Welle 6 | feat/retro-4-schutzgitter | Proposed |
 | `knowledge/pilot-packs-spring-boot-maven` | 2026-05-31 | `knowledge/frameworks/spring-boot-3.md` + `knowledge/build/maven.md` | feat(knowledge): Pilot-Packs spring-boot-3 + maven mit 3-Sektionen-Aufbau (A=train/B=retro/C=Floor + Coder/Reviewer/Test) — PR-E (Welle 5 des framework-build-subsystem-Epics) | PR-E, Welle 5 | feat/pilot-packs-spring-boot-maven | Proposed |
 | `adopt+new-project/framework-detection` | 2026-05-31 | `skills/{adopt,new-project}/SKILL.md` | feat(adopt+new-project): Framework/Build-Detection-Heuristik + Polyglott-Trigger-Wiederverwendung (Companions ausgenommen) — PR-D | PR-D, Welle 4 | feat/adopt-newproject-framework-detection | Proposed |
 | `tester/build-dispatch` | 2026-05-31 | `agents/tester.md` | feat(tester): kanonische Build-Tool-Dispatch-Tabelle (maven/gradle/npm/pnpm/uv/cargo/none + Freitext-Fallback) — PR-C | PR-C, Welle 3 | feat/tester-build-dispatch | Proposed |
