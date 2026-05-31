@@ -32,6 +32,7 @@ Greift **nur im `agent-flow`-Repo selbst** (die Fabrik testet ihre eigenen Templ
 | `templates/_shared/db-<dialect>/**` (mehrere Dialekte) | je betroffener Dialekt einzeln, **nicht** `run-all.sh` (Per-Dialekt-Logs bleiben separat) |
 | `templates/_shared/companion-*/**` | analoger `tests/db-subsystem/smoke-companion-<name>.sh`, **nur falls vorhanden**; sonst skip + im Output vermerken (kein FAIL) |
 | `tests/db-subsystem/run-all.sh` ODER `tests/db-subsystem/smoke-*.sh` selbst geändert | **ALLE** Smokes via `./tests/db-subsystem/run-all.sh` (Regression-Check der Smoke-Suite gegen sich selbst) |
+| Nur `tests/db-subsystem/README.md` (oder andere Docs in dem Ordner) ohne Skript-/Template-Diff | **kein** Smoke — `Test-Gate: SKIPPED-DOC-ONLY` + Begründung im Output (Doku-only, kein mechanischer Effekt). Der `/flow` triggert in dem Fall auch nicht — siehe `skills/flow/SKILL.md` §4 Pfad-Filter. |
 
 **Docker-Vorbedingung:** Smokes brauchen einen erreichbaren Docker-Daemon (`docker info` exit 0). Wenn nicht erreichbar:
 ```
@@ -46,7 +47,7 @@ Spec-Verweis: `docs/architecture/db-subsystem.md` §13 (Test-Verträge) — der 
 
 # Output
 ```
-Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER
+Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER | SKIPPED-DOC-ONLY
 Ran: <Befehle>
 Result: <…>
 Failures: <… oder none>
@@ -56,4 +57,5 @@ Failures: <… oder none>
 - Schreibt KEINEN Produktiv-/Testcode, keine Fixes (FAIL → zurück an coder; fehlende Tests = reviewer-Befund).
 - `PASS` nur wenn Build grün UND Tests grün UND Security-Smoke sauber (kein Secret-Treffer / kein High-Critical-CVE) UND (bei Template-Diffs) DB-Subsystem-Smoke grün UND **alle genannten AC** erfüllt.
 - `SKIPPED-NO-DOCKER` nur, wenn die DB-Subsystem-Smoke aufgrund fehlendem Docker-Daemon nicht laufen konnte; nie als Tarn-PASS für andere Stufen verwenden.
+- `SKIPPED-DOC-ONLY` nur, wenn der Diff ausschließlich Doku-Dateien in `tests/db-subsystem/` (z.B. README) berührt und keinerlei Skript-/Template-Diff vorliegt; dieser Status ist für den Orchestrator äquivalent zu „kein Smoke nötig" (kein human-handoff).
 - Bekannte nicht-fatale Fehler nur tolerieren, wenn im Profil deklariert.
