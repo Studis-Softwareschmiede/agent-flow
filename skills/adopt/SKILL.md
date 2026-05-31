@@ -277,7 +277,7 @@ Expliziter Befehl ohne `<owner/repo>`-Argument. cwd = bereits adoptiertes Repo (
 - **Verhalten identisch zu §6.a–c** — bei PASS wird `adoption_validated_at` neu gesetzt (überschreibt alten Wert); bei FAIL läuft der gleiche Coder-Fix-Loop (max 3) + Issue-Erstellung.
 - **Use-Cases:**
   - Spec/Template wurde manuell editiert (z.B. Compose-Fragment angepasst).
-  - `/flow` hat das Flag invalidiert (Spec §18, `skills/flow/SKILL.md` §X) und der User will explizit re-validieren statt auf den nächsten `/preview up` zu warten.
+  - `/flow` hat das Flag invalidiert (Spec §18, `skills/flow/SKILL.md` §5a) und der User will explizit re-validieren statt auf den nächsten `/preview up` zu warten.
   - Nach Plugin-Update (`templates/_shared/db-<dialect>/` neu gepullt).
 
 ## Grenzen
