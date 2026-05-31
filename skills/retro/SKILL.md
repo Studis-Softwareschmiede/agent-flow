@@ -11,7 +11,7 @@ Starte den **retro**-Agenten (Task-Tool) im aktuellen Projekt-Repo. Er liest `.c
 
 1. **Frequenz-Schwelle:** Promotion nur bei ≥2 Projekten × ≥2 Stellen. Ein-Projekt-Patterns bleiben lokal.
 2. **Provenance im PR-Body:** jede Regel listet die Quell-Lessons namentlich (Projekt + Datei/Zeile oder PR-Nummer).
-3. **Cooldown:** max. 1× pro Woche pro Repo (gestaut in `.claude/lessons/.retro-last-run`). `--force` umgeht den Cooldown bewusst und manuell.
+3. **Cooldown:** max. 1× pro Woche pro Repo (gespeichert in `.claude/lessons/.retro-last-run`). `--force` umgeht den Cooldown bewusst und manuell.
 4. **Reviewer-Gate:** retro-PR durchläuft den normalen reviewer-Loop. Kein Auto-Merge, kein Bypass.
 
 **Sektions-Disziplin bei Framework-/Build-Packs:** retro schreibt NUR in `## B. Anti-Patterns aus Einsatz` (Sektion A ist train-Hoheit; Sektion C nur mit explizitem User-Approval).
