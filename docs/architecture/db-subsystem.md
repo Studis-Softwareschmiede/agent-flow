@@ -32,26 +32,37 @@ db_dialect: postgres | mysql | sqlite | mongodb | none
 
 **Default beim `/new-project` ohne `--db`-Flag:** `none` (eine App ohne DB ist der safe minimal state — der User entscheidet später bewusst).
 
-**Detection-Heuristik (`/adopt` und `/init`)** — erstes Match in dieser Reihenfolge gewinnt:
+**Detection-Heuristik (`/adopt` und `/init`)** — erstes Match in dieser Reihenfolge gewinnt. Confidence-Stufen steuern, ob die Detection ohne Rückfrage übernommen werden darf (per Spec: **immer** Rückfrage, auch bei `high` — siehe §9):
 
-| Signal | → `db_dialect` |
-|---|---|
-| `package.json` deps: `mongoose`, `mongodb` | `mongodb` |
-| `package.json` deps: `pg`, `postgres`, `prisma` (mit `provider = "postgresql"`) | `postgres` |
-| `package.json` deps: `mysql2`, `mysql`, `prisma` (mit `provider = "mysql"`) | `mysql` |
-| `package.json` deps: `better-sqlite3`, `sqlite3` | `sqlite` |
-| `pom.xml`/`build.gradle`: `org.postgresql:postgresql` | `postgres` |
-| `pom.xml`/`build.gradle`: `mysql:mysql-connector-j`, `org.mariadb.jdbc:mariadb-java-client` | `mysql` |
-| `pubspec.yaml`: `postgres`, `supabase_flutter` | `postgres` |
-| `pubspec.yaml`: `sqflite`, `drift`, `sembast_sqflite` | `sqlite` |
-| Compose-Service `image:` enthält `postgres`, `supabase/postgres`, `timescale` | `postgres` |
-| Compose-Service `image:` enthält `mariadb`, `mysql` | `mysql` |
-| Compose-Service `image:` enthält `mongo` | `mongodb` |
-| File-Endung `*.sqlite`, `*.db` im Repo-Root oder `data/` | `sqlite` |
-| Verzeichnis `db_scripts/` mit `*.sql` und `CREATE TABLE` enthält `SERIAL`/`BIGSERIAL`/`uuid_generate_v4` | `postgres` |
-| Verzeichnis `db_scripts/` mit `*.sql` und `AUTO_INCREMENT`/`ENGINE=InnoDB` | `mysql` |
-| Verzeichnis `db_scripts/` mit `*.js` und `db.createCollection` | `mongodb` |
-| sonst | **Frage stellen** (`AskUserQuestion` mit den 5 Enum-Werten) |
+| Signal | → `db_dialect` | Confidence |
+|---|---|---|
+| `package.json` deps: `mongoose`, `mongodb` | `mongodb` | high |
+| `package.json` deps: `pg`, `postgres`, `pgvector`; `prisma` (mit `provider = "postgresql"`) | `postgres` | high |
+| `package.json` deps: `mysql2`, `mysql`, `mariadb`; `prisma` (mit `provider = "mysql"`) | `mysql` | high |
+| `package.json` deps: `better-sqlite3`, `sqlite3` | `sqlite` | high |
+| `pubspec.yaml`: `postgres`, `supabase_flutter` | `postgres` | high |
+| `pubspec.yaml`: `sqflite`, `drift`, `sembast_sqflite` | `sqlite` | high |
+| `pom.xml`/`build.gradle`: `org.postgresql:postgresql` | `postgres` | high |
+| `pom.xml`/`build.gradle`: `mysql:mysql-connector-j`, `org.mariadb.jdbc:mariadb-java-client` | `mysql` | high |
+| `pom.xml`/`build.gradle`: `org.mongodb:mongodb-driver-sync`, `org.springframework.data:spring-data-mongodb` | `mongodb` | high |
+| `requirements.txt`/`pyproject.toml`: `psycopg`, `psycopg2`, `asyncpg` | `postgres` | high |
+| `requirements.txt`/`pyproject.toml`: `pymongo`, `motor` | `mongodb` | high |
+| Compose-Service `image:` enthält `postgres`, `supabase/postgres`, `timescale`, `pgvector` | `postgres` | high |
+| Compose-Service `image:` enthält `mariadb`, `mysql` | `mysql` | high |
+| Compose-Service `image:` enthält `mongo` | `mongodb` | high |
+| Compose-Healthcheck-String: `pg_isready` | `postgres` | medium |
+| Compose-Healthcheck-String: `mongosh`, `mongo --eval` | `mongodb` | medium |
+| Env-Refs (`.env*`, `*.yml`): `SUPABASE_URL`, `PG_*`, `POSTGRES_*`, `DATABASE_URL=postgres://` | `postgres` | medium |
+| Env-Refs: `MYSQL_HOST`, `MARIADB_HOST`, `DATABASE_URL=mysql://` | `mysql` | medium |
+| Env-Refs: `MONGO_URL`, `MONGODB_URI`, `DATABASE_URL=mongodb://` | `mongodb` | medium |
+| File-Endung `*.sqlite`, `*.sqlite3`, `*.db` im Repo-Root oder `data/` | `sqlite` | medium |
+| SQLite-CLI in Scripts (`sqlite3 path/to/file`) | `sqlite` | low |
+| Verzeichnis `db_scripts/` mit `*.sql` und `CREATE TABLE` enthält `SERIAL`/`BIGSERIAL`/`uuid_generate_v4` | `postgres` | low |
+| Verzeichnis `db_scripts/` mit `*.sql` und `AUTO_INCREMENT`/`ENGINE=InnoDB` | `mysql` | low |
+| Verzeichnis `db_scripts/` mit `*.js` und `db.createCollection` | `mongodb` | low |
+| sonst | **Frage stellen** (`AskUserQuestion` mit den 5 Enum-Werten) | — |
+
+Diese Tabelle ist die **kanonische Signal-Palette** (Single Source of Truth) — `skills/adopt/SKILL.md` Schritt 2a spiegelt sie 1:1 wider und darf sie nicht silently erweitern. Neue Signale (etwa eine weitere Sprach-Toolchain wie Rust/`sqlx` oder Go/`pgx`) werden **zuerst hier** ergänzt; die Skill-Tabelle zieht im selben PR nach. Confidence-Stufen sind nicht-bindend für die Detection-Reihenfolge (die ist durch die Tabellen-Position fixiert), sondern Hinweis für Audit-Trail/Logs (welche Klasse von Signal hat gegriffen).
 
 **Annahme (begründet):** Eine App = ein Dialekt. Polyglott (z.B. Postgres + Mongo) ist im OSS-SMB-Bereich selten; wenn nötig, kommt das in einer späteren Welle als `db_dialects: [postgres, mongodb]` Liste hinzu — explizit out-of-scope für P1, damit die Pack-Auswahl und Compose-Generierung deterministisch bleiben.
 
@@ -94,9 +105,10 @@ profile.db_dialect = postgres → knowledge/sql.md
 ```
 <repo>/
   db_scripts/
-    001_init.sql              # postgres|mysql|sqlite
+    000_init_meta.sql         # postgres|mysql|sqlite (mongodb: .js)
+    001_<name>.sql            # erste App-Migration (Projekt-spezifisch)
     002_<name>.sql
-    003_<name>.js             # mongodb (mongosh script)
+    003_<name>.js             # weitere Migrationen — mongodb nutzt .js (mongosh script)
     run-migrations.sh         # dialekt-spezifischer Wrapper (Welle 2)
 ```
 
@@ -314,7 +326,14 @@ templates/_shared/db-<dialect>/
    - **Compose-Fragment fehlt?** → ein Backlog-Item „DB-Service im Compose ergänzen" (Standard-Priorität: Important).
    - **`run-migrations.sh` fehlt?** → Backlog-Item „Migration-Runner einrichten" (Priorität: Important).
 
-**Keine automatischen Edits.** `/adopt` schreibt nur `profile.db_dialect` und Backlog-Items; **keine** Auto-Migration, **kein** Auto-Compose-Patch (Konsistent mit „behebt nichts automatisch", `/adopt` Grenze).
+**Scaffolding ≠ Auto-Fix (Klarstellung, Amendment 2026-05-31 — PR #35).** `/adopt` darf — analog zur bestehenden Scaffold-Logik für `Dockerfile` / `.github/workflows/build.yml` / `security.yml` / `.github/dependabot.yml` aus Schritt 2 — **additive, nicht-destruktive Skeleton-Files** anlegen, wenn der jeweilige Pfad noch nicht existiert. Das umfasst beim DB-Subsystem konkret:
+
+1. **Compose-Fragment-Include:** Wenn das Projekt-`docker-compose.yml` noch keinen `db`-Service hat (bei sqlite: noch keinen `migrations`-Service), wird das Fragment aus `templates/_shared/db-<dialect>/compose.fragment.yml` angehängt (`cat fragment >> docker-compose.yml`, mit Trennzeilen-Kommentar als Audit-Trail). Bei vorhandenem db-Service: **kein Overwrite** — Fragment landet als separates `docker-compose.db.yml` + Backlog-Item.
+2. **`db_scripts/`-Skeleton:** `000_init_meta.{sql|js}` + `run-migrations.sh` aus dem dialekt-spezifischen Template-Ordner, wenn `db_scripts/` fehlt. Bestehende `db_scripts/`-Dateien werden **nie** überschrieben.
+3. **`.env.db.example`:** Vorlage für DB-Env-Variablen, wenn noch nicht vorhanden.
+4. **DBA-Audit-Dispatch:** Wenn `db_scripts/` mit Inhalt vorliegt (eigener oder gerade kopierter Skeleton), dispatcht `/adopt` den `reviewer` im Audit-Modus mit DB-Pack — Findings landen im Backlog.
+
+**Trennlinie zur „behebt nichts automatisch"-Grenze:** Scaffolding (Compose-Fragment, Skeleton, CI-Workflows) und Auto-Fix (Business-Logik, Bestandscode patchen) sind verschiedene Klassen. `/adopt` scaffoldet weiterhin (wie bisher mit Dockerfile/security.yml/dependabot.yml), behebt aber **keine** Critical-/Important-Findings — diese gehen ausschließlich ins Backlog für `/flow`. Eine bestehende `db_scripts/`-Migration, ein bestehender Runner, ein bestehender db-Service im Compose werden **nie** angefasst — Konflikte → Backlog. Diese Klarstellung folgt dem in §16-R5/R6 etablierten Pattern (Spec-Amendment statt Skill-Rollback, wenn die Skill-Implementierung den besseren Trade-off trägt; vgl. auch §14-Amendment „Graceful Degradation" aus PR #28).
 
 ---
 
@@ -328,7 +347,7 @@ templates/_shared/db-<dialect>/
 **Was passiert je Wert:**
 
 - `none`: `profile.db_dialect: none`. Kein DB-Pack, kein Compose-Fragment, kein `db_scripts/`-Skeleton, kein DBA-Dispatch beim ersten `requirement`-Lauf. `docs/data-model.md` wird **nicht** gescaffolded (bestand-Regel in `new-project` Schritt 4b bleibt — sie hängt heute schon an `domains: [sql]`, künftig an `db_dialect != none`).
-- `postgres|mysql|sqlite|mongodb`: Das Fragment aus `templates/_shared/db-<dialect>/compose.fragment.yml` wird ans Projekt-`docker-compose.yml` angehängt. `db_scripts/` wird mit `001_init.sql` (bzw. `.js`) als **leere Vorlage** + dem dialekt-spezifischen `run-migrations.sh` angelegt. `docs/data-model.md` wird gescaffolded. Der `Dockerfile` der Sprache wird um den DB-CLI-Client ergänzt (psql / mariadb-client / sqlite3 / mongosh).
+- `postgres|mysql|sqlite|mongodb`: Das Fragment aus `templates/_shared/db-<dialect>/compose.fragment.yml` wird ans Projekt-`docker-compose.yml` angehängt. `db_scripts/` wird mit `000_init_meta.sql` (bzw. `.js` für mongodb) als idempotenter Marker-Tabellen-Migration + dem dialekt-spezifischen `run-migrations.sh` angelegt. `docs/data-model.md` wird gescaffolded. Der `Dockerfile` der Sprache wird um den DB-CLI-Client ergänzt (psql / mariadb-client / sqlite3 / mongosh).
 
 **Annahme (begründet):** Genau **eine** zusätzliche Frage (kein Multi-Step-Wizard). Begrenzung „minimal fragen" (vgl. existing `new-project` Grenze) bleibt eingehalten.
 
@@ -488,6 +507,8 @@ Die in §15 aufgeworfenen offenen Fragen wurden vom User entschieden — die Wel
 - **R2 — SQLite-Skalierungsgrenze:** **Entschieden: Ja, prominent dokumentieren.** `knowledge/sql-sqlite.md` erhält eine sichtbare Warn-Sektion zur Single-File-Lock-Limitierung; der DBA-Agent erhält eine Regel (z.B. `sqlite/R0X`), Items mit Multi-Replica-Deployment-Anforderung bei `db_dialect: sqlite` als Critical zu flaggen.
 - **R4 — Migration-CLI-Ort:** **Entschieden: Separates `migrations`-Image.** Der DB-Client (psql/mysql/sqlite3/mongo) wird NICHT ins App-Image gebacken. Stattdessen pro Dialekt ein schlankes `migrations`-Image (z.B. `postgres:16-alpine` mit `run-migrations.sh` als ENTRYPOINT), das im Compose als one-shot-Service zwischen DB-Healthy und App-Start läuft. Saubere Trennung App ↔ DB-Admin.
 - **R5 — Optionale `checksum`-Spalte in `_schema_migrations` (Amendment, 2026-05-30):** **Entschieden: Spec §4 erlaubt eine optionale dritte Spalte `checksum TEXT NULL` (bzw. dialekt-äquivalent).** Verursacht durch Pack-Diff in PR #24 (Postgres-Pack), das diese Spalte für Drift-Detection einführte und damit gegen die ursprüngliche zwei-spaltige Tabellen-Definition driftete. Spec hatte `checksum` weder eingeführt noch bewusst ausgeschlossen — die saubere Lösung ist „optional dokumentiert", sodass jeder Dialekt-Pack frei wählt. Implementierungen ohne `checksum` bleiben Spec-konform. Detail in §4. Unblockt PR #24 + Folge-Packs.
+- **R6 — `/adopt` darf DB-Scaffolding ausführen (Amendment, 2026-05-31 — PR #35-Klärung):** **Entschieden: `/adopt` darf Compose-Fragmente includen + `db_scripts/`-Skeleton (`000_init_meta.{sql|js}` + `run-migrations.sh`) + `.env.db.example` anlegen — analog zur bereits existierenden Scaffold-Logik für `Dockerfile` / `.github/workflows/build.yml` / `security.yml` / `.github/dependabot.yml` aus Schritt 2.** Trennlinie: Scaffolding (additive, nicht-destruktive Skeleton-Files in nicht-existierenden Pfaden) ≠ Auto-Fix (Patch von Bestandscode oder bestehenden Migrationen). Bestehende `db_scripts/`, bestehende db-Services im Compose, bestehende Runner werden **nie** überschrieben — Konflikte landen ausschließlich im Backlog. Detail in §9. Folgt dem Spec-Amendment-Pattern aus §14 (PR #28) und R5 (PR #24): wenn die Skill-Implementierung den besseren Trade-off trägt, wird die Spec nachgezogen statt die Skill zurückgerollt.
+- **R7 — §2 ist die kanonische Detection-Signal-Palette (Amendment, 2026-05-31 — PR #35-Klärung):** **Entschieden: §2-Tabelle führt die volle Signal-Palette mit Confidence-Stufen.** Skill `skills/adopt/SKILL.md` Schritt 2a spiegelt §2 1:1 wider — keine silent erweiterten Signale in der Skill. Neue Signal-Quellen (z.B. künftig Rust/`sqlx`, Go/`pgx`) werden zuerst in §2 ergänzt, dann in der Skill nachgezogen (gleicher PR). Verhindert Drift zwischen Spec und Implementierung. Eingeführt, weil PR #35 acht zusätzliche Signale (Python-Deps, Mongo-JVM-Deps, `pgvector`, Healthcheck-Strings, Env-Refs, `*.sqlite3`, `sqlite3`-CLI) in der Skill hatte, die in §2 fehlten.
 - **R8 — Smoke-Suite-Struktur (Amendment, 2026-05-31, PR #36):** **Entschieden: monolithische Per-Dialekt-Skripte unter `tests/db-subsystem/smoke-<dialect>.sh` statt `tests/smoke-db/<dialect>/{run.sh, expected.txt}`.** Begründung: Per-Dialekt-Skripte sind übersichtlich, portabel (keine Branches in einem gemeinsamen Runner), validieren erwartete Outputs inline (keine separate `expected.txt` nötig) und haben in PR #36 echte Drift-Bugs in den Compose-Fragmenten zutage gefördert. Aggregation läuft über `tests/db-subsystem/run-all.sh`. Spec §13 + §14 wurden in PR #36 entsprechend amended.
 
 Mit diesen Festlegungen ist die Spec vollständig — Welle 1 kann nach Merge dieses PRs starten.

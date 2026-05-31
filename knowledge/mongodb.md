@@ -58,8 +58,9 @@ if (!db.getCollectionNames().includes('_schema_migrations')) {
 }
 
 // 2. Version bereits angewandt?
+// db._collname-Dot-Notation funktioniert NICHT für Collections mit '_'-Präfix in mongosh — immer getCollection() nutzen.
 const VERSION = '001';
-if (db._schema_migrations.findOne({ _id: VERSION })) {
+if (db.getCollection('_schema_migrations').findOne({ _id: VERSION })) {
   print('Migration ' + VERSION + ' already applied — skip');
   quit(0);
 }
@@ -86,7 +87,7 @@ db.createCollection('events', {
 db.events.createIndex({ type: 1, occurredAt: -1 }, { name: 'idx_events_type_date' });
 
 // 5. Migration als angewandt markieren
-db._schema_migrations.insertOne({ _id: VERSION, applied_at: new Date() });
+db.getCollection('_schema_migrations').insertOne({ _id: VERSION, applied_at: new Date() });
 print('Migration ' + VERSION + ' applied.');
 ```
 
@@ -103,10 +104,11 @@ print('Migration ' + VERSION + ' applied.');
 - Multi-Document-Transaktion für Single-Document-Operationen → **Important** (`mongo/R05`).
 - Bereits angewandte Migration editiert / umnummeriert → **Critical**.
 - `insertOne` in Migration ohne Idempotenz-Guard (kein `upsert`, kein `findOne`-Check) → **Important**.
+- Migrations-Code darf `db._collname.*` (Dot-Notation auf Underscore-Prefix-Collections) NICHT verwenden — stets `db.getCollection('_collname')`. → **Important** (mongosh-Parser-Falle: Property-Access bricht still bei Collections mit '_'-Präfix).
 - Relationale Daten in MongoDB-Collections modelliert (normalisierte Entitäten, häufige `$lookup`) — Header-Anti-Pattern verletzt → **Critical** (falscher Dialekt gewählt).
 
 ## Test-Approach
 
-- Migration läuft sauber **und** idempotent: `mongosh --file 001_init.js` zweimal ausführen → beide Läufe `exit 0`; Marker `_schema_migrations.findOne({_id: '001'})` existiert genau einmal.
+- Migration läuft sauber **und** idempotent: `mongosh --file 001_init.js` zweimal ausführen → beide Läufe `exit 0`; Marker `db.getCollection('_schema_migrations').findOne({_id: '001'})` existiert genau einmal.
 - Schema-Validation-Probe: Insert eines invaliden Dokuments (fehlendes Pflichtfeld) → Serverfehler mit Validation-Failure erwartet (im Node-Driver: `MongoServerError`).
 - Connection-Pool-Probe: MongoClient-Singleton nachweisen (keine mehrfache Instanziierung im App-Code).
