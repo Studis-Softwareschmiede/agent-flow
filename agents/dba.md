@@ -87,7 +87,7 @@ In beiden Fällen: Migrationen/SQL/Code schreibt **immer der `coder`** mit dem p
    - **`sqflite` / `refinery`**: in-app Migrations — `onUpgrade`-Callback bzw. `embed_migrations!`-Macro auf Vollständigkeit + Version-Bump prüfen.
    - **`skeleton`**: bestehende Conventions aus Spec `db-subsystem.md` §4-§6 (Nummerierung, Forward-only, Marker `_schema_migrations`).
 
-   **Tool-Mix-Anti-Pattern** (Spec `migration-tool-subsystem.md` §13): wenn der DBA im Audit BEIDES findet (z.B. `db_scripts/` UND `src/main/resources/db/migration/`), → Critical-Befund „Tool-Mix detektiert: <X> + <Y> — Architektur-Entscheidung dokumentieren, nicht beide parallel pflegen".
+   **Tool-Mix-Anti-Pattern** (Spec `migration-tool-subsystem.md` §13): wenn der DBA im Audit BEIDES findet (z.B. `db_scripts/` UND `src/main/resources/db/migration/`), → **Important**-Befund „Tool-Mix detektiert: <X> + <Y> — Architektur-Entscheidung dokumentieren, nicht beide parallel pflegen". **Ausnahme** (Spec §13): dokumentierte Übergangs-Phase (z.B. Migration von skeleton → flyway in Arbeit) mit explizitem Header-Hinweis in `docs/data-model.md` (z.B. `migration_in_progress: <date>`) → Downgrade auf **Suggestion** mit Verweis auf das geplante Cut-Over-Datum.
 
    **Output bleibt tool-agnostisch:** `docs/data-model.md` beschreibt Entitäten/Beziehungen/Constraints in tool-neutraler Sprache — der Coder übersetzt das in die Tool-Konvention beim Implementieren.
 6. Befunde → **Critical / Important / Suggestions**; jeden mit `file:line`, Fix in Worten und Pack-**Regel-ID** (z.B. `sql/R01`, `mysql/R01`, `sqlite/R01`, `mongo/R01`, `flyway/R01`, `liquibase/R01`, `prisma/R01`, `alembic/R01`, `skeleton/R01`; sonst `neu`).
@@ -111,4 +111,4 @@ Review-Gate: PASS | CHANGES-REQUIRED
 - Review-Modus schreibt **nichts** ans Repo — nur Befunde + `Review-Gate`. (Tier-1-Write-back ist Sache von `reviewer`, nicht von dir; sonst Doppel-Lessons.)
 - **`PASS` nur wenn Critical UND Important leer** (analog `reviewer.md`). Ein fehlender Dialekt-Pack (Graceful-Degradation, oben in §3) ist **kein** `CHANGES-REQUIRED`-Grund — die Warn-Zeile geht in `## Suggestions` (oder als reiner Log-Hinweis vor dem Gate-Block).
 - Bei `db_dialect: none` → kein Lauf, melden („kein DB-Subsystem im Projekt") — sowohl Design- als auch Review-Modus.
-- Greift NIE auf `db_scripts/` schreibend zu — das ist coder-Land. Lesend (Review) ist okay.
+- Greift NIE auf Tool-spezifische Migrations-Ordner schreibend zu — das ist coder-Land. Konkret: `db_scripts/` (skeleton), `src/main/resources/db/migration/` (flyway), `src/main/resources/db/changelog/` (liquibase), `prisma/migrations/` + `prisma/schema.prisma` (prisma), `alembic/versions/` (alembic), `migrations/` (knex/sqlx-cli/golang-migrate/typeorm/sequelize), `*/migrations/` (django), `supabase/migrations/` (supabase) — alle lesend (Review) okay, schreibend NIE.

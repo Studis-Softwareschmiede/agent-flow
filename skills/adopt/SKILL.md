@@ -405,11 +405,29 @@ Schritte:
                    - **sqlx-cli:** `_sqlx_migrations` (Tabelle)
                    - **sqflite / refinery:** in-app Marker (sqflite: `version` aus Database-Header; refinery: `refinery_schema_history`), getestet via App-Boot statt SQL-Query
                    - Query-Form analog skeleton-Pfad: `SELECT count(*) FROM <marker> → >= 1` bzw. für mongodb `db.<marker>.countDocuments() >= 1`.
-  4. Trivial-Query auf marker:
+  4. Trivial-Query auf marker (Marker-Tabelle aus Schritt 3 wählen — **tool-spezifisch**):
+
+                   **Allgemeines Schema:** `<dialekt-client> -c "SELECT * FROM <marker-tabelle> LIMIT 1"`. Marker-Tabelle pro `profile.db_migration_tool` aus Schritt 3 nehmen.
+
+                   **skeleton (Default — Marker `_schema_migrations`):**
                    - postgres:  psql -c "SELECT version FROM _schema_migrations ORDER BY version LIMIT 1"
-                   - mysql:     mariadb  -e "SELECT version FROM _schema_migrations ORDER BY version LIMIT 1"
+                   - mysql:     mariadb -e "SELECT version FROM _schema_migrations ORDER BY version LIMIT 1"
                    - sqlite:    sqlite3 /data/app.sqlite "SELECT version FROM _schema_migrations LIMIT 1"
                    - mongodb:   mongosh --eval 'db._schema_migrations.findOne()'
+
+                   **flyway@<n> (Marker `flyway_schema_history`):** `psql -c "SELECT version FROM flyway_schema_history ORDER BY installed_rank LIMIT 1"` (analog für mysql/mariadb).
+                   **liquibase@<n> (Marker `databasechangelog`):** `psql -c "SELECT id FROM databasechangelog LIMIT 1"`.
+                   **prisma (Marker `_prisma_migrations`):** `psql -c "SELECT migration_name FROM _prisma_migrations LIMIT 1"`.
+                   **alembic (Marker `alembic_version`):** `psql -c "SELECT version_num FROM alembic_version LIMIT 1"`.
+                   **knex (Marker `knex_migrations`):** `psql -c "SELECT name FROM knex_migrations LIMIT 1"`.
+                   **typeorm (Marker `typeorm_metadata` oder DataSource-config):** `psql -c "SELECT name FROM typeorm_metadata LIMIT 1"` (oder gemäß DataSource).
+                   **sequelize (Marker `SequelizeMeta`):** `psql -c 'SELECT name FROM "SequelizeMeta" LIMIT 1'` (case-sensitive, deshalb gequotet).
+                   **django-migrations (Marker `django_migrations`):** `psql -c "SELECT app, name FROM django_migrations LIMIT 1"`.
+                   **supabase (Marker `supabase_migrations.schema_migrations`):** `psql -c "SELECT version FROM supabase_migrations.schema_migrations LIMIT 1"`.
+                   **golang-migrate (Marker `schema_migrations`):** `psql -c "SELECT version, dirty FROM schema_migrations LIMIT 1"`.
+                   **sqlx-cli (Marker `_sqlx_migrations`):** `psql -c "SELECT version FROM _sqlx_migrations LIMIT 1"`.
+
+                   **In-app Tools (sqflite / refinery):** Schritt 4 **SKIP** — Marker lebt in-app, kein externer SQL-Query möglich. Smoke = App-Boot ohne Migrations-Fehler (Schritt 2.5 in-app-Variante).
   5. /preview down --keep-data=false   (cleanup, Volume weg)
 
 Output (alle 4 Stufen grün → PASS; sonst FAIL mit Stufe + stdout/stderr):
