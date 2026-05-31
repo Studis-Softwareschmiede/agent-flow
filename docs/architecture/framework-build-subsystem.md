@@ -127,6 +127,14 @@ Jeder framework-/build-Pack hat die folgenden Sektionen mit klarer Schreib-Hohei
 
 **Sektions-Reihenfolge im Pack-File** (kanonisch, damit Reviewer Diffs leicht zuordnet): A → B → C → Coder-Guidance → Reviewer-Checklist → Test-Approach.
 
+**Verbatim-Wording-Disziplin (Pack-Authoring-Regel, Lehre aus PR-I — sb-2/A02+A04 mussten entschärft werden).** Bei Aussagen mit **harten Versions- oder Datumsangaben** (z.B. „since 2.5.6", „OSS-EOL 2023-11-18") MUSS der Pack-Autor entweder:
+
+1. Ein **wörtliches Zitat + Anchor-Link** aus der Primärquelle im Pack-Regel-Body haben (`[src: URL#anchor — verbatim: „<exaktes Zitat>"]`), ODER
+2. Die Aussage **entschärfen** mit `verify`-Marker (z.B. „Java 17 wird in späteren 2.x-Releases unterstützt — *verify gegen die Release-Note der eingesetzten 2.x-Version*"), ODER
+3. Auf das konkrete Datum/die konkrete Version **verzichten** und stattdessen auf die Primärquelle verweisen („siehe `spring.io/projects/spring-boot/#support` für aktuelle Daten").
+
+Diese Regel ist die symmetrische Verlängerung von `reviewer/R01` und `coder/R02` (Verbatim-Pflicht bei Klassifikations-Widerlegungen) ins Pack-Material. Pack-Autor = `train`-Agent ODER manueller Pack-Anleger. Der Reviewer prüft das beim Pack-Review als Hard-Check: harte Datums-Behauptung ohne Verbatim/Anchor/verify-Marker → **Important** mit Verweis auf diese Regel.
+
 ---
 
 ## 5. Versions-Strategie
@@ -171,11 +179,25 @@ Analog zur DB-Detection in `db-subsystem.md` §2: kanonische Signal-Palette mit 
 | `requirements.txt`/`pyproject.toml` mit `flask>=` | `frameworks += flask@<major>` | high |
 | sonst (Sprach-Build-Tool unklar) | **Frage stellen** (`AskUserQuestion` mit den Enum-Werten + `none`) | — |
 
-**Major-Extraktion.** Aus der Dep-Version den ersten Major nehmen — `react@^18.2.0` → `react@18`; `react@~19.0.0` → `react@19`; `react@>=17 <19` → `react@17` (erster Major im Range) + **Warnung** im Adopt-Output („Dep spannt Majors 17–18; gepinnt auf 17; korrigiere Profil bei Bedarf"). Spec-Ranges mit Wildcards (`*`, `x`) ohne Untergrenze → Frage an User.
+**Major-Extraktion.** Aus der Dep-Version den ersten Major nehmen — `react@^18.2.0` → `react@18`; `react@~19.0.0` → `react@19`; `angular@~13.3.2` → `angular@13` (Tilde mit 3-Stellen-Patch, analog Caret); `react@>=17 <19` → `react@17` (erster Major im Range) + **Warnung** im Adopt-Output („Dep spannt Majors 17–18; gepinnt auf 17; korrigiere Profil bei Bedarf"). Spec-Ranges mit Wildcards (`*`, `x`) ohne Untergrenze → Frage an User.
 
 **Python-Signal-Fallback:** Liefert `requirements.txt` oder `pyproject.toml` einen Framework-Namen OHNE Version-Pin (`django` statt `django>=5.1`), wird Major-Extraktion via `pip index versions <name>` oder Pack-Default versucht. Schlägt das fehl → AskUserQuestion mit „kein Major bestimmt — bitte angeben".
 
 **Confidence-Semantik.** `high` heißt: Signal ist eindeutig — Detection wird vorgeschlagen, User-Bestätigung erfolgt **trotzdem** (analog DB-Subsystem §9: immer Rückfrage, auch bei `high`). Confidence-Stufen sind Hinweis für Audit-Trail/Logs.
+
+**Scan-Tiefe (Spec-Amendment 2026-05-31, Dogfood-Lehre aus climatedataanalyser).** `/adopt` scannt **nicht** generisch rekursiv — sonst würden `node_modules/`, `target/`, `vendor/`, `dist/` etc. false-positives erzeugen. Stattdessen **explizite Marker-getriebene** Sub-Modul-Erkennung:
+
+| Marker | Welche Sub-Modul-Pfade werden zusätzlich gescannt |
+|---|---|
+| Maven Multi-Modul: `<packaging>pom</packaging>` + `<modules>` im Root-pom | alle in `<modules>` gelisteten Pfade |
+| npm/pnpm Workspaces: `workspaces` (Array oder Glob) in Root-`package.json` | alle expandierten Workspace-Pfade |
+| Cargo Workspace: `[workspace].members` in Root-`Cargo.toml` | alle gelisteten Member-Pfade |
+| pnpm `pnpm-workspace.yaml` | alle expandierten Pfade |
+| (kein Marker) | nur Repo-Root scannen |
+
+**Repos ohne expliziten Marker**, die Sub-Trees mit eigenen Build-Files haben → `/adopt --root <subdir>` separat aufrufen (Skill-Flag). Default-Adopt-Lauf bleibt strikt root + Marker-Pfade.
+
+**Konsequenz fürs Profil:** Multi-Lang-Detection (§2 Multi-Lang-Form) und Polyglott-Trigger (§7) greifen nur, wenn die Sub-Modul-Marker das jeweilige Sub-Modul sichtbar machen. Ohne Marker bleibt das Sub-Tree unsichtbar — bewusst, weil generisches Scanning zu viele false-positives erzeugt.
 
 ---
 
