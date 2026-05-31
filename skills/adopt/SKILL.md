@@ -375,9 +375,36 @@ Schritte:
                    (docker inspect Health.Status = healthy)
                    bei sqlite: migrations-Service exit 0
                    Companion-Services (sofern profile.companions nicht leer) sind healthy
-  3. Verifiziere:  Marker-Migration appliziert
-                   - postgres/mysql/sqlite:  SELECT count(*) FROM _schema_migrations  → >= 1
-                   - mongodb:                db._schema_migrations.countDocuments() → >= 1
+  2.5. **Migration-Apply** — gemäß `profile.db_migration_tool` aus der kanonischen Tabelle in `agents/tester.md` Migration-Apply-Dispatch (PR-Q3):
+       - skeleton: `bash db_scripts/run-migrations.sh`
+       - flyway@9/@10: `mvn -B -ntp flyway:migrate` (im app-Container)
+       - liquibase@4: `mvn -B -ntp liquibase:update`
+       - prisma: `npx prisma migrate deploy`
+       - alembic: `alembic upgrade head`
+       - knex: `npx knex migrate:latest`
+       - typeorm: `npx typeorm migration:run -d <dataSourcePath>`
+       - sequelize: `npx sequelize-cli db:migrate`
+       - django-migrations: `python manage.py migrate`
+       - supabase: `supabase db push`
+       - golang-migrate: `migrate -path migrations -database "$DB_URL" up`
+       - sqlx-cli: `sqlx migrate run`
+       - sqflite / refinery: (in-app, kein externer Apply — Smoke = App-Boot ohne Migration-Fehler)
+       - Fehlend / unbekannt: Fallback auf skeleton-Pfad.
+  3. Verifiziere:  Marker-Migration appliziert. **Marker-Tabelle/Collection ist tool-spezifisch:**
+                   - **skeleton (Default):** `_schema_migrations` (Tabelle/Collection — Spec `db-subsystem.md` §4)
+                   - **flyway@<n>:** `flyway_schema_history` (Tabelle)
+                   - **liquibase@<n>:** `databasechangelog` (Tabelle)
+                   - **prisma:** `_prisma_migrations` (Tabelle)
+                   - **alembic:** `alembic_version` (Tabelle, 1 Zeile mit aktuellem revision)
+                   - **knex:** `knex_migrations` + `knex_migrations_lock` (2 Tabellen)
+                   - **typeorm:** `typeorm_metadata` (Tabelle) oder das in der DataSource-Config definierte
+                   - **sequelize:** `SequelizeMeta` (Tabelle)
+                   - **django-migrations:** `django_migrations` (Tabelle)
+                   - **supabase:** `supabase_migrations.schema_migrations` (Schema + Tabelle)
+                   - **golang-migrate:** `schema_migrations` (Tabelle, mit `version` + `dirty`-Spalten)
+                   - **sqlx-cli:** `_sqlx_migrations` (Tabelle)
+                   - **sqflite / refinery:** in-app Marker (sqflite: `version` aus Database-Header; refinery: `refinery_schema_history`), getestet via App-Boot statt SQL-Query
+                   - Query-Form analog skeleton-Pfad: `SELECT count(*) FROM <marker> → >= 1` bzw. für mongodb `db.<marker>.countDocuments() >= 1`.
   4. Trivial-Query auf marker:
                    - postgres:  psql -c "SELECT version FROM _schema_migrations ORDER BY version LIMIT 1"
                    - mysql:     mariadb  -e "SELECT version FROM _schema_migrations ORDER BY version LIMIT 1"
@@ -398,14 +425,16 @@ Bei `Validate-Gate: PASS` schreibt der Orchestrator in `.claude/profile.md` (add
 adoption_validated_at: <ISO-Datum, z.B. 2026-05-31T11:42:00Z>
 adoption_validated_dialect: <postgres|mysql|sqlite|mongodb>
 adoption_validated_companions: [<liste, z.B. redis>]
+adoption_validated_migration_tool: <skeleton|flyway@<n>|liquibase@<n>|prisma|alembic|...>   # NEU (PR-Q6)
 ```
 
 Klar-Output:
 ```
 ✓ Adoption validated end-to-end. profile.adoption_validated_at: <date>
-  Dialect:    <dialect>
-  Companions: [<liste>]
-  Cache:      /preview up wird E2E-Smoke künftig skippen (cache-hit), solange Dialect+Companions unverändert.
+  Dialect:         <dialect>
+  Companions:      [<liste>]
+  Migration-Tool:  <tool>                                          # NEU
+  Cache:           /preview up wird E2E-Smoke künftig skippen (cache-hit), solange Dialect+Companions+Migration-Tool unverändert.
 ```
 
 ### 6.c FAIL-Pfad — Coder-Fix-Loop (max. `MAX_VALIDATE_RETRIES = 3`)
@@ -417,6 +446,7 @@ Bei `Validate-Gate: FAIL`:
    - **migration-Fehler:** Skeleton-Migration `000_init_meta.{sql|js}` syntaktisch kaputt für den Dialekt, oder `run-migrations.sh` non-executable → Permission/Pfad prüfen.
    - **query-Fehler:** Marker-Tabelle/Collection nicht angelegt (Migration silent-failed).
 2. **Coder dispatchen** (Task) mit den Findings als `FINDINGS: <…>` + `ITERATION: <N>` (1..3). Coder fixt **nur** das Skeleton/Compose/Migrations-Skript, **nicht** Business-Code. **§5-Grenze ("kein Auto-Fix für Bestand") bleibt:** der Coder darf das gerade angelegte Skeleton anpassen, nicht jedoch bestehende `db_scripts/`-Dateien/Compose-Services.
+   **Tool-Beschränkung (PR-Q6):** Der Coder darf das gerade angelegte Skeleton (`db_scripts/` bei `skeleton`) UND tool-spezifische Initial-Files (z.B. `application.properties` `spring.flyway.enabled=true` bei flyway@<n>, `prisma/schema.prisma` bei prisma) anpassen — niemals jedoch bestehende, vor-`/adopt` existierende Migrations-Files (Forward-only-Disziplin bleibt). Bei nicht-skeleton-Tools, die keinen Auto-Scaffold-Skeleton erhalten haben (Spec §8): der Coder fragt explizit nach manueller Setup-Anweisung (Backlog-Item statt Auto-Fix).
 3. **Re-Validate:** Schritt 6.a erneut.
 4. Bleibt es nach `MAX_VALIDATE_RETRIES = 3` rot → **human-handoff:**
    - Klare Fehler-Spec ausgeben (Failed-Stage + alle 3 Iterations-Logs).
@@ -429,7 +459,7 @@ Expliziter Befehl ohne `<owner/repo>`-Argument. cwd = bereits adoptiertes Repo (
 
 - **Auth** wie §0.
 - **Sprung direkt zu §6** — keine Detection, kein Scaffold, kein Audit, keine Übergabe-Schritte.
-- **Vorbedingung:** `profile.db_dialect != none` ODER `profile.companions[]` nicht leer. Sonst: klar-Output „nichts zu re-validieren" + Exit 0.
+- **Vorbedingung:** `profile.db_dialect != none` ODER `profile.companions[]` nicht leer. ZUSÄTZLICH (PR-Q6): bei `db_migration_tool != skeleton` muss das Tool-spezifische Migrations-Setup existieren (z.B. `src/main/resources/db/migration/V1__init.sql` bei flyway; `prisma/schema.prisma` bei prisma) — sonst klar-Output „kein Migrations-Setup vorhanden, re-validate nicht sinnvoll" + Exit 0. Sonst: klar-Output „nichts zu re-validieren" + Exit 0.
 - **Verhalten identisch zu §6.a–c** — bei PASS wird `adoption_validated_at` neu gesetzt (überschreibt alten Wert); bei FAIL läuft der gleiche Coder-Fix-Loop (max 3) + Issue-Erstellung.
 - **Use-Cases:**
   - Spec/Template wurde manuell editiert (z.B. Compose-Fragment angepasst).
