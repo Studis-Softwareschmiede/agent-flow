@@ -1,11 +1,13 @@
 ---
 name: adopt
-description: Adoptiert ein BESTEHENDES GitHub-Repo in die Fabrik — klont es (fremde Repos werden in die Org geforkt), übernimmt es per init (Stack erkennen, .claude/+docs/ scaffolden, Spec aus Code ableiten, CI/Security ergänzen), auditiert den Bestand gegen den Fabrik-Standard und legt die Funde als priorisiertes Backlog aufs Board. Behebt NICHTS automatisch — /flow arbeitet das Backlog ab. Aufruf: /agent-flow:adopt <owner/repo>.
+description: Adoptiert ein BESTEHENDES GitHub-Repo in die Fabrik — klont es (fremde Repos werden in die Org geforkt), übernimmt es per init (Stack erkennen, .claude/+docs/ scaffolden, Spec aus Code ableiten, CI/Security ergänzen), auditiert den Bestand gegen den Fabrik-Standard, legt die Funde als priorisiertes Backlog aufs Board und validiert das Skeleton end-to-end via tester-Agent (Cache-Flag profile.adoption_validated_at). Behebt NICHTS automatisch — /flow arbeitet das Backlog ab. Aufruf: /agent-flow:adopt <owner/repo> | /agent-flow:adopt re-validate.
 ---
 
-# /adopt <owner/repo>
+# /adopt <owner/repo>   ·   /adopt re-validate
 
-Bringt ein bestehendes Repo auf Fabrik-Standard: **clone/fork → adopt → audit → Backlog → (du wählst) → `/flow`**. Es wird **nichts automatisch behoben** — der Audit erzeugt Items, gefixt wird inkrementell per `/flow` + PR durchs Gate.
+Bringt ein bestehendes Repo auf Fabrik-Standard: **clone/fork → adopt → audit → Backlog → Validate (E2E-Smoke) → (du wählst) → `/flow`**. Es wird **nichts automatisch behoben** — der Audit erzeugt Items, gefixt wird inkrementell per `/flow` + PR durchs Gate. Der **Validate-Step** (§6) prüft das Skeleton end-to-end via `tester`-Agent und schreibt das Cache-Flag `profile.adoption_validated_at` (Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §18).
+
+`/adopt re-validate` (Mode ohne `<owner/repo>`): cwd = bereits adoptiertes Repo. Läuft **nur** den Validate-Step (§6) erneut — nützlich nach manuellen Spec-/Template-Updates oder wenn `adoption_validated_at` durch `/flow` invalidiert wurde (Spec §18). Keine Detection, kein Scaffold, kein Audit; springt direkt zu §6.
 
 ## 0. Auth
 `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"`.
@@ -196,6 +198,88 @@ Aus den Funden **Board-Items** (Status To Do), **Critical zuerst**: pro Item ein
 ## 5. Übergabe (KEIN Auto-Fix)
 Report an den User: Repo-/Fork-URL · Board-URL · Funde nach Schwere (#Critical / #Important / #Suggestions) · die abgeleiteten Specs. → „Wähle die Items, die behoben werden sollen, und starte `/agent-flow:flow`." **Stop.**
 
+## 6. Validate — End-to-End-Smoke via `tester`-Agent (Spec §18)
+**Letzter Schritt nach Übergabe.** Verifiziert, dass das gerade angelegte Skeleton (Compose-Fragment + `db_scripts/`-Marker + Companion-Fragmente) **mechanisch** funktioniert — DB startet, Marker-Migration appliziert, App-Container erreichbar. Schreibt das Cache-Flag `profile.adoption_validated_at`, das `/preview` (Cache-Hit) und `/flow` (Invalidierung) auswerten.
+
+**Trigger.** Läuft **wenn** `profile.db_dialect != none` ODER `profile.companions[]` nicht leer ist. Sonst (statische App ohne DB/Companion): Validate skip + klar-Output „nichts zu validieren — kein DB-/Companion-Skeleton angelegt".
+
+**Konstante.** `MAX_VALIDATE_RETRIES = 3` (interner Fix-Loop-Cap; Spec §18).
+
+### 6.a `tester`-Dispatch — E2E-Smoke-Auftrag
+Orchestrator dispatcht `tester`-Agent (Task) mit dem folgenden Auftrag (cwd = adoptiertes Repo, **nicht** das agent-flow-Repo — der `tester` läuft hier im **Adoption-Validate-Modus**, nicht im DB-Subsystem-Smoke-Modus aus `agents/tester.md`):
+
+```
+ADOPTION-VALIDATE für <repo>
+profile.db_dialect: <wert>
+profile.companions:  <liste>
+
+Schritte:
+  1. /preview up   (für das adoptierte Repo, im cwd; nutzt die preview-up-Logik aus skills/preview/SKILL.md)
+  2. Verifiziere:  DB-Service (sofern db_dialect ∈ {postgres,mysql,mongodb}) ist healthy
+                   (docker inspect Health.Status = healthy)
+                   bei sqlite: migrations-Service exit 0
+                   Companion-Services (sofern profile.companions nicht leer) sind healthy
+  3. Verifiziere:  Marker-Migration appliziert
+                   - postgres/mysql/sqlite:  SELECT count(*) FROM _schema_migrations  → >= 1
+                   - mongodb:                db._schema_migrations.countDocuments() → >= 1
+  4. Trivial-Query auf marker:
+                   - postgres:  psql -c "SELECT version FROM _schema_migrations ORDER BY version LIMIT 1"
+                   - mysql:     mariadb  -e "SELECT version FROM _schema_migrations ORDER BY version LIMIT 1"
+                   - sqlite:    sqlite3 /data/app.sqlite "SELECT version FROM _schema_migrations LIMIT 1"
+                   - mongodb:   mongosh --eval 'db._schema_migrations.findOne()'
+  5. /preview down --keep-data=false   (cleanup, Volume weg)
+
+Output (alle 4 Stufen grün → PASS; sonst FAIL mit Stufe + stdout/stderr):
+  Validate-Gate: PASS | FAIL
+  Failed-Stage:  <up|health|migration|query|down> | none
+  Stderr:        <tail -n 50 der relevanten Logs>
+```
+
+### 6.b PASS-Pfad — Cache-Flag schreiben
+Bei `Validate-Gate: PASS` schreibt der Orchestrator in `.claude/profile.md` (additiv, bestehende Keys nicht überschreiben):
+
+```yaml
+adoption_validated_at: <ISO-Datum, z.B. 2026-05-31T11:42:00Z>
+adoption_validated_dialect: <postgres|mysql|sqlite|mongodb>
+adoption_validated_companions: [<liste, z.B. redis>]
+```
+
+Klar-Output:
+```
+✓ Adoption validated end-to-end. profile.adoption_validated_at: <date>
+  Dialect:    <dialect>
+  Companions: [<liste>]
+  Cache:      /preview up wird E2E-Smoke künftig skippen (cache-hit), solange Dialect+Companions unverändert.
+```
+
+### 6.c FAIL-Pfad — Coder-Fix-Loop (max. `MAX_VALIDATE_RETRIES = 3`)
+Bei `Validate-Gate: FAIL`:
+
+1. **Diagnose-Output zeigen** (an User): `Failed-Stage`, `tester`-Stdout/Stderr (letzte 50 Zeilen). Typische Ursachen:
+   - **up-Fehler:** Compose-Syntax kaputt (Fragment-Append-Konflikt) → `docker compose config` zeigen.
+   - **health-Fehler:** DB-Image bootet nicht (env fehlt, Permission, Port-Konflikt) → `docker logs <db-container>`.
+   - **migration-Fehler:** Skeleton-Migration `000_init_meta.{sql|js}` syntaktisch kaputt für den Dialekt, oder `run-migrations.sh` non-executable → Permission/Pfad prüfen.
+   - **query-Fehler:** Marker-Tabelle/Collection nicht angelegt (Migration silent-failed).
+2. **Coder dispatchen** (Task) mit den Findings als `FINDINGS: <…>` + `ITERATION: <N>` (1..3). Coder fixt **nur** das Skeleton/Compose/Migrations-Skript, **nicht** Business-Code. **§5-Grenze ("kein Auto-Fix für Bestand") bleibt:** der Coder darf das gerade angelegte Skeleton anpassen, nicht jedoch bestehende `db_scripts/`-Dateien/Compose-Services.
+3. **Re-Validate:** Schritt 6.a erneut.
+4. Bleibt es nach `MAX_VALIDATE_RETRIES = 3` rot → **human-handoff:**
+   - Klare Fehler-Spec ausgeben (Failed-Stage + alle 3 Iterations-Logs).
+   - **Backlog-Issue anlegen:** `gh issue create --title "ADOPT-VALIDATE-FAIL: <Failed-Stage>" --body "<tester-Output + Iterations-Diff>" --label adopt-validate-fail,important`. Bei fehlendem Label-Setup: ohne Labels (vgl. Polyglott-Eskalation §2a, a.1).
+   - **`adoption_validated_at` wird NICHT gesetzt** — `/preview up` und `/adopt re-validate` werden den Validate-Schritt beim nächsten Aufruf erneut versuchen (kein silent skip).
+5. **Schleifenschutz-Klarstellung:** Die 3 Iterationen sind **Validate-intern**, NICHT identisch mit dem `/flow`-Build-Loop (§3) — Validate ist ein separater Mechanismus, der vor dem ersten `/flow`-Run sicherstellt, dass das Skeleton mechanisch trägt.
+
+### 6.d Re-Validate-Mode (`/adopt re-validate`)
+Expliziter Befehl ohne `<owner/repo>`-Argument. cwd = bereits adoptiertes Repo (muss `.claude/profile.md` haben).
+
+- **Auth** wie §0.
+- **Sprung direkt zu §6** — keine Detection, kein Scaffold, kein Audit, keine Übergabe-Schritte.
+- **Vorbedingung:** `profile.db_dialect != none` ODER `profile.companions[]` nicht leer. Sonst: klar-Output „nichts zu re-validieren" + Exit 0.
+- **Verhalten identisch zu §6.a–c** — bei PASS wird `adoption_validated_at` neu gesetzt (überschreibt alten Wert); bei FAIL läuft der gleiche Coder-Fix-Loop (max 3) + Issue-Erstellung.
+- **Use-Cases:**
+  - Spec/Template wurde manuell editiert (z.B. Compose-Fragment angepasst).
+  - `/flow` hat das Flag invalidiert (Spec §18, `skills/flow/SKILL.md` §5a) und der User will explizit re-validieren statt auf den nächsten `/preview up` zu warten.
+  - Nach Plugin-Update (`templates/_shared/db-<dialect>/` neu gepullt).
+
 ## Grenzen
 - **Behebt nichts automatisch** — erzeugt nur das Backlog; Fix = `/flow` (PR-gated).
 - Pusht NUR auf das Org-Repo bzw. den Org-Fork — **nie** ungefragt auf ein fremdes Upstream (Upstream-PR nur auf deinen Wunsch + Approve).
@@ -203,3 +287,4 @@ Report an den User: Repo-/Fork-URL · Board-URL · Funde nach Schwere (#Critical
 - Die **abgeleitete Spec ist Entwurf**, bis du sie bestätigst (sie ist danach die Drift-Gate-Referenz für `/flow`).
 - **DB-Detection (Schritt 2a) ist nicht-destruktiv:** schreibt `db_dialect`, hängt Compose-Fragment **nur** an, wenn noch kein db-Service existiert; bestehende `db_scripts/`-Dateien werden **nie** überschrieben — Konflikte landen als Backlog-Item, nicht als Auto-Patch.
 - **Companion-Detection (Schritt 2b) ist nicht-destruktiv** und beeinflusst `db_dialect` NICHT: Companions leben in `profile.companions[]` (additive Liste, Scope-Lock §17). Heute verfügbar: `redis`. Kein `db_scripts/`-Skeleton, kein Migrations-Runner, kein Backup-Auto-Scaffold — wer das braucht, gehört ins DB-Subsystem.
+- **Validate (Schritt 6) ist kein Auto-Fix für Bestand:** der Coder-Fix-Loop darf nur das gerade angelegte **Skeleton** (000_init_meta, run-migrations.sh, Compose-Fragment-Append, .env.db.example) anpassen — nie bestehende `db_scripts/`-Migrations oder bestehende db-Services im Compose. Loop-Cap fix `MAX_VALIDATE_RETRIES = 3`; danach human-handoff + Backlog-Issue, kein Endlos-Loop. `adoption_validated_at` wird NUR bei PASS gesetzt — ohne Validate-PASS gibt es keinen Cache-Hit in `/preview` (Spec §18).

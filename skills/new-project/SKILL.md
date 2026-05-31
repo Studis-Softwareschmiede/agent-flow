@@ -60,8 +60,21 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
 6. **Branch-Protection** auf `main` (optional/best-effort): nur *„require a pull request before merging"* (blockiert Direkt-Push). **KEINE** Pflicht-Status-Checks (`reviewer` ist ein Agent, kein GitHub-Check → würde sonst jeden Merge blockieren) und **KEINE** Pflicht-Approvals (solo kann eigenen PR nicht approven). Lehnt die API ab (Plan/Permissions) → **überspringen, nicht abbrechen**. Das eigentliche Gate ist dein manueller Merge nach Review-PASS + Test-PASS.
 7. **Initial commit + push.**
 
+8. **Validate** (Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §18) — **wenn** `profile.db_dialect != none` ODER `profile.companions[]` nicht leer:
+   - Analoger E2E-Smoke-Step wie `/adopt` §6 — der Orchestrator dispatcht den `tester`-Agent (Adoption-Validate-Modus) mit dem Auftrag `/preview up` → DB/Companion healthy → Marker-Migration appliziert (`SELECT count(*) FROM _schema_migrations` ≥ 1 / Mongo-Äquivalent) → Trivial-Query → `/preview down --keep-data=false`. Das Image-Build läuft via CI (Schritt 5 hat `build.yml` gescaffolded) **bevor** Validate den ghcr-Pull triggert — Validate wartet best-effort auf den ersten `build.yml`-Run (`gh run watch` mit kurzem Timeout). Pull-`denied` (Image noch nicht gebaut/published) → Validate skip + Output „CI nicht fertig — Validate beim nächsten `/preview up` nachholen" (kein FAIL, kein Issue).
+   - **Konstante:** `MAX_VALIDATE_RETRIES = 3` (identisch zu `/adopt` §6).
+   - **PASS:** in `.claude/profile.md` ergänzen:
+     ```yaml
+     adoption_validated_at: <ISO-Datum>
+     adoption_validated_dialect: <postgres|mysql|sqlite|mongodb>
+     adoption_validated_companions: [<liste>]
+     ```
+     Klar-Output: `✓ New-project validated end-to-end. profile.adoption_validated_at: <date>`. Validate-Ergänzung läuft als **zweiter Commit** auf demselben Branch (`chore: validate scaffold end-to-end`) — der Initial-Commit aus Schritt 7 bleibt unverändert (Audit-Trail).
+   - **FAIL:** identischer Coder-Fix-Loop wie `/adopt` §6.c. Coder darf **nur** das gerade gescaffoldete Skeleton/Compose-Fragment/Migration anpassen — kein Business-Code. Bleibt nach 3 Iterationen FAIL → human-handoff + `gh issue create --title "NEW-PROJECT-VALIDATE-FAIL: <stage>" --label adopt-validate-fail,important`. `adoption_validated_at` wird **NICHT** gesetzt (später `/preview up` versucht erneut).
+   - **Wenn `db_dialect: none` UND `companions: []`:** Validate skip + Output „nichts zu validieren — kein DB-/Companion-Skeleton angelegt" (statische App). Konsistent mit `/adopt` §6.
+
 ## Output
-Repo-URL · Board-URL · Profil · Image-Ziel → „bereit für `/requirement`".
+Repo-URL · Board-URL · Profil · Image-Ziel · (sofern Schritt 8 lief) Validate-Status → „bereit für `/requirement`".
 
 ## Grenzen
 - Kein App-Code.
@@ -70,3 +83,4 @@ Repo-URL · Board-URL · Profil · Image-Ziel → „bereit für `/requirement`"
 - Genau **ein** Dialekt pro Projekt (`db_dialect` ist Single-Value-Enum, Spec §16-R1) — Polyglott (mehrere primäre DBs) ist P1 explizit out of scope.
 - `db_dialect: none` → **kein** Compose-Fragment, **kein** `db_scripts/`-Skeleton, **kein** `docs/data-model.md` — der User entscheidet später bewusst per `/adopt`-Re-Run oder manuellem Profil-Edit.
 - Companion-Auswahl ist **optional** (Default `companions: []`); P1 nur `redis` verfügbar. Kein Migrations-/Backup-/Pack-Scaffold für Companions (Scope-Lock Spec §17).
+- **Validate (Schritt 8) ist kein Auto-Fix für Bestand:** Coder-Fix-Loop darf nur Skeleton/Compose-Fragment/Marker-Migration anpassen. Loop-Cap fix `MAX_VALIDATE_RETRIES = 3`; danach human-handoff, kein Endlos-Loop. `adoption_validated_at` wird NUR bei PASS gesetzt (Spec §18).
