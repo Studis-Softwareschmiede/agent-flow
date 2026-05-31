@@ -188,6 +188,84 @@ companions: [redis]   # auto-detected from <evidence>, confirmed <YYYY-MM-DD>
 
 **e) Kein Auto-Fix.** Identisch zu 2a-g: 2b schreibt nur `profile.companions[]`, kopiert nicht-destruktives Skeleton, erzeugt ggf. Backlog-Items. Bestehende Companion-Services im Compose werden **nie** überschrieben.
 
+## 2c. Framework/Build-Detection (`profile.build` + `profile.frameworks[]`)
+Heuristik gemäß [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §6. Erstes Match je Achse gewinnt; mehrere Frameworks für DIESELBE Sprache lösen den Polyglott-Trigger aus (siehe Schritt 2d). Läuft **nach** der Companion-Detection (2b) und **vor** dem Audit (3), damit `reviewer`/`tester` den richtigen Framework-/Build-Pack laden können (Spec §3 Pack-Auswahl-Regel).
+
+**Aufbau analog 2a:** Build-Tool-Achse zuerst (single-value, Pflicht ab Sprachen mit Build-Tool), Framework-Achse danach (multi-value, optional). User-Bestätigung pro Achse — auch bei `high`-Confidence — analog zur DB-Detection (§2a-c).
+
+**a) Build-Tool-Achse** (`profile.build`, single-value):
+
+| Signal | → setzt | Confidence |
+|---|---|---|
+| `pom.xml` | `build: maven` | high |
+| `build.gradle` / `build.gradle.kts` / `settings.gradle{,.kts}` | `build: gradle` | high |
+| `package.json` + `package-lock.json` | `build: npm` | high |
+| `package.json` + `pnpm-lock.yaml` | `build: pnpm` | high |
+| `pyproject.toml` + `uv.lock` | `build: uv` | high |
+| `Cargo.toml` | `build: cargo` | high |
+| keine der Signale | `build: none` (default, User-Bestätigung via AskUserQuestion) | — |
+
+**b) Framework-Achse** (`profile.frameworks: []`, multi-value, optional):
+
+| Signal | → setzt | Confidence |
+|---|---|---|
+| `pom.xml` mit `spring-boot-starter-parent` ODER `org.springframework.boot:*` Dep | `frameworks += spring-boot@<major>` | high |
+| `build.gradle*` mit `org.springframework.boot` Plugin/Dep | `frameworks += spring-boot@<major>` | high |
+| `pom.xml`/`build.gradle*` mit `io.quarkus:*` | `frameworks += quarkus@<major>` | high |
+| `package.json` dep `react` | `frameworks += react@<major>` | high |
+| `package.json` dep `vue` | `frameworks += vue@<major>` | high |
+| `package.json` dep `@angular/core` | `frameworks += angular@<major>` | high |
+| `requirements.txt`/`pyproject.toml` mit `django>=*` | `frameworks += django@<major>` | high |
+| `requirements.txt`/`pyproject.toml` mit `fastapi>=*` | `frameworks += fastapi@<major>` | high |
+| `requirements.txt`/`pyproject.toml` mit `flask>=*` | `frameworks += flask@<major>` | high |
+
+**c) Major-Extraktion.** Aus dem Version-Constraint die niedrigste passende Major-Version nehmen (`^18.2.0` → `18`; `>=3.4,<4` → `3`; `~5.1` → `5`). Bei Spannweite über Majors (`>=2,<4`): erster Major (`2`) UND `[POLYGLOTT-WARN]`-Marker im Backlog-Item (User soll Profil schärfen). Wildcards (`*`, `x`) ohne Untergrenze → Frage an User (Spec §6 Major-Extraktion).
+
+**d) User-Bestätigung — Pflicht, auch bei `high`-Confidence** (AskUserQuestion, beide Achsen einzeln):
+- **build:** single-select aus Tabellen-Werten + `none`; Voreinstellung = Heuristik-Vorschlag.
+- **frameworks:** multi-select aus den Heuristik-Treffern; Skip-Option immer dabei; Voreinstellung = alle vorgeschlagen.
+
+**e) In `.claude/profile.md` schreiben:**
+```yaml
+build: <wert>           # auto-detected from <evidence>, confirmed <YYYY-MM-DD>
+frameworks: [<id>@<major>, …]   # auto-detected from <evidence>, confirmed <YYYY-MM-DD>
+```
+
+**f) Pack-Vorhandensein-Check + Backlog-Items** (Standard-Priorität Important):
+- **Framework-Pack fehlt:** für jedes gewählte Framework prüfen, ob `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md` existiert. Fehlt: Backlog-Item „Pack `<id>@<major>` anlegen (via `/train <id>@<major>` oder manuelle Spec)".
+- **Build-Pack fehlt:** analog für `${CLAUDE_PLUGIN_ROOT}/knowledge/build/<build>.md`. Fehlt: Backlog-Item „Pack `build/<build>` anlegen".
+- **Polyglott-Eskalation:** siehe Schritt 2d.
+
+**g) Kein Auto-Fix.** Analog 2a-g/2b-e: 2c schreibt nur `profile.build` und `profile.frameworks[]`, erzeugt ggf. Backlog-Items. **Kein** automatischer Pack-Anlage-Lauf, **kein** Auto-Patch von App-Code oder Build-Files.
+
+## 2d. Polyglott-Eskalation (Frameworks)
+Wiederverwendung des in Schritt 2a für DB-Dialekte etablierten Mechanismus ([`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §16-R1 und [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §7).
+
+**Trigger.** Detection findet **2+ HIGH-Confidence-Frameworks für DIESELBE Sprache** (z.B. `spring-boot@3` + `quarkus@3` im selben Java-Projekt, oder `vue@3` + `angular@17` im selben TS-Projekt).
+
+**Nicht-Trigger:**
+- Polyglott über **verschiedene Sprachen** (Java-Backend + React-Frontend im Mono-Repo) — das ist normal, kein Eskalations-Fall. Die Heuristik gruppiert die Detection nach `profile.lang` — der Trigger feuert nur, wenn die Konfliktmenge innerhalb **einer** Sprach-Bucket liegt (Spec §7).
+- **Companions** (Redis, Memcached) zählen NICHT als Framework — sie werden separat in Schritt 2b behandelt.
+- **Framework-Familien** (z.B. `spring-boot` + `spring-data` + `spring-security` mit gleichem Prefix) sind **komplementär**, nicht rivalisierend — kein Trigger (Spec §7).
+
+**Aktionen bei Trigger:**
+
+1. `AskUserQuestion` mit den gefundenen Frameworks als Optionen (multi-select erlaubt; Default = alle vorgeschlagen) — der User wählt, welche Frameworks in `profile.frameworks[]` landen.
+2. **Auto-Backlog-Issue** im aktuellen Repo (Fork):
+   - **Titel:** `⚠ POLYGLOTT-FRAMEWORK-BEDARF: <X> + <Y> in <lang> — Architektur-Entscheidung dokumentieren`
+   - **Body:** Welcher Framework ist primär? Migration geplant? Verweis auf [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §7 + [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §16-R1 (Pattern-Quelle).
+   - **Labels:** `polyglott-needed`, `architecture` (Fallback ohne Labels analog 2a a.1).
+   - **Priorität:** Important.
+3. **Console-Output** (eigene Zeile, deutlich abgesetzt — vor der User-Frage):
+   ```
+   ============================================================
+   ⚠ POLYGLOTT: <N> Frameworks für <lang> detektiert (<liste>)
+     — siehe Backlog-Item #<n> für Klärung.
+   ============================================================
+   ```
+
+**Spec-Verweise:** [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §7 (Framework-Polyglott) + [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §16-R1 (Pattern-Quelle).
+
 ## 3. Auditieren (gegen den Fabrik-Standard)
 - **Automatik zuerst (objektiv, billig):** `gitleaks detect --source=. --no-git` (Secrets) + Dependency-Audit gemäß Sprache (`npm audit --omit=dev` / `pip-audit` / …) → Funde notieren.
 - **`reviewer` im Audit-Modus** (Task — s. `reviewer.md` „Audit-Modus"): prüft den **Bestand** (kein Diff) gegen **Security-Floor** (immer), die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** → priorisierte Funde (Critical/Important/Suggestions). Bei großen Repos **priorisiert** (Security-Floor überall; Pack-Checks auf repräsentative/heikle Dateien — Auth, Daten-/Netz-Zugriff, Eingänge; Architektur-Auffälligkeiten), NICHT zeilenweise.

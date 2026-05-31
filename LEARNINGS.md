@@ -5,6 +5,7 @@ Eine Zeile pro Promotion (von `retro`/`train`/`teamLeader`, via PR). Status:
 
 | ID | Datum | Pack/Skill | Regel | Quelle | PR | Status |
 |----|-------|------------|-------|--------|----|--------|
+| `adopt+new-project/framework-detection` | 2026-05-31 | `skills/{adopt,new-project}/SKILL.md` | feat(adopt+new-project): Framework/Build-Detection-Heuristik + Polyglott-Trigger-Wiederverwendung (Companions ausgenommen) — PR-D | PR-D, Welle 4 | feat/adopt-newproject-framework-detection | Proposed |
 | `tester/build-dispatch` | 2026-05-31 | `agents/tester.md` | feat(tester): kanonische Build-Tool-Dispatch-Tabelle (maven/gradle/npm/pnpm/uv/cargo/none + Freitext-Fallback) — PR-C | PR-C, Welle 3 | feat/tester-build-dispatch | Proposed |
 | `schema/loader-resolver` | 2026-05-31 | `agents/{coder,reviewer,tester,train,retro}.md` + `skills/train/SKILL.md` | 3-Achsen-Pack-Loader in coder/reviewer/tester + train/retro Sektions-Disziplin (A=train, B=retro, C=User-Approval) + `/train <pack-id>`-Resolver mit Ambiguitäts-Stopp — PR-B (Welle 2 des framework-build-subsystem-Epics). Templates `templates/<lang>/profile.md` werden separat in PR-D/PR-E nachgezogen. | PR-B, Welle 2 | feat/schema-loader-resolver | Proposed |
 | `spec/framework-build-subsystem` | 2026-05-31 | `docs/architecture/framework-build-subsystem.md` + `knowledge/_meta/versioning.md` | 3-Achsen-Profil (lang/build/frameworks); Major-Cut+Minor-Tag; train+retro auf disjunkten Pack-Sektionen — PR-A (Welle 1 des framework-build-subsystem-Epics) | Spec-PR, Welle 1 | spec/framework-build-subsystem | Proposed |
