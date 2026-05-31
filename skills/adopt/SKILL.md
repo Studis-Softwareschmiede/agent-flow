@@ -148,6 +148,44 @@ db_dialect: <wert>   # auto-detected from <evidence>, confirmed <YYYY-MM-DD>
 
 **g) Kein Auto-Fix.** Wie der ganze `/adopt`-Pfad: 2a schreibt nur `profile.db_dialect`, kopiert idempotent **Skeleton**-Dateien (die per Definition nichts überschreiben) und erzeugt Backlog-Items. **Keine** automatische Migrations-Ausführung, **kein** Auto-Patch von App-Code.
 
+## 2b. Companion-Detection (`profile.companions[]` ergänzen)
+Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §17. Companions = stateful Sidecars **OHNE** Schema-Evolution (Cache/Queue/Sessions/Pub-Sub). Läuft **nach** der DB-Detection (2a), unabhängig vom DB-Pfad — `db_dialect: none` schliesst Companions nicht aus.
+
+**Wichtig (Scope-Lock):** Companions belegen **NICHT** den `db_dialect`-Slot — der bleibt für primäre DBs reserviert. Die Companion-Detection beeinflusst die Polyglott-Trigger-Heuristik (§2 / Spec §16-R1) **nicht**.
+
+**a) Auto-Detection — pro Companion separat** (heute nur `redis` verfügbar; weitere Companions additiv in eigenen PRs):
+
+| Signal (Quelle → Wert) | → Companion |
+|---|---|
+| `package.json` deps: `redis`, `ioredis`, `bull`, `bullmq`, `connect-redis` | `redis` |
+| `requirements.txt`/`pyproject.toml`: `redis`, `celery[redis]`, `rq`, `django-redis` | `redis` |
+| `pom.xml`/`build.gradle`: `redis.clients:jedis`, `io.lettuce:lettuce-core`, `org.springframework.data:spring-data-redis` | `redis` |
+| `pubspec.yaml` deps: `redis` (Dart-Client) | `redis` |
+| Vorhandenes `docker-compose*.yml` Service `image:` enthält `redis` | `redis` |
+| Env-Refs (`.env*`, `*.yml`): `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT` | `redis` |
+| Kein Treffer | (keiner) |
+
+**b) User-Bestätigung — Pflicht bei Treffer** (AskUserQuestion):
+```
+Detected companion: redis (evidence: package.json:38 ["ioredis": "^5.4.1"])
+Add to profile.companions[]? [Y/n]
+```
+
+**c) In `.claude/profile.md` schreiben** (Liste, additiv — bestehende Werte erhalten):
+```yaml
+companions: [redis]   # auto-detected from <evidence>, confirmed <YYYY-MM-DD>
+```
+
+**d) Wenn Companion bestätigt — Compose-Fragment + .env-Vorlage ergänzen, IDEMPOTENT:**
+- **Fragment-Quelle:** `${CLAUDE_PLUGIN_ROOT}/templates/_shared/companion-<name>/compose.fragment.yml`.
+- **Vorhandenes Projekt-`docker-compose.yml`** ohne Companion-Service (z.B. `services.redis` fehlt): Fragment **anhängen** mit Trennzeile `# --- companion-<name> (added by /adopt, source: templates/_shared/companion-<name>/compose.fragment.yml) ---`.
+- **Vorhandenes `docker-compose.yml` MIT Companion-Service**: **nicht überschreiben** — Fragment in separate `docker-compose.<name>.yml` ablegen + Backlog-Item „Companion-Service gegen Fabrik-Standard abgleichen".
+- **`.env.<name>.example`** (z.B. `.env.redis.example`) ans Repo-Root kopieren, falls noch nicht vorhanden.
+- **KEIN `db_scripts/`-Skeleton, KEIN Migrations-Runner, KEIN Backup-Skript** — Companions haben per Definition keine Schema-Evolution (Spec §17 Scope-Lock).
+- **KEIN DBA-Audit-Dispatch** — Companions sind Infra, nicht DB. Audit-Findings (z.B. Companion-Service ohne Healthcheck, hartkodiertes Passwort im Compose) gehen über den normalen `reviewer`-Audit (Schritt 3).
+
+**e) Kein Auto-Fix.** Identisch zu 2a-g: 2b schreibt nur `profile.companions[]`, kopiert nicht-destruktives Skeleton, erzeugt ggf. Backlog-Items. Bestehende Companion-Services im Compose werden **nie** überschrieben.
+
 ## 3. Auditieren (gegen den Fabrik-Standard)
 - **Automatik zuerst (objektiv, billig):** `gitleaks detect --source=. --no-git` (Secrets) + Dependency-Audit gemäß Sprache (`npm audit --omit=dev` / `pip-audit` / …) → Funde notieren.
 - **`reviewer` im Audit-Modus** (Task — s. `reviewer.md` „Audit-Modus"): prüft den **Bestand** (kein Diff) gegen **Security-Floor** (immer), die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** → priorisierte Funde (Critical/Important/Suggestions). Bei großen Repos **priorisiert** (Security-Floor überall; Pack-Checks auf repräsentative/heikle Dateien — Auth, Daten-/Netz-Zugriff, Eingänge; Architektur-Auffälligkeiten), NICHT zeilenweise.
@@ -164,3 +202,4 @@ Report an den User: Repo-/Fork-URL · Board-URL · Funde nach Schwere (#Critical
 - Idempotent: bestehende `.claude/`-/`docs/`-Dateien nicht überschreiben (mergen/fragen).
 - Die **abgeleitete Spec ist Entwurf**, bis du sie bestätigst (sie ist danach die Drift-Gate-Referenz für `/flow`).
 - **DB-Detection (Schritt 2a) ist nicht-destruktiv:** schreibt `db_dialect`, hängt Compose-Fragment **nur** an, wenn noch kein db-Service existiert; bestehende `db_scripts/`-Dateien werden **nie** überschrieben — Konflikte landen als Backlog-Item, nicht als Auto-Patch.
+- **Companion-Detection (Schritt 2b) ist nicht-destruktiv** und beeinflusst `db_dialect` NICHT: Companions leben in `profile.companions[]` (additive Liste, Scope-Lock §17). Heute verfügbar: `redis`. Kein `db_scripts/`-Skeleton, kein Migrations-Runner, kein Backup-Auto-Scaffold — wer das braucht, gehört ins DB-Subsystem.
