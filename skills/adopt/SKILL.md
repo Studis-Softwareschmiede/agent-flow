@@ -243,6 +243,17 @@ frameworks: [<id>@<major>, …]   # auto-detected from <evidence>, confirmed <YY
 
 **g) Kein Auto-Fix.** Analog 2a-g/2b-e: 2c schreibt nur `profile.build` und `profile.frameworks[]`, erzeugt ggf. Backlog-Items. **Kein** automatischer Pack-Anlage-Lauf, **kein** Auto-Patch von App-Code oder Build-Files.
 
+**Multi-Lang-Erkennung (für `profile.lang` Array-Form, siehe `docs/architecture/framework-build-subsystem.md` §2):** wenn die Heuristik **2+ primäre Sprachen** in EINEM Repo findet — typischerweise via expliziter Multi-Modul-Marker:
+
+| Marker | Multi-Lang-Indikator |
+|---|---|
+| Maven Multi-Modul (`<packaging>pom</packaging>` + `<modules>` mit Sub-Modulen, die UNTERSCHIEDLICHE Sprachen haben) | ja |
+| npm/pnpm `workspaces` mit Sprach-fremden Sub-Packages (z.B. Workspace mit `pom.xml` darin) | ja |
+| Repo-Root hat sowohl `pom.xml` (Java) ALS AUCH `package.json` (TS/JS) mit eigenem `src/` | ja |
+| Cargo `[workspace]` mit Cross-Sprach-Mitgliedern | ja |
+
+Bei Multi-Lang-Treffer **schreibt `/adopt` `lang: [java, ts]`** (Array-Form) statt einzelner Wert. **AskUserQuestion** bestätigt den Vorschlag (multi-select: alle erkannten Sprachen vorausgewählt). Keine separate Polyglott-Eskalation (Polyglott meint MEHRERE Frameworks pro Sprache — nicht mehrere Sprachen pro Repo; siehe Spec §7).
+
 ## 2d. Polyglott-Eskalation (Frameworks)
 Wiederverwendung des in Schritt 2a für DB-Dialekte etablierten Mechanismus ([`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §16-R1 und [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §7).
 

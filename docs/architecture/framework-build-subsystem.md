@@ -27,7 +27,9 @@
 Neue Felder im `.claude/profile.md`. Die Sprach-Achse (`lang`) bleibt unverändert; **zwei neue Felder** kommen hinzu:
 
 ```yaml
-lang: "java" | "ts" | "py" | "rust" | ...        # bestehend, Pflicht
+lang: "java" | "ts" | "py" | "rust" | ...        # bestehend; Single-Value ODER (neu) Array für Mono-Repos
+                                                  #   Single:  lang: "java"
+                                                  #   Multi:   lang: [java, ts]       (z.B. Spring-Boot-Backend + Angular-Frontend in einem Repo)
 build: "maven" | "gradle" | "npm" | "pnpm" | "uv" | "cargo" | "none"   # NEU, Pflicht ab Sprachen mit Build-Tool; "none" für Bash-Skripte/statische Seiten
 frameworks: []                                    # NEU, Array, optional; Form: ["spring-boot@3", "spring-data@3"]
 ```
@@ -36,11 +38,15 @@ frameworks: []                                    # NEU, Array, optional; Form: 
 
 | Feld | Status | Default beim Scaffold |
 |---|---|---|
-| `lang` | Pflicht (bestehend) | aus Sprach-Auswahl `/new-project` / `/adopt` |
+| `lang` | Pflicht (bestehend); Scalar ODER Array (Multi-Lang-Mono-Repos, siehe unten) | aus Sprach-Auswahl `/new-project` / `/adopt` |
 | `build` | Pflicht ab Sprachen mit Build-Tool | aus Detection (§6); explizit `none` für Bash/statisch |
 | `frameworks` | Optional (Array, Default `[]`) | aus Detection (§6); leer ⇒ kein Framework-Pack |
 
 **Form des `frameworks`-Eintrags.** `"<id>@<major>"` (z.B. `"spring-boot@3"`). Major ist Pflicht ab Frameworks, die einen Cut hatten — Loader matcht über `framework_version_range`-Header (§3). Details und Faustregel: [`knowledge/_meta/versioning.md`](../../knowledge/_meta/versioning.md).
+
+**Multi-Lang-Form (Mono-Repos).** Ist `lang` als Array gesetzt (z.B. `[java, ts]`), gilt jede gelistete Sprache als „primäre Sprache" des Repos. Der Pack-Loader lädt **alle** Sprach-Packs parallel (§3); der Reviewer wendet **Per-File-Dispatch** an — die Datei-Endung entscheidet, welcher Sprach-Pack für eine konkrete Datei greift (`*.java` → `java.md`, `*.ts`/`*.tsx` → `ts.md`, etc.). Floor-Packs (z.B. `security.md`) gelten dateiunabhängig. Scalar-Form (`lang: "java"`) ist YAML-äquivalent zu `lang: [java]` und bleibt der **Default** für Single-Sprache-Repos — die Multi-Form ist explizit für Mono-Repos mit mehreren primären Sprachen (über Maven Multi-Modul, npm/pnpm-Workspaces, Cargo-Workspaces oder vergleichbare Strukturen).
+
+**Abgrenzung zu `db_dialect` (siehe `docs/architecture/db-subsystem.md` §2):** `db_dialect` ist und bleibt **single-value** (eine App = eine DB). `lang`-Multi ist eine andere Klasse: ein Mono-Repo ist mehrere logisch getrennte Apps in einem Repo, mit eigenen Source-Trees pro Sprache — die `lang`-Achse muss das abbilden. Die DB-Achse spannt das nicht (auch ein Java+Angular-Repo nutzt typischerweise EINE DB).
 
 **Backwards-Compat.** Fehlende `build`-Zeile in bestehenden Profilen → Loader interpretiert als „kein Build-Pack laden" (analog zum DB-Subsystem-Fallback). Beim nächsten `/adopt` setzt die Heuristik (§6) das Feld; alternativ wird interaktiv nachgefragt. Fehlende `frameworks`-Zeile → behandelt wie `frameworks: []` (kein Framework-Pack).
 
@@ -76,12 +82,12 @@ knowledge/
 **Pack-Auswahl-Regel** (gilt für `coder`, `reviewer`, `tester`, `train`, `retro`):
 
 ```
-ALWAYS  knowledge/<profile.lang>.md
-IF profile.frameworks    → für jedes f in frameworks:
-                             pack = f bis @ + "-" + major  → knowledge/frameworks/<pack>.md
-                             (z.B. "spring-boot@3" → knowledge/frameworks/spring-boot-3.md)
+ALWAYS  für JEDE Sprache in profile.lang (Scalar → 1-Element-Array normalisiert): knowledge/<lang>.md
+IF profile.frameworks    → für jedes f in frameworks: knowledge/frameworks/<f>.md
 IF profile.build != none → knowledge/build/<profile.build>.md
 ```
+
+**Per-File-Dispatch bei Multi-Lang** (Reviewer-/Tester-spezifisch): wenn `profile.lang` mehr als eine Sprache enthält, wendet der Reviewer für jeden geänderten File **den passenden Sprach-Pack** an — Auswahl per Datei-Endung gemäß einer expliziten Mapping-Tabelle, die im Reviewer-Agent verankert ist (siehe `agents/reviewer.md` Schritt 5). Die Coder-Guidance aller geladenen Sprach-Packs liest der Coder vollständig (er weiß noch nicht, welche Files er gleich editieren wird); der Per-File-Dispatch betrifft nur die Reviewer-Checklist-Anwendung. Floor-Packs (`security.md`) gelten dateiunabhängig — Floor wird IMMER auf alle Dateien angewendet.
 
 **Pack-Header (Pflicht-Frontmatter ab framework-/build-Packs):**
 
