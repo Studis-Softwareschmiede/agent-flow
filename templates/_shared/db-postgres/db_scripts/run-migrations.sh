@@ -36,6 +36,19 @@ export PGDATABASE="$DB_NAME"
 
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/db_scripts}"
 
+# ---- 0. SQL-Quote-Helper (analog db-sqlite) ----
+# psql `:'var'`-Substitution funktioniert NUR in `-f`/STDIN/interaktiv,
+# NICHT in `-c "..."` (psql parst `-c`-Strings als bereits-fertiges SQL und
+# expandiert Variablen darin nicht — Resultat: `syntax error at or near ":"`).
+# Stattdessen escapen wir Werte shell-seitig nach kanonischer SQL-Regel
+# (jedes ' verdoppeln) und betten sie als Literal ein. Deterministisch für
+# JEDE Eingabe, injektionssicher.
+#   Eingabe `O'Brien`   → Literal `'O''Brien'`
+#   Eingabe `'; DROP …` → Literal `'''; DROP …'`  (komplett innerhalb des Strings)
+sql_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
+}
+
 # ---- 1. Auf DB warten (max 60s, 2s-Intervall) ----
 echo "[run-migrations] Waiting for Postgres at ${DB_HOST}:${DB_PORT} (max 60s)..."
 WAIT_MAX=30
@@ -115,10 +128,13 @@ for f in "${SORTED[@]}"; do
   echo "[run-migrations] APPLY version=${version} file=${base}"
   # In einer Transaktion: die Migration + den Marker-INSERT. Bei Fehler
   # rollt psql ON_ERROR_STOP=1 + die explizite Transaction zurück.
+  # Marker-Werte werden via sql_quote() escaped (siehe oben — `:'var'`
+  # funktioniert nicht in psql -c).
+  qver="$(sql_quote "$version")"
+  qsum="$(sql_quote "$file_checksum")"
   if ! psql -v ON_ERROR_STOP=1 --single-transaction \
-       -v version="$version" -v checksum="$file_checksum" \
        -f "$f" \
-       -c "INSERT INTO public._schema_migrations(version, checksum) VALUES (:'version', :'checksum')"
+       -c "INSERT INTO public._schema_migrations(version, checksum) VALUES (${qver}, ${qsum})"
   then
     echo "[run-migrations] ERROR: migration ${base} failed — aborting." >&2
     exit 1
