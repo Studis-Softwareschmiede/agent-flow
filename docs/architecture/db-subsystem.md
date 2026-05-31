@@ -105,9 +105,10 @@ profile.db_dialect = postgres → knowledge/sql.md
 ```
 <repo>/
   db_scripts/
-    001_init.sql              # postgres|mysql|sqlite
+    000_init_meta.sql         # postgres|mysql|sqlite (mongodb: .js)
+    001_<name>.sql            # erste App-Migration (Projekt-spezifisch)
     002_<name>.sql
-    003_<name>.js             # mongodb (mongosh script)
+    003_<name>.js             # weitere Migrationen — mongodb nutzt .js (mongosh script)
     run-migrations.sh         # dialekt-spezifischer Wrapper (Welle 2)
 ```
 
@@ -346,7 +347,7 @@ templates/_shared/db-<dialect>/
 **Was passiert je Wert:**
 
 - `none`: `profile.db_dialect: none`. Kein DB-Pack, kein Compose-Fragment, kein `db_scripts/`-Skeleton, kein DBA-Dispatch beim ersten `requirement`-Lauf. `docs/data-model.md` wird **nicht** gescaffolded (bestand-Regel in `new-project` Schritt 4b bleibt — sie hängt heute schon an `domains: [sql]`, künftig an `db_dialect != none`).
-- `postgres|mysql|sqlite|mongodb`: Das Fragment aus `templates/_shared/db-<dialect>/compose.fragment.yml` wird ans Projekt-`docker-compose.yml` angehängt. `db_scripts/` wird mit `001_init.sql` (bzw. `.js`) als **leere Vorlage** + dem dialekt-spezifischen `run-migrations.sh` angelegt. `docs/data-model.md` wird gescaffolded. Der `Dockerfile` der Sprache wird um den DB-CLI-Client ergänzt (psql / mariadb-client / sqlite3 / mongosh).
+- `postgres|mysql|sqlite|mongodb`: Das Fragment aus `templates/_shared/db-<dialect>/compose.fragment.yml` wird ans Projekt-`docker-compose.yml` angehängt. `db_scripts/` wird mit `000_init_meta.sql` (bzw. `.js` für mongodb) als idempotenter Marker-Tabellen-Migration + dem dialekt-spezifischen `run-migrations.sh` angelegt. `docs/data-model.md` wird gescaffolded. Der `Dockerfile` der Sprache wird um den DB-CLI-Client ergänzt (psql / mariadb-client / sqlite3 / mongosh).
 
 **Annahme (begründet):** Genau **eine** zusätzliche Frage (kein Multi-Step-Wizard). Begrenzung „minimal fragen" (vgl. existing `new-project` Grenze) bleibt eingehalten.
 
@@ -405,7 +406,8 @@ tests/smoke-db/<dialect>/
   docker-compose.yml         # App + (für 3 von 4 Dialekten) db
   Dockerfile                 # minimaler curl/echo-Service
   db_scripts/
-    001_init.sql|js          # CREATE TABLE foo / createCollection
+    000_init_meta.sql|js     # Marker-Tabelle / -Collection (aus Template)
+    001_smoke.sql|js         # CREATE TABLE foo / createCollection
     run-migrations.sh
   expected.txt               # "ok" — Output des Smoke-SELECTs
 ```
