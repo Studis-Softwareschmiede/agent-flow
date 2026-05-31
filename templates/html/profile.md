@@ -1,7 +1,8 @@
 # Projekt-Profil (Vorlage: html) — new-project füllt <…> aus
 language: html
 domains: [css]
-build: "true"          # statisch, kein Build
+frameworks: []          # statische Seite — keine Frameworks; siehe docs/architecture/framework-build-subsystem.md §3
+build: "true"          # statisch, kein Build (kanonisch wäre: none)
 test: "true"           # Smoke = Seite lädt
 lint: "true"
 smoke: "curl -fsS -o /dev/null -w '%{http_code}' http://localhost:8080/"
