@@ -32,8 +32,8 @@ Ohne Argument: Image/App aus dem cwd-`profile.md`. Mit `<app>`: `image=ghcr.io/s
 3. **App starten** (ersetzt eine evtl. laufende Instanz):
    ```
    docker rm -f "$app" 2>/dev/null || true
-   # NETARG ist leer wenn db_dialect=none, sonst --network "${compose_project}_default"
-   NETARG=""; [ "$db_dialect" != "none" ] && NETARG="--network ${compose_project}_default"
+   # NETARG ist leer wenn db_dialect=none, sonst --network "$db_network" (= ${compose_project}_default)
+   NETARG=""; [ "$db_dialect" != "none" ] && NETARG="--network ${db_network}"
    # DBENV nur wenn DB aktiv; postgres/mysql/mongodb sehen "db" per Compose-DNS, sqlite via Pfad
    DBENV=""
    case "$db_dialect" in
@@ -56,7 +56,19 @@ Ohne Argument: Image/App aus dem cwd-`profile.md`. Mit `<app>`: `image=ghcr.io/s
 ### DB-Subsystem-Integration (Spec §12)
 Nur wenn `db_dialect != none` und Profil vorhanden (also **nicht** bei `up <app>` repo-los).
 
-1. **Fragment lokalisieren:** `FRAG="$CLAUDE_PLUGIN_ROOT/templates/_shared/db-${db_dialect}/compose.fragment.yml"`. Existiert nicht → Fehler: „kein Compose-Fragment für db_dialect=$db_dialect — Welle 2 fehlt".
+0. **Enum-Validierung** (vor jedem Pfad-Zugriff `templates/_shared/db-$db_dialect/`):
+   ```
+   case "$db_dialect" in
+     postgres|mysql|sqlite|mongodb|none) ;;
+     *) echo "FEHLER: unbekannter db_dialect='$db_dialect' (erlaubt: postgres|mysql|sqlite|mongodb|none) — skip DB-Stack"; db_dialect="none"; return 0 2>/dev/null || exit 1 ;;
+   esac
+   ```
+   Bei unbekanntem Wert: klare Fehlermeldung + skip (kein Pfad-Zusammensetzen mit garbage). Bewahrt auch vor Path-Traversal.
+1. **Fragment lokalisieren** (mit Existence-Guard — Spec §14-Amendment Graceful Degradation):
+   ```
+   FRAG="$CLAUDE_PLUGIN_ROOT/templates/_shared/db-${db_dialect}/compose.fragment.yml"
+   [ -f "$FRAG" ] || { echo "FEHLER: kein Compose-Fragment für db_dialect=$db_dialect ($FRAG) — Welle 2 fehlt"; exit 1; }
+   ```
 2. **Compose-Stack starten** mit eindeutigem Project-Name (isoliertes Network + Volume, mehrere parallele Previews kollidieren nicht):
    ```
    docker compose -p "$compose_project" -f "$FRAG" up -d db
@@ -109,15 +121,27 @@ Flags:
    Fallback (Container schon weg / kein Label): `compose_project` aus Profil rekonstruieren (`preview-${app}-${profile.preview_port}`).
 2. **App-Container** stoppen + entfernen: `docker rm -f "$app"`.
 3. **DB-Stack** (nur wenn `db_dialect` gesetzt und `!= none`):
+   **Enum-Validierung + Fragment-Guard** (Spec §14-Amendment Graceful Degradation — identisch zu `up`):
+   ```
+   case "$db_dialect" in
+     postgres|mysql|sqlite|mongodb) ;;
+     *) echo "WARN: unbekannter db_dialect='$db_dialect' aus Label — skip DB down"; db_dialect="" ;;
+   esac
+   FRAG="$CLAUDE_PLUGIN_ROOT/templates/_shared/db-${db_dialect}/compose.fragment.yml"
+   if [ -n "$db_dialect" ] && [ ! -f "$FRAG" ]; then
+     echo "WARN: Fragment fehlt für db_dialect=$db_dialect ($FRAG) — App-Container ist down, DB-Stack-Cleanup übersprungen (manuell prüfen: docker compose -p $compose_project down -v)"
+     db_dialect=""
+   fi
+   ```
+   Bei fehlendem Fragment oder unbekanntem Dialekt wird **nur** der App-Container runtergefahren (Schritt 2 bereits erledigt) — kein Crash, klare Warn-Log-Zeile.
    - Default (Volume löschen):
      ```
-     FRAG="$CLAUDE_PLUGIN_ROOT/templates/_shared/db-${db_dialect}/compose.fragment.yml"
-     docker compose -p "$compose_project" -f "$FRAG" down -v
+     [ -n "$db_dialect" ] && docker compose -p "$compose_project" -f "$FRAG" down -v
      ```
      `-v` entfernt das named-Volume `${compose_project}_db_data` (Spec §12).
    - Mit `--keep-data`:
      ```
-     docker compose -p "$compose_project" -f "$FRAG" down
+     [ -n "$db_dialect" ] && docker compose -p "$compose_project" -f "$FRAG" down
      ```
      Volume überlebt für späteres `up` (gleicher `compose_project` → gleiches Volume).
 4. `role=vps`: Tunnel-Ingress-Regel für `$app` entfernen + DNS-CNAME `$app.$domain` via Cloudflare-API löschen.
