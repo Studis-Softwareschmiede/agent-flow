@@ -100,6 +100,8 @@ non_sources: [baeldung.com, dev.to, medium.com]
 
 **Header-Pflicht für build-Packs:** identisch, außer `framework_version_range` (entfällt oder leer). `primary_sources` zeigt auf das offizielle Build-Tool-Doc (z.B. `maven.apache.org`).
 
+**Hinweis zu `pack_version`:** Pflicht-Format ist `<major>.<minor>` (zwei-stellig) — patch-Level nicht nötig, weil Pack-Patches als ganz neuer commit/PR landen und das `pack_date` der Wahrheits-Marker ist.
+
 **Header-Pflicht für Sprach-Packs (bestand):** wird in dieser Spec **nicht** geändert — Sprach-Packs behalten ihren bisherigen Aufbau, damit Bestandsprojekte stabil bleiben.
 
 **Regel-IDs pro Pack-Namespace** (analog DB-Subsystem §3): `spring-boot/R<NN>`, `react/R<NN>`, `maven/R<NN>`, `gradle/R<NN>`. Begründung: stabile IDs für das Observability-Ledger (CONCEPT §5a).
@@ -134,6 +136,10 @@ Jeder framework-/build-Pack hat die folgenden Sektionen mit klarer Schreib-Hohei
 
 **Pack-Anlage-Pflicht bei Cut.** Ein neuer Pack wird durch Kopie + Anpassung des alten erzeugt. Der alte Pack wird **NICHT gelöscht** (Bestandsprojekte verlassen sich darauf), bekommt aber im Header einen Endlebenszyklus-Marker: `eol: <datum>` oder `superseded_by: <neuer-pack-id>`. Detail-Begründung und Beispiel-Tabelle: [`knowledge/_meta/versioning.md`](../../knowledge/_meta/versioning.md).
 
+**Range-Matching-Semantik (Loader-Verhalten):** Der Pack-Loader matcht `frameworks: ["<id>@<major>"]` aus dem Profil gegen den `framework_version_range`-Header der Pack-Datei. Match-Regel: der Major aus dem Profil muss in das Range-Intervall fallen. Beispiel: Pack-Range `">=3.0, <4.0"` matcht `spring-boot@3`. Mehrere Packs mit überlappenden Ranges für denselben `<id>` sind nicht erlaubt (Build-Time-Fehler im Pack-Loader).
+
+**Major-Optionalität:** Frameworks, die noch nie einen Cut hatten (z.B. `fastapi`, `flask` Stand 2026), dürfen ohne `@<major>` im Profil stehen (`frameworks: ["fastapi"]`). Der Loader nimmt dann den einzigen vorhandenen Pack-File-Match. Sobald ein Cut entsteht (z.B. `fastapi-2.md` neu), wird `@<major>` im Profil Pflicht — sonst Build-Time-Fehler („mehrdeutiger Match: fastapi-1.md ODER fastapi-2.md").
+
 ---
 
 ## 6. Adopt-Heuristik (Framework/Build-Detection)
@@ -160,6 +166,8 @@ Analog zur DB-Detection in `db-subsystem.md` §2: kanonische Signal-Palette mit 
 | sonst (Sprach-Build-Tool unklar) | **Frage stellen** (`AskUserQuestion` mit den Enum-Werten + `none`) | — |
 
 **Major-Extraktion.** Aus der Dep-Version den ersten Major nehmen — `react@^18.2.0` → `react@18`; `react@~19.0.0` → `react@19`; `react@>=17 <19` → `react@17` (erster Major im Range) + **Warnung** im Adopt-Output („Dep spannt Majors 17–18; gepinnt auf 17; korrigiere Profil bei Bedarf"). Spec-Ranges mit Wildcards (`*`, `x`) ohne Untergrenze → Frage an User.
+
+**Python-Signal-Fallback:** Liefert `requirements.txt` oder `pyproject.toml` einen Framework-Namen OHNE Version-Pin (`django` statt `django>=5.1`), wird Major-Extraktion via `pip index versions <name>` oder Pack-Default versucht. Schlägt das fehl → AskUserQuestion mit „kein Major bestimmt — bitte angeben".
 
 **Confidence-Semantik.** `high` heißt: Signal ist eindeutig — Detection wird vorgeschlagen, User-Bestätigung erfolgt **trotzdem** (analog DB-Subsystem §9: immer Rückfrage, auch bei `high`). Confidence-Stufen sind Hinweis für Audit-Trail/Logs.
 
@@ -209,7 +217,7 @@ Promotionen aus Projekt-Lessons in Framework-/Build-Packs sind **gefährlich** (
 
 1. **Frequenz-Schwelle.** Ein Pattern muss in **≥2 verschiedenen Projekten** UND **≥2 verschiedenen Code-Stellen** vorkommen, bevor `retro` es in einen Pack promoten darf. Single-Projekt-Lessons bleiben in `LEARNINGS.md` als `Proposed`, werden aber nicht in den Pack gehoben.
 2. **Provenance im PR-Body.** Der retro-PR-Body listet die Lesson-Quellen **namentlich**: Projekt-Name + Datei + Zeile, oder Projekt + PR-Nummer. Reviewer prüft die Quellen-Existenz als Hard-Check. Ohne Provenance → `CHANGES-REQUIRED`.
-3. **Cooldown.** `retro` läuft maximal **1× pro Woche** oder per expliziter `/retro`-Trigger. **Nicht automatisch** nach jedem coder-PR (sonst entsteht Promotions-Lärm bei flüchtigen Lessons). Der Cooldown wird im LEARNINGS-Ledger getrackt (Spalte „Datum" der letzten `retro/`-PR-Zeile).
+3. **Cooldown:** retro läuft max. 1× pro Woche pro Repo (oder per explizitem `/retro --force`-Trigger). Persistiert in der projekt-lokalen Datei `.claude/lessons/.retro-last-run` (ISO-Datum). **Amendment (2026-05-31):** ursprünglich war ein Lookup in `LEARNINGS.md`-Spalte „Datum" geplant; ersetzt durch dedizierte Datei, weil ein leerer retro-Lauf (kein Pattern reif für Promotion) keinen Ledger-Eintrag erzeugt — eine Cooldown-Quelle aus dem Ledger wäre für solche Läufe blind. Die `.retro-last-run`-Datei tickt deterministisch bei jedem Lauf.
 4. **Reviewer-Gate bleibt.** Der retro-PR durchläuft denselben reviewer-Loop wie jeder andere PR — **kein Auto-Merge**, kein Bypass. Cross-Pack-Promotions (eine retro-Welle, die mehrere Packs trifft) werden gebündelt als **ein PR mit mehreren Regeln** (kein PR-Spam).
 
 **Schreib-Hoheit.** `retro` schreibt **nur** in Sektion B (Anti-Patterns aus Einsatz) der Framework-/Build-Packs und ergänzt optional `Coder-Guidance` / `Reviewer-Checklist` / `Test-Approach`. Sektion A (Stable API & Deprecations) bleibt `train`-Hoheit — Berührung durch `retro` → reviewer `CHANGES-REQUIRED`.

@@ -44,7 +44,7 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
      Vorschlags-Liste pro `lang`:
      - **java/kotlin:** `[spring-boot@3, quarkus@3]`
      - **ts/js:** `[react@18, react@19, vue@3, angular@17]`
-     - **py:** `[django@5, fastapi, flask]`
+     - **py:** `[django@5, fastapi, flask]` — django mit `@5` (Cut bei 4→5 erfolgt); `fastapi`/`flask` ohne `@<major>` (noch nie ein Cut, Spec §5 Major-Optionalität).
      - **rust:** (keine Vorschläge in P1 — Skip oder Freitext)
      **Default ohne Antwort: keine** (Framework-Auswahl ist opt-in; weniger Moving-Parts beim Bootstrap).
    - `init`: Detection wie in `/adopt` Schritt 2c — dort dokumentiert; hier nur Verweis.

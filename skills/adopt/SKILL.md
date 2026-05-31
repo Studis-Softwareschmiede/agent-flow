@@ -203,7 +203,7 @@ Heuristik gemäß [`docs/architecture/framework-build-subsystem.md`](../../docs/
 | `pnpm-lock.yaml` | `build: pnpm` | high |
 | `pyproject.toml` + `uv.lock` | `build: uv` | high |
 | `Cargo.toml` | `build: cargo` | high |
-| keine der Signale | `build: none` (default, User-Bestätigung via AskUserQuestion) | — |
+| keine der Signale | `build: none` (Default, **mit User-Bestätigung via AskUserQuestion** — auch `none` bedarf der Bestätigung, weil ein Repo möglicherweise einen externen Build-Mechanismus hat, den die Heuristik nicht sieht) | — |
 
 **b) Framework-Achse** (`profile.frameworks: []`, multi-value, optional):
 
@@ -219,7 +219,12 @@ Heuristik gemäß [`docs/architecture/framework-build-subsystem.md`](../../docs/
 | `requirements.txt`/`pyproject.toml` mit `fastapi>=` | `frameworks += fastapi@<major>` | high |
 | `requirements.txt`/`pyproject.toml` mit `flask>=` | `frameworks += flask@<major>` | high |
 
-**c) Major-Extraktion.** Aus dem Version-Constraint die niedrigste passende Major-Version nehmen (`^18.2.0` → `18`; `>=3.4,<4` → `3`; `~5.1` → `5`). Bei Spannweite über Majors (`>=2,<4`): erster Major (`2`) UND `[POLYGLOTT-WARN]`-Marker im Backlog-Item (User soll Profil schärfen). Wildcards (`*`, `x`) ohne Untergrenze → Frage an User (Spec §6 Major-Extraktion).
+**c) Major-Extraktion.** Aus dem Version-Constraint die niedrigste passende Major-Version nehmen:
+- `^18.2.0` → `18` (Caret-Range)
+- `~5.1` → `5` (Tilde-Range)
+- `>=3.4,<4` → `3` (Untere Grenze)
+- `>=2,<4` → `2` UND `[POLYGLOTT-WARN]`-Marker (Spannweite über Majors → User soll Profil schärfen)
+- Wildcard `*`/`x` ohne Untergrenze → AskUserQuestion mit „kein Major bestimmt"
 
 **d) User-Bestätigung — Pflicht, auch bei `high`-Confidence** (AskUserQuestion, beide Achsen einzeln):
 - **build:** single-select aus Tabellen-Werten + `none`; Voreinstellung = Heuristik-Vorschlag.

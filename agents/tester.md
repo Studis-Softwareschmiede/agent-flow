@@ -73,7 +73,7 @@ Spec-Verweis: `docs/architecture/db-subsystem.md` §13 (Test-Verträge) — der 
 
 # Output
 ```
-Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER | SKIPPED-DOC-ONLY
+Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER | SKIPPED-DOC-ONLY | SKIPPED-NO-BUILD
 Ran: <Befehle>
 Result: <…>
 Failures: <… oder none>
@@ -85,4 +85,5 @@ Failures: <… oder none>
 - `SKIPPED-NO-DOCKER` nur, wenn die DB-Subsystem-Smoke aufgrund fehlendem Docker-Daemon nicht laufen konnte; nie als Tarn-PASS für andere Stufen verwenden.
 - `SKIPPED-DOC-ONLY` nur, wenn der Diff ausschließlich Doku-Dateien in `tests/db-subsystem/` (z.B. README) berührt und keinerlei Skript-/Template-Diff vorliegt; dieser Status ist für den Orchestrator äquivalent zu „kein Smoke nötig" (kein human-handoff).
 - **Build-Tool-Dispatch:** wenn `profile.build` einen kanonischen Wert hat (siehe Tabelle), MUSS der dort definierte Befehl genutzt werden; eigenmächtige sprach-hartcodete Build-Logik ist verboten.
+- `SKIPPED-NO-BUILD` nur, wenn `profile.build` den Wert `none` hat (Sprach-Toolchains ohne Build wie statische HTML/CSS). Build-Stufe wird übersprungen, alle anderen Stufen (test, Security-Smoke, ggf. DB-Subsystem-Smoke) laufen normal; AC-Abgleich erfolgt wie üblich.
 - Bekannte nicht-fatale Fehler nur tolerieren, wenn im Profil deklariert.
