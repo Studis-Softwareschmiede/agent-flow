@@ -397,7 +397,7 @@ Der Orchestrator dispatcht `dba` (im Review-Modus, nicht Design-Modus) **wenn ei
 
 ## 13. Test-Verträge — Selbsttest der Fabrik
 
-Die DB-Subsystem-Erweiterung wird in der Fabrik durch **vier Smoke-Skripte** verifiziert (eines pro Dialekt). Diese leben in `tests/db-subsystem/` innerhalb des `agent-flow`-Repos und werden von einem neuen Workflow `.github/workflows/smoke-db.yml` (Welle 3) bei jedem PR ausgeführt, der `knowledge/sql*.md`, `knowledge/mongodb.md`, `templates/_shared/db-*` oder `skills/preview/SKILL.md` berührt.
+Die DB-Subsystem-Erweiterung wird in der Fabrik durch **vier Smoke-Skripte** verifiziert (eines pro Dialekt). Diese leben in `tests/db-subsystem/` innerhalb des `agent-flow`-Repos und werden vom **`tester`-Agent im `/flow`-Loop** ausgeführt, sobald ein PR `templates/_shared/db-*/**` oder die Smoke-Skripte selbst (`tests/db-subsystem/*.sh`) berührt. Pfad-basierte Auswahl (nur der betroffene Dialekt; bei Edits am Runner selbst alle vier) ist im Agent kodifiziert — siehe `agents/tester.md` Abschnitt „DB-Subsystem-Smoke (bei Template-Diffs)". Kein GitHub-Actions-Workflow nötig (keine Actions-Minuten, kein DinD-Overhead, unabhängig von Org-Budget-Politik).
 
 **Smoke-Suite-Struktur** (kanonisch, umgesetzt in PR #36):
 
@@ -415,7 +415,7 @@ Jedes `smoke-<dialect>.sh` ist **monolithisch + selbst-validierend** (keine sepa
 
 **Begründung für monolithische Struktur (gegenüber dem ursprünglichen `tests/smoke-db/<dialect>/{run.sh, expected.txt}`-Layout):** Per-Dialekt-Skripte sind übersichtlich, portabel (kein gemeinsamer `run.sh` mit case/switch pro Dialekt), validieren erwartete Outputs inline (kein File-Diff-Roundtrip nötig) und haben in PR #36 echte Drift-Bugs in den Compose-Fragmenten gefunden. Eine separate `expected.txt` würde nur sehr triviale „ok"-Vergleiche kapseln; der Mehrwert rechtfertigt das zusätzliche File-Layout nicht.
 
-**Smoke-Verlauf** (ein Skript `tests/db-subsystem/smoke-<dialect>.sh`, vom CI-Job pro Dialekt aufgerufen):
+**Smoke-Verlauf** (ein Skript `tests/db-subsystem/smoke-<dialect>.sh`, vom `tester`-Agent pro betroffenem Dialekt aufgerufen):
 
 1. `docker compose -p smoke-<dialect> up -d`.
 2. Auf DB-Healthcheck warten (außer sqlite).
@@ -427,6 +427,8 @@ Jedes `smoke-<dialect>.sh` ist **monolithisch + selbst-validierend** (keine sepa
 8. PASS = alle 4 Dialekte grün; ein roter = PR rot. `run-all.sh` aggregiert "N/4 PASS".
 
 **Annahme (begründet):** Smoke testet **die Mechanik** (Runner, Marker, Idempotenz, Drift-Erkennung, Compose-Fragment), nicht den Pack-Inhalt (Pack-Korrektheit ist `reviewer`-/Mensch-Sache; wenn wir das testen würden, müssten wir den ganzen `/flow` simulieren — zu schwer für CI).
+
+**Aufruf-Wiring (Amendment, 2026-05-31):** Die Smoke-Skripte werden vom **`tester`-Agent** im `/flow`-Loop gefahren — nicht von einem GitHub-Actions-Workflow. Pfad-basierte Auswahl (nur der betroffene Dialekt; bei Edits am Runner selbst alle vier) ist im Agent kodifiziert — siehe `agents/tester.md` Abschnitt „DB-Subsystem-Smoke (bei Template-Diffs)". Der `/flow`-Orchestrator behandelt `Test-Gate: PASS` als harte Vorbedingung für Merge bei Template-Diffs (`skills/flow/SKILL.md` §4). Begründung gegenüber der ursprünglich angedachten `.github/workflows/smoke-db.yml`: lokaler Tester-Run ist schneller (kein DinD-Overhead), kostet keine Actions-Minuten, ist unabhängig von Org-Budget-Politik und integriert sich nativ in die bestehende Coder→Reviewer→Tester-Sequenz.
 
 ---
 
@@ -457,7 +459,7 @@ Drei Wellen mit klaren Abhängigkeiten — die zweite hängt von der ersten, die
 - `skills/flow/SKILL.md`: DBA-Review-Dispatch bei Trigger §11.
 - `skills/preview/SKILL.md`: DB-Service-Start, Migrations-Apply, Isolations-Compose-Projekt-Namen.
 - `templates/<lang>/profile.md`: `db_dialect: <bei Scaffold gesetzt>` Zeile.
-- `tests/db-subsystem/smoke-<dialect>.sh` + `tests/db-subsystem/run-all.sh` + `.github/workflows/smoke-db.yml` (siehe §13 für die kanonische Struktur, umgesetzt in PR #36).
+- `tests/db-subsystem/smoke-<dialect>.sh` + `tests/db-subsystem/run-all.sh` + `tester`-Agent-Dispatch in `agents/tester.md` + `/flow`-Trigger in `skills/flow/SKILL.md` §4 (siehe §13 für die kanonische Struktur, umgesetzt in PR #36; Wiring auf `tester`-Agent statt GH-Actions umgestellt in PR #41).
 - **Output:** End-to-end nutzbar.
 
 **Parallelisierbarkeit:**
@@ -489,7 +491,7 @@ Diese Amendment-Regel ist explizit eng: sie deckt nur Disziplin-/Wiring-Edits ab
 
 **R4 — CLI-Clients im App-Image.** Ein `psql`/`mongosh` im Production-Image vergrößert Surface und Image-Größe. Mitigations-Optionen: (a) Multi-Stage-Build mit `migrations-Stage` (CLI nur im Build, nicht im Runtime); (b) Separater `init`-Container nur mit der CLI, der die App-Image-Größe nicht aufbläht. **Empfehlung: (b) ab Welle 2 — ein generisches `migrations`-Image (z.B. `alpine` + dialekt-CLI) statt CLI im App-Image.** Soll ich die Welle-2-Specs entsprechend umstellen? — User-Entscheid offen, default in dieser Spec ist noch (a).
 
-**R5 — `tests/smoke-db.yml` läuft Docker-in-Docker auf GitHub Actions.** Funktioniert (DinD ist Standard), kostet aber Minuten. Bei langer Smoke-Pipeline → Lauf nur auf Pfad-Änderungen filtern (`paths:` in der workflow-Trigger-Config). **Geklärt:** Filter ist Pflicht (in Welle 3 spezifiziert).
+**R5 — Smoke-Pipeline-Kosten.** Ursprünglich war ein GitHub-Actions-Workflow `tests/smoke-db.yml` (DinD) geplant. **Aufgelöst (PR #41):** Smoke läuft lokal über den `tester`-Agent — keine Actions-Minuten, kein DinD-Overhead, kein Org-Budget-Risiko. Pfad-basierter Filter (nur betroffener Dialekt; ganze Suite bei Runner-Edits) ist im Agent kodifiziert (`agents/tester.md` + `skills/flow/SKILL.md` §4).
 
 **R6 — `domains: [sql]` Backwards-Compat.** Der einzeilige Fallback (`domains: [sql]` ohne `db_dialect` ⇒ `postgres`) muss in `coder`/`reviewer`/`tester`/`dba` konsistent geschrieben sein, sonst zerfällt der Bestand. **Frage:** Eigener Smoke-Test dafür? — Ja, ein 5. Skript `tests/db-subsystem/smoke-legacy-sql-domain.sh` in Welle 3 (analog zur Per-Dialekt-Struktur aus §13).
 
@@ -503,7 +505,7 @@ Diese Amendment-Regel ist explizit eng: sie deckt nur Disziplin-/Wiring-Edits ab
 
 Die in §15 aufgeworfenen offenen Fragen wurden vom User entschieden — die Wellen 1-3 starten mit diesen Festlegungen:
 
-- **R1 — Polyglott:** **Entschieden: P1 = nur 1 DB pro Projekt.** `profile.db_dialect` bleibt Single-Value-Enum. Companion-Services wie Redis werden außerhalb des DB-Subsystems als Sidecar-Templates geführt. Polyglott (mehrere primäre DBs in einem Projekt) wird in P2 evaluiert, falls echter Bedarf entsteht.
+- **R1 — Polyglott:** **Entschieden: P1 = nur 1 DB pro Projekt.** `profile.db_dialect` bleibt Single-Value-Enum. Companion-Services wie Redis werden außerhalb des DB-Subsystems als Sidecar-Templates geführt. Polyglott (mehrere primäre DBs in einem Projekt) wird in P2 evaluiert, falls echter Bedarf entsteht. **Polyglott-Trigger in `/adopt`** — siehe [`skills/adopt/SKILL.md`](../../skills/adopt/SKILL.md) Schritt 2a (Abschnitt **a.1**): erkennt `/adopt` 2+ primäre Dialekte mit `high`-Confidence im selben Repo, wird ein GitHub-Issue mit Label `polyglott-needed` + `architecture` angelegt; P1 wird mit dem vom User gewählten Dialekt adoptiert. Companions (Redis, Memcached, Elasticsearch, Meilisearch, Typesense) zählen explizit **nicht** als Polyglott — die Heuristik schließt sie aus, sonst wäre jede Postgres+Redis-Standard-Webapp ein false-positive. Edge-Case 2 SQL-Dialekte (typisches Test-/Embedded-Setup wie Postgres+SQLite) wird auf `medium`-Confidence downgegradet — keine automatische Eskalation. Diese Skill-Eskalation ist der **Echt-Bedarfs-Belegmechanismus**, der P2 triggert (sobald 2+ unabhängige Projekte den Issue produzieren).
 - **R2 — SQLite-Skalierungsgrenze:** **Entschieden: Ja, prominent dokumentieren.** `knowledge/sql-sqlite.md` erhält eine sichtbare Warn-Sektion zur Single-File-Lock-Limitierung; der DBA-Agent erhält eine Regel (z.B. `sqlite/R0X`), Items mit Multi-Replica-Deployment-Anforderung bei `db_dialect: sqlite` als Critical zu flaggen.
 - **R4 — Migration-CLI-Ort:** **Entschieden: Separates `migrations`-Image.** Der DB-Client (psql/mysql/sqlite3/mongo) wird NICHT ins App-Image gebacken. Stattdessen pro Dialekt ein schlankes `migrations`-Image (z.B. `postgres:16-alpine` mit `run-migrations.sh` als ENTRYPOINT), das im Compose als one-shot-Service zwischen DB-Healthy und App-Start läuft. Saubere Trennung App ↔ DB-Admin.
 - **R5 — Optionale `checksum`-Spalte in `_schema_migrations` (Amendment, 2026-05-30):** **Entschieden: Spec §4 erlaubt eine optionale dritte Spalte `checksum TEXT NULL` (bzw. dialekt-äquivalent).** Verursacht durch Pack-Diff in PR #24 (Postgres-Pack), das diese Spalte für Drift-Detection einführte und damit gegen die ursprüngliche zwei-spaltige Tabellen-Definition driftete. Spec hatte `checksum` weder eingeführt noch bewusst ausgeschlossen — die saubere Lösung ist „optional dokumentiert", sodass jeder Dialekt-Pack frei wählt. Implementierungen ohne `checksum` bleiben Spec-konform. Detail in §4. Unblockt PR #24 + Folge-Packs.
