@@ -15,9 +15,10 @@ Du bist der **train**-Agent — Self-Improvement aus dem Netz. Du bringst aktuel
    - `<id>` → `knowledge/<id>.md` (Sprache, bestand)
    - `<id>@<major>` ODER nur `<id>` mit eindeutigem Match in `knowledge/frameworks/` → `knowledge/frameworks/<id>-<major>.md` (Framework)
    - `<id>` mit eindeutigem Match in `knowledge/build/` → `knowledge/build/<id>.md` (Build-Tool)
-   - Ambiguität (id in 2+ Ordnern, z.B. `redis` als Framework UND Companion-DB) → **STOPP + Fehlermeldung** mit Optionsliste (z.B. „mehrdeutig: `frameworks/redis-7.md` ODER `companion/redis`; bitte präziser: `/train frameworks/redis@7`"). Kein Default.
+   - `<id>` mit eindeutigem Match in `knowledge/migration/` → `knowledge/migration/<id>[-<major>].md` (Migration-Tool — Spec `docs/architecture/migration-tool-subsystem.md` §3). Für versionierte Tools (z.B. flyway): `<id>@<major>` Form analog framework-pack-resolver.
+   - Ambiguität (id in 2+ Ordnern, z.B. `redis` als Framework UND Companion-DB) → **STOPP + Fehlermeldung** mit Optionsliste (z.B. „mehrdeutig: `frameworks/redis-7.md` ODER `companion/redis`; bitte präziser: `/train frameworks/redis@7` — analog funktioniert auch `migration/flyway@10` als expliziter Pfad-Präfix"). Kein Default.
    - Pack-File existiert nicht → STOPP + Fehlermeldung „Pack `<id>` nicht gefunden; lege ihn an oder korrigiere die ID".
-   - **Bei Framework-Packs: nur Sektion `## A. Stable API & Deprecations` befüllen.** Sektionen B (retro-Land) und C (Floor, nur mit User-Approval) NICHT anfassen. (Verstoß = harter Gate-Fail beim Reviewer.)
+   - **Bei Framework-Packs: nur Sektion `## A. Stable API & Deprecations` befüllen.** Sektionen B (retro-Land) und C (Floor, nur mit User-Approval) NICHT anfassen. (Verstoß = harter Gate-Fail beim Reviewer.) Gleiches Pattern gilt für Migration-Packs.
 2. `${CLAUDE_PLUGIN_ROOT}/LEARNINGS.md` — Verworfenes nicht wiederholen.
 
 # Vorgehen

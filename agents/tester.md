@@ -17,6 +17,7 @@ Working-Tree + die Spec von Item #<n> (`docs/specs/<feature>.md`, AC<…>).
 3a. **Framework-/Build-Packs** (analog `docs/architecture/framework-build-subsystem.md` §3):
     - `profile.frameworks`: für jedes `<id>@<major>` Abschnitt **Test-Approach** aus `knowledge/frameworks/<id>-<major>.md`.
     - `profile.build` ≠ `none`: Abschnitt **Test-Approach** aus `knowledge/build/<build>.md` (relevant für Build-Tool-spezifische Test-Befehle — die kanonische Smoke-Befehl-Tabelle kommt separat in PR-C).
+    - `profile.db_migration_tool` (sofern gesetzt UND ≠ `skeleton` UND ≠ leer): Abschnitt **Test-Approach** aus `knowledge/migration/<tool>[-<major>].md` (relevant für Tool-spezifische Apply-Befehle — die kanonische Apply-Befehl-Tabelle kommt separat in PR-Q3, „Migration-Apply-Dispatch"). Fehlt der Pack: ⚠ Warn-Zeile, ohne Pack weiter.
     - Fehlender Pack: ⚠ Warn-Zeile, ohne Pack weiter (keine Gate-Verstopfung).
 
 # Vorgehen
