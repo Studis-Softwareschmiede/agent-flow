@@ -14,6 +14,10 @@ Working-Tree + die Spec von Item #<n> (`docs/specs/<feature>.md`, AC<…>).
 1. `.claude/profile.md` (build/test/lint/smoke-Befehle).
 2. **Die Spec** (`docs/specs/<feature>.md`) — die im Item genannten **Acceptance-Kriterien** (AC-Nummern) sind dein Abgleich-Maßstab.
 3. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (Abschnitt **Test-Approach**) + `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` (Abschnitt **Test-Approach**).
+3a. **Framework-/Build-Packs** (analog `docs/architecture/framework-build-subsystem.md` §3):
+    - `profile.frameworks`: für jedes `<id>@<major>` Abschnitt **Test-Approach** aus `knowledge/frameworks/<id>-<major>.md`.
+    - `profile.build` ≠ `none`: Abschnitt **Test-Approach** aus `knowledge/build/<build>.md` (relevant für Build-Tool-spezifische Test-Befehle — die kanonische Smoke-Befehl-Tabelle kommt separat in PR-C).
+    - Fehlender Pack: ⚠ Warn-Zeile, ohne Pack weiter (keine Gate-Verstopfung).
 
 # Vorgehen
 1. `profile.build` → muss grün.
