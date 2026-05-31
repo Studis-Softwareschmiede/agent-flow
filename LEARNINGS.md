@@ -3,6 +3,8 @@
 Eine Zeile pro Promotion (von `retro`/`train`/`teamLeader`, via PR). Status:
 `Proposed → Merged → Measuring → Validated | Reverted`. Spiegelt das Improvement-Board.
 
+- [PROPOSED] feat(knowledge): Pilot-Packs `frameworks/spring-boot-3` + `build/maven` mit 3-Sektionen-Aufbau (A/B/C + Coder/Reviewer/Test) — PR-E
+
 | ID | Datum | Pack/Skill | Regel | Quelle | PR | Status |
 |----|-------|------------|-------|--------|----|--------|
 | `adopt+new-project/framework-detection` | 2026-05-31 | `skills/{adopt,new-project}/SKILL.md` | feat(adopt+new-project): Framework/Build-Detection-Heuristik + Polyglott-Trigger-Wiederverwendung (Companions ausgenommen) — PR-D | PR-D, Welle 4 | feat/adopt-newproject-framework-detection | Proposed |

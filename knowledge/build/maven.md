@@ -1,0 +1,60 @@
+---
+pack: build/maven
+pack_version: 1.0
+pack_date: 2026-05-31
+primary_sources:
+  - https://maven.apache.org/guides/
+  - https://maven.apache.org/plugins/
+  - https://maven.apache.org/docs/history.html
+non_sources:
+  - baeldung.com
+  - dev.to
+  - medium.com
+  - stackoverflow.com
+---
+
+# Knowledge Pack: maven
+
+Apache Maven (Build-Tool, primär Java/Kotlin/Scala). Geladen bei `profile.build: maven`. Regel-IDs: `maven/A<NN>` · `maven/B<NN>` · `maven/C<NN>`.
+
+## A. Stable API & Deprecations
+
+> Quellen-getrieben (`train`-Land).
+
+- `maven/A01` — **`-ntp` (`--no-transfer-progress`, since 3.6.1)** unterdrückt das Download-Progress-Spam in CI/Logs. Standardflag im Smoke-Befehl `mvn -B -ntp verify`. [src: https://maven.apache.org/docs/3.6.1/release-notes.html, since: 3.6.1]
+- `maven/A02` — **`-B` (`--batch-mode`)** unterdrückt interaktive Prompts und ANSI-Farben — Pflicht für CI/Smoke. Kombination `-B -ntp` ist die kanonische CI-Form.
+- `maven/A03` — **Reproducible-Builds via `project.build.outputTimestamp` (since 3.6.3).** Setzt deterministischen Timestamp in JAR-Manifest und ZIP-Entries — Voraussetzung für SOURCE_DATE_EPOCH-konforme Reproducible-Builds. [src: https://maven.apache.org/guides/mini/guide-reproducible-builds.html, since: 3.6.3]
+
+## B. Anti-Patterns aus Einsatz
+
+> Felderfahrung (`retro`-Land). Initial leer.
+
+_(noch keine Einträge; siehe Schutzgitter in der Spec)_
+
+## C. Konventionen (Floor)
+
+- `maven/C01` — **Maven-Wrapper (`mvnw`) ins Repo committen.** `mvn:wrapper`-Plugin generiert `mvnw`/`mvnw.cmd` + `.mvn/wrapper/`-Konfiguration. CI und neue Entwickler nutzen den exakt gepinnten Maven, kein Globaler-Maven-Mismatch.
+- `maven/C02` — **`dependencyManagement` in Parent-POM bei Multi-Module.** Versionen genau einmal definieren, Sub-Module nur `<dependency>` ohne `<version>`. Verhindert Versions-Drift zwischen Modulen.
+- `maven/C03` — **`spring-boot-starter-parent` ODER `dependencyManagement`-Import** für Spring-Boot-Projekte, nicht beides. Wenn der Parent-POM des Projekts schon einen anderen `<parent>` braucht: `spring-boot-dependencies`-BOM via `<scope>import</scope>` ins `dependencyManagement` aufnehmen.
+- `maven/C04` — **Keine Snapshot-Dependencies in Release-Builds.** `*-SNAPSHOT`-Refs in `pom.xml` machen den Build nicht-reproduzierbar. CI-Gate: `mvn enforcer:enforce` mit `requireReleaseDeps` Regel.
+
+## Coder-Guidance
+
+- Setze `<maven.compiler.release>` (NICHT nur `source`/`target`) — verhindert versehentliche JDK-API-Nutzung neuer als das Target.
+- Multi-Module: gemeinsame Versionen in Parent-POM `dependencyManagement`, niemals doppelt in Sub-Modulen (C02).
+- Reproducible-Builds: `project.build.outputTimestamp` setzen (A03).
+
+## Reviewer-Checklist
+
+- `mvnw`/`mvnw.cmd` fehlen → **Important** (C01, Reproducibility).
+- Sub-Modul listet `<version>` für eine Library, die schon in Parent `dependencyManagement` steht → **Important** (C02, Drift-Risiko).
+- `*-SNAPSHOT`-Dep in `pom.xml` eines Release-Branches → **Critical** (C04).
+- Plugin-Version ungepinnt (`<plugin>` ohne `<version>`) → **Important** (Build-Reproducibility).
+- `mvn`-Befehl in CI/Smoke-Skripts ohne `-B -ntp` → **Suggestion** (A01/A02).
+
+## Test-Approach
+
+- Smoke-Befehl (kanonisch, siehe `agents/tester.md` Build-Tool-Dispatch): `mvn -B -ntp verify`.
+- `verify` ruft `test` (Unit) + `integration-test` (Failsafe-Plugin) — vollständige Build-Lifecycle-Validierung.
+- Für nur-Unit-Smoke: `mvn -B -ntp test` (schneller, kein Packaging).
+- Mit Test-Profilen (z.B. `-Pintegration-tests`): erweitert den Befehl additiv, ersetzt ihn nicht (siehe tester.md Pack-Erweiterungs-Regel).
