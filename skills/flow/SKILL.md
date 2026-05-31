@@ -39,6 +39,9 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 - **tester** (Task): Working-Tree + die **Spec** (AC<…>). Lies `Test-Gate`:
   - `FAIL` → als Befund zurück an coder (zählt zum Schleifenschutz) → 3.1.
   - `PASS` → weiter zu 5.
+  - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): Item → **Blocked** (Kommentar „DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"), dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert.
+
+**Template-Diff = hartes Test-Gate.** Wenn `git diff --name-only` (gegen `main`) im `agent-flow`-Repo Pfade unter `templates/_shared/db-*`, `templates/_shared/companion-*` oder `tests/db-subsystem/**` berührt, ist `Test-Gate: PASS` **Pflicht-Vorbedingung** für Schritt 5 — kein Bypass, auch nicht im `direct`-merge-Modus. Der `tester`-Agent dispatcht die zugehörigen Smoke-Skripte selbst (Auswahl-Regel siehe `agents/tester.md` → „DB-Subsystem-Smoke (bei Template-Diffs)"). Die früher angedachte CI-Variante (`.github/workflows/smoke-db.yml`) entfällt damit — lokaler Tester-Run ist schneller, kostet keine Actions-Minuten und scheitert nicht an leeren Org-Budgets.
 
 ## 5. Landen (gemäß `merge_policy`)
 - **Code UND etwaige `docs/specs/`-Deltas im selben Commit/PR** — zusammen oder gar nicht (Drift-Gate-Prinzip, CONCEPT §4d).

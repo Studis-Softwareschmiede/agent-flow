@@ -428,6 +428,8 @@ Jedes `smoke-<dialect>.sh` ist **monolithisch + selbst-validierend** (keine sepa
 
 **Annahme (begründet):** Smoke testet **die Mechanik** (Runner, Marker, Idempotenz, Drift-Erkennung, Compose-Fragment), nicht den Pack-Inhalt (Pack-Korrektheit ist `reviewer`-/Mensch-Sache; wenn wir das testen würden, müssten wir den ganzen `/flow` simulieren — zu schwer für CI).
 
+**Aufruf-Wiring (Amendment, 2026-05-31):** Die Smoke-Skripte werden vom **`tester`-Agent** im `/flow`-Loop gefahren — nicht von einem GitHub-Actions-Workflow. Pfad-basierte Auswahl (nur der betroffene Dialekt; bei Edits am Runner selbst alle vier) ist im Agent kodifiziert — siehe `agents/tester.md` Abschnitt „DB-Subsystem-Smoke (bei Template-Diffs)". Der `/flow`-Orchestrator behandelt `Test-Gate: PASS` als harte Vorbedingung für Merge bei Template-Diffs (`skills/flow/SKILL.md` §4). Begründung gegenüber der ursprünglich angedachten `.github/workflows/smoke-db.yml`: lokaler Tester-Run ist schneller (kein DinD-Overhead), kostet keine Actions-Minuten, ist unabhängig von Org-Budget-Politik und integriert sich nativ in die bestehende Coder→Reviewer→Tester-Sequenz.
+
 ---
 
 ## 14. Migrations-Reihenfolge / Build-Wellen
