@@ -6,6 +6,14 @@
 // damit `db_scripts/` allein (z.B. via mongosh --file) eine vollständige,
 // idempotente Schema-Definition ist.
 //
+// WICHTIG (Smoke-Hotfix): Diese Datei geht davon aus, dass `db` bereits
+// auf die App-DB zeigt. Der Runner (`run-migrations.sh`) garantiert das
+// via `db = db.getSiblingDB(MONGO_DB); load(this-file)`. Bei manuellem
+// Aufruf MUSS der Aufrufer den DB-Kontext selbst setzen (`use <db>` oder
+// `mongosh --eval "db = db.getSiblingDB('<db>'); load('000_init_meta.js')"`).
+// Hintergrund: mongosh's default-`db` ist in non-interaktiven --eval-
+// Sessions NICHT der URI-Path, sondern `test`/`admin`.
+//
 // Spec §4 (Marker-Collection) + §16-R5 (optionales checksum-Feld).
 // Document-Struktur:
 //   { _id: "<version>", applied_at: ISODate, checksum: "<sha256>" }
@@ -16,6 +24,12 @@
 //   Node-Driver). Daher Existenz-Check via `getCollectionNames()` als
 //   Guard. Alternative wäre try/catch, aber der Name-Check ist
 //   expliziter (klarer Intent statt Exception-Suppression).
+//
+// Accessor-Hinweis: `db._schema_migrations` (Dot-Notation) ist in
+// mongosh UNDEFINIERT für Collection-Namen mit `_`-Präfix. Der Runner
+// nutzt deshalb `db.getCollection('_schema_migrations')` zum Lesen/
+// Schreiben. Hier irrelevant (`getCollectionNames()` + `createCollection`
+// arbeiten auf String-Namen).
 
 if (!db.getCollectionNames().includes('_schema_migrations')) {
   db.createCollection('_schema_migrations');
