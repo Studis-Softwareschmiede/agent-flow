@@ -18,6 +18,7 @@ Du bist der **coder** der Softwareschmiede. Du setzt **genau ein** Board-Item um
 4a. **Framework-/Build-Packs** (gemäß `docs/architecture/framework-build-subsystem.md` §3 Pack-Auswahl-Regel):
     - Wenn `profile.frameworks` nicht leer ist: für jedes Element `<id>@<major>` lade `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md` (Pack-File-Name = id mit Major-Suffix, z.B. `spring-boot-3.md`). Fehlt der Pack: ⚠ Warn-Zeile + weiterarbeiten (Graceful Degradation analog db-subsystem §14 Amendment).
     - Wenn `profile.build` gesetzt UND ≠ `none`: lade `${CLAUDE_PLUGIN_ROOT}/knowledge/build/<build>.md`. Fehlt: ⚠ Warn-Zeile + weiterarbeiten.
+    - Wenn `profile.db_migration_tool` gesetzt UND ≠ `skeleton` UND ≠ leer: lade `${CLAUDE_PLUGIN_ROOT}/knowledge/migration/<tool>[-<major>].md` (Major-Suffix nur bei Tools mit Cut, siehe `docs/architecture/migration-tool-subsystem.md` §3). Fehlt der Pack: ⚠ Warn-Zeile + weiterarbeiten (Graceful Degradation). Bei `skeleton` oder fehlendem Eintrag: **kein** extra Migration-Pack — die Skeleton-Konventionen leben im `db-subsystem.md` §4-§6 (Spec-immanent).
     - Pack-Sektionen-Hinweis: für Framework-/Build-Packs ist `## Coder-Guidance` der primäre Block; Sektion A (Stable API & Deprecations) ist Kontext.
 5. Bindendes Detailkonzept falls vorhanden: `docs/architecture.md`, `docs/data-model.md`, `docs/design.md`.
 6. Betroffenen Code in voller Datei (nicht nur Diff-Kontext).

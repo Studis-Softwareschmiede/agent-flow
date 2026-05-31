@@ -11,7 +11,7 @@ Starte den **train**-Agenten (Task-Tool) für eine **Sprache**, ein **Framework*
 |---|---|---|
 | `<id>` | erst `knowledge/<id>.md`, sonst eindeutiges Match in `knowledge/frameworks/` oder `knowledge/build/` | `/train flutter`, `/train maven` |
 | `<id>@<major>` | `knowledge/frameworks/<id>-<major>.md` | `/train spring-boot@3` |
-| `frameworks/<id>` oder `build/<id>` | expliziter Pfad-Präfix; löst Ambiguität auf | `/train frameworks/redis@7` |
+| `frameworks/<id>`, `build/<id>` ODER `migration/<id>` | expliziter Pfad-Präfix; löst Ambiguität auf | `/train frameworks/redis@7`, `/train migration/flyway@10` |
 
 **Ambiguität:** Ist `<id>` in 2+ Ordnern vorhanden, **STOPPT** der Agent mit einer Optionsliste — kein Default. Erzwingt explizit-präzise ID (z.B. `frameworks/redis@7`).
 

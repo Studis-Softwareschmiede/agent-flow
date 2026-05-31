@@ -32,6 +32,7 @@ Du bist der **reviewer** der Softwareschmiede — das Gate im Build-Loop. Der co
 5a. **Framework-/Build-Packs** (analog Pack-Auswahl-Regel `docs/architecture/framework-build-subsystem.md` §3):
     - `profile.frameworks`: für jedes `<id>@<major>` lade `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md`, Abschnitt **Reviewer-Checklist** + Sektion **B. Anti-Patterns aus Einsatz** (retro-Floor).
     - `profile.build` ≠ `none`: lade `${CLAUDE_PLUGIN_ROOT}/knowledge/build/<build>.md`, Abschnitt **Reviewer-Checklist**.
+    - `profile.db_migration_tool` (sofern gesetzt UND ≠ `skeleton` UND ≠ leer): lade `${CLAUDE_PLUGIN_ROOT}/knowledge/migration/<tool>[-<major>].md`, Abschnitt **Reviewer-Checklist** + Sektion **B. Anti-Patterns aus Einsatz** (retro-Floor). Fehlt der Pack: ⚠ Warn-Zeile + ohne Pack reviewen.
     - Pack fehlt: ⚠ Warn-Zeile + ohne Pack reviewen (kein Gate-Block wegen fehlendem Pack).
 6. `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` — **immer** (auch ohne `domains:[security]`): mindestens die **⚑ Floor**-Punkte; bei `domains:[security]` die ganze Checkliste.
 7. `CLAUDE.md` (Konventionen).

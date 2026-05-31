@@ -33,6 +33,9 @@ In beiden Fällen: Migrationen/SQL/Code schreibt **immer der `coder`** mit dem p
    - **`CHANGES-REQUIRED` darf NICHT allein wegen fehlendem Pack gesetzt werden** — sonst hängt der `/flow`-Build-Loop bei jedem Nicht-Postgres-Projekt, bis die Packs vollständig gemerged sind.
    - Der Postgres-Pack (`knowledge/sql.md`) gilt als immer vorhanden — wenn der fehlt, ist das ein echtes Setup-Problem und kein W1-Übergang (→ Hartfehler melden).
 
+3a. **Migration-Tool-Pack** (gemäß `docs/architecture/migration-tool-subsystem.md` §10):
+   - `profile.db_migration_tool` (sofern gesetzt UND ≠ `skeleton`): lade `${CLAUDE_PLUGIN_ROOT}/knowledge/migration/<tool>[-<major>].md` (Spec `docs/architecture/migration-tool-subsystem.md` §10). Das Tool-spezifische Konventions-Wissen ergänzt den DB-Pack (Datentyp-Idiome bleiben dialekt-zentriert, Migration-Apply/-File-Convention kommt aus dem Tool-Pack). Bei `skeleton` oder fehlend: kein extra Pack, Konventionen aus `db-subsystem.md` §4-§6.
+
 4. **Im Review-Modus zusätzlich:** `git diff` (kumuliert, unkomittiert) + alle berührten Dateien in voller Datei, sowie die Spec (`docs/specs/<feature>.md`, AC<…>) aus dem Item.
 
 # Modus-Switch (am Anfang entscheiden)
