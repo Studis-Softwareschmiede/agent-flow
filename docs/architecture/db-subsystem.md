@@ -512,3 +512,71 @@ Die in §15 aufgeworfenen offenen Fragen wurden vom User entschieden — die Wel
 - **R8 — Smoke-Suite-Struktur (Amendment, 2026-05-31, PR #36):** **Entschieden: monolithische Per-Dialekt-Skripte unter `tests/db-subsystem/smoke-<dialect>.sh` statt `tests/smoke-db/<dialect>/{run.sh, expected.txt}`.** Begründung: Per-Dialekt-Skripte sind übersichtlich, portabel (keine Branches in einem gemeinsamen Runner), validieren erwartete Outputs inline (keine separate `expected.txt` nötig) und haben in PR #36 echte Drift-Bugs in den Compose-Fragmenten zutage gefördert. Aggregation läuft über `tests/db-subsystem/run-all.sh`. Spec §13 + §14 wurden in PR #36 entsprechend amended.
 
 Mit diesen Festlegungen ist die Spec vollständig — Welle 1 kann nach Merge dieses PRs starten.
+
+---
+
+## §17 — Companions (stateful Sidecars OHNE Schema-Evolution)
+
+**Zweck.** Manche Apps brauchen stateful Infra-Dienste, die **keine** App-eigenen Schemas tragen — Cache (Redis), Queue-Broker (Redis/BullMQ, RabbitMQ in P2), Session-Store, Pub-Sub-Fanout. Sie sind weder DB (kein durable Business-Schema, keine Migrationen, kein Backup-Runner) noch reine Code-Dependency (eigener Container, eigenes Volume, eigener Lifecycle). Diese Spec-Sektion definiert sie als eigene Klasse: **Companions**.
+
+**Definition.** Ein **Companion** ist ein stateful Sidecar mit:
+
+- **eigenem Container + Volume** (überlebt App-Restarts),
+- **schemalosem oder app-internem State** (Cache-Keys, Queue-Jobs, Session-Tokens — keine durable Business-Entitäten),
+- **kein Migrations-Runner** (kein `db_scripts/`, kein `_schema_migrations`-Marker),
+- **kein Backup-Skript im Default-Scaffold** (Daten sind ephemer/regenerierbar; wenn Persistenz nötig: AOF/RDB als Container-internes Feature, nicht als Workflow),
+- **kein Knowledge-Pack-Eintrag** (kein eigener `coder`/`reviewer`/`tester`-Pack — Pattern leben in Sprach-Packs bzw. im Companion-README).
+
+**`profile.companions[]`-Schema.** Neuer optionaler Slot in `.claude/profile.md`:
+
+```yaml
+companions: [redis]   # Liste, additiv; Default beim Scaffold: []
+```
+
+**Erlaubte Werte (P1):** `redis`. Weitere Companions (z.B. `memcached`, `rabbitmq`, `nats`) sind **additiv** in eigenen Spec-PRs möglich, aber explizit **out-of-scope dieses PRs**. Jeder neue Companion bringt mit:
+
+1. `templates/_shared/companion-<name>/` mit `compose.fragment.yml`, `README.md`, `.env.<name>.example`, optional `scripts/`.
+2. Detection-Signale in §17a (kanonische Tabelle, analog §2 für DBs) — neue Signale werden zuerst hier ergänzt, dann in `skills/adopt/SKILL.md` Schritt 2b nachgezogen (gleicher PR, kein Drift).
+3. Wiring-Anpassungen in `skills/new-project/SKILL.md` (Flag-Validierung in 2b) und `skills/adopt/SKILL.md` (Detection-Tabelle in 2b).
+
+**Abgrenzung zum DB-Subsystem.**
+
+| Aspekt | DB (§4–§7) | Companion (§17) |
+|---|---|---|
+| Profile-Slot | `db_dialect: <single-enum>` | `companions: [<array>]` |
+| Schema-Evolution | `db_scripts/<NNN>_*.sql` + Marker | **keine** |
+| Migrations-Runner | `run-migrations.sh` (§6) | **keiner** |
+| Backup-Runner | `scripts/db-backup.sh` Vorlage (§7) | **keiner im Default** |
+| Knowledge-Pack | `knowledge/sql*.md` / `mongodb.md` | **keiner** |
+| DBA-Agent-Audit | dispatcht bei `db_dialect != none` | **kein Dispatch** |
+| `/preview`-Integration | DB-Service + Healthcheck-Wait + Migrations-Apply (§12) | Companion-Service + Healthcheck-Wait — **kein** Migrations-Schritt |
+| Reviewer-Audit | DB-Pack-Checklist + Security-Floor | **nur** Security-Floor + Compose-Pflichten (Healthcheck, named Volume, kein hartkodiertes Passwort) |
+
+**Scope-Lock (verbindlich):**
+
+1. **Companions belegen NICHT den `db_dialect`-Slot.** `db_dialect: postgres` + `companions: [redis]` ist eine valide Kombination — Redis ist hier Cache, Postgres ist die primäre DB.
+2. **Companion-Detection beeinflusst die Polyglott-Trigger-Heuristik (§16-R1) NICHT.** `companions: [redis]` zusätzlich zu `db_dialect: postgres` ist **kein** Polyglott-Fall — Polyglott meint ausschließlich mehrere **primäre DBs** (z.B. Postgres + Mongo gleichzeitig).
+3. **Wer Redis als primären Datenstore nutzen will** (Event-Sourcing-Backbone, einziges System-of-Record), ist im DB-Subsystem falsch UND im Companion-Pfad falsch — das braucht einen eigenen Spec-PR (out-of-scope P1).
+
+**§17a — Detection-Signal-Palette (kanonisch).** Analog §2: diese Tabelle ist die Single Source of Truth, `skills/adopt/SKILL.md` Schritt 2b spiegelt sie 1:1 wider. Neue Signal-Quellen werden zuerst hier ergänzt.
+
+| Signal | → Companion |
+|---|---|
+| `package.json` deps: `redis`, `ioredis`, `bull`, `bullmq`, `connect-redis` | `redis` |
+| `requirements.txt`/`pyproject.toml`: `redis`, `celery[redis]`, `rq`, `django-redis` | `redis` |
+| `pom.xml`/`build.gradle`: `redis.clients:jedis`, `io.lettuce:lettuce-core`, `org.springframework.data:spring-data-redis` | `redis` |
+| `pubspec.yaml` deps: `redis` | `redis` |
+| Vorhandenes `docker-compose*.yml` Service `image:` enthält `redis` | `redis` |
+| Env-Refs (`.env*`, `*.yml`): `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT` | `redis` |
+
+**Wiring-Pfad (Welle 3-äquivalent).** Heute (PR „companion-redis"):
+
+- `templates/_shared/companion-redis/` (4 Files: `compose.fragment.yml`, `.env.redis.example`, `README.md`, `scripts/companion-info.sh`) — bereitgestellt.
+- `skills/adopt/SKILL.md` Schritt 2b — Companion-Detection nach DB-Detection, idempotenter Fragment-Append, kein Auto-Fix.
+- `skills/new-project/SKILL.md` `--companions <list>`-Flag + 1 optionale Frage (Default: keine) + Schritt 4d (Fragment-Scaffold).
+- `agents/dba.md`: **unverändert** — Companions sind nicht DBA-Sache.
+- `/preview` (Spec §12): Companions starten als reguläre Compose-Services beim `up`; **keine** Migrations-Apply-Stage. Detail-Wiring in einem Folge-PR (heute out-of-scope).
+
+**Heute (P1) verfügbar:** `redis`. Weitere Companions kommen additiv in eigenen PRs — die Spec-Sektion ist so geschnitten, dass eine neue Engine nur §17a um Signale ergänzt und ein neues `templates/_shared/companion-<name>/`-Bundle hinzukommt; die Skill-Wiring-Schritte sind generisch über `<name>` parametrisiert.
+
+Mit dieser Sektion ist die Companion-Klasse als eigener Vertrag etabliert — sauber abgegrenzt zum DB-Subsystem, additive Erweiterbarkeit, klarer Scope-Lock.
