@@ -51,11 +51,36 @@ until mongosh "$MONGO_URI" --quiet --eval "db.adminCommand({ ping: 1 }).ok" >/de
 done
 echo "[run-migrations] DB is ready."
 
+# ---- App-DB-Switch + Marker-Accessor (Smoke-Hotfix) ----
+#
+# Zwei Gotchas, die der Welle-3-Smoke (PR #36 / smoke-mongodb.sh)
+# aufgedeckt hat — beide manifestieren sich als
+# `TypeError: Cannot read properties of undefined (reading 'find'|'insertOne')`
+# auf `db._schema_migrations`:
+#
+# 1. mongosh's default-`db` ist NICHT garantiert die App-DB aus dem
+#    URI-Path: in `--eval`-Aufrufen (im Gegensatz zu interaktivem
+#    `use <db>`) verbleibt `db` u.U. auf `test`/`admin`. Fix: vor jedem
+#    Statement explizit `db = db.getSiblingDB('${MONGO_DB}')` setzen.
+#    Migrations-Files bleiben portabel (kein hardcoded DB-Name); die
+#    Verantwortung für den DB-Kontext liegt einzig im Runner.
+#
+# 2. Collections, deren Name mit `_` beginnt, sind in mongosh NICHT per
+#    Dot-Notation erreichbar — `db._schema_migrations` ist immer
+#    `undefined`. MongoDB-Doku-Pattern: `db.getCollection('_schema_migrations')`.
+#    (Selbe Regel gilt für Bindestrich-Namen.)
+#
+# Beide Fixes sind im Runner zentralisiert → keine Magie in den
+# Migration-Files selbst.
+DB_SWITCH="db = db.getSiblingDB('${MONGO_DB}');"
+MARKER_ACCESSOR="db.getCollection('_schema_migrations')"
+
 # ---- 2. Marker-Collection sicherstellen (idempotent, Spec §4 + §16-R5) ----
 # `createCollection` wirft, wenn die Collection bereits existiert — der
 # `getCollectionNames().includes(...)`-Guard schützt vor diesem Fehler
 # (knowledge/mongodb.md mongo/R01-Idempotenz).
 mongosh "$MONGO_URI" --quiet --eval "
+  ${DB_SWITCH}
   if (!db.getCollectionNames().includes('_schema_migrations')) {
     db.createCollection('_schema_migrations');
   }
@@ -70,7 +95,8 @@ while IFS='|' read -r version checksum; do
   APPLIED_VERSIONS["$version"]=1
   APPLIED_CHECKSUMS["$version"]="$checksum"
 done < <(mongosh "$MONGO_URI" --quiet --eval "
-  db._schema_migrations.find({}, {_id: 1, checksum: 1}).forEach(function(d) {
+  ${DB_SWITCH}
+  ${MARKER_ACCESSOR}.find({}, {_id: 1, checksum: 1}).forEach(function(d) {
     print(d._id + '|' + (d.checksum || ''));
   });
 ")
@@ -120,8 +146,15 @@ for f in "${SORTED[@]}"; do
   fi
 
   echo "[run-migrations] APPLY version=${version} file=${base}"
-  # mongosh --file führt das JS aus; bei Fehler exit != 0 → set -e bricht ab.
-  if ! mongosh "$MONGO_URI" --quiet --file "$f"; then
+  # WICHTIG: Statt `--file "$f"` direkt zu nutzen (wo `db` u.U. nicht auf
+  # die App-DB auflöst), erst `DB_SWITCH` setzen UND DANN per `load()`
+  # die Migration ziehen. So bleiben die Migration-Files portabel
+  # (kein hardcoded DB-Name im Script) — die Verantwortung für den
+  # DB-Kontext liegt einzig im Runner.
+  if ! mongosh "$MONGO_URI" --quiet --eval "
+    ${DB_SWITCH}
+    load('${f}');
+  "; then
     echo "[run-migrations] ERROR: migration ${base} failed — aborting." >&2
     exit 1
   fi
@@ -130,7 +163,8 @@ for f in "${SORTED[@]}"; do
   # über Statements hinweg"). Migrations selbst sind idempotent → der
   # Rerun nach einem Crash zwischen Apply und Marker-Insert ist safe.
   if ! mongosh "$MONGO_URI" --quiet --eval "
-    db._schema_migrations.insertOne({
+    ${DB_SWITCH}
+    ${MARKER_ACCESSOR}.insertOne({
       _id: '${version}',
       applied_at: new Date(),
       checksum: '${file_checksum}'
