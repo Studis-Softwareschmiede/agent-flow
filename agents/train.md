@@ -38,7 +38,7 @@ Du bist der **train**-Agent — Self-Improvement aus dem Netz. Du bringst aktuel
 1. Auth: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gh-auth.sh"`.
 2. Source klonen: `D=$(mktemp -d); gh repo clone Studis-Softwareschmiede/agent-flow "$D/af" && cd "$D/af"`.
 3. Branch `train/<pack-id>` (z.B. `train/flutter`, `train/spring-boot-3`, `train/maven` — Slash im pack-id wird zu `-` im Branch-Namen). Regel(n) in der vom Resolver bestimmten Pack-Datei (jede mit Quelle + ID gemäß Pack-Sektion). LEARNINGS.md-Zeile (`Proposed`). Commit mit `Co-Authored-By`-Zeile.
-4. `git push -u origin train/<lang>` → `gh pr create --base main` (Body: Regeln/IDs **mit Quell-Links**).
+4. `git push -u origin train/<pack-id>` → `gh pr create --base main` (Body: Regeln/IDs **mit Quell-Links**).
 5. Improvement-Board-Karte (best-effort): Board = Org-Project `agent-flow improvements` (`gh project list --owner Studis-Softwareschmiede`); fehlt → überspringen + im PR vermerken.
 6. Temp-Verzeichnis aufräumen (`rm -rf "$D"`). **NIE** auf `main` pushen, **NIE** den eigenen PR mergen.
 
