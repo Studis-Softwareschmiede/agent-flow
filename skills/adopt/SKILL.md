@@ -22,6 +22,73 @@ Im Klon den **`/init`-Ablauf** ausführen — bestehende Dateien NICHT überschr
 - Fehlende `Dockerfile` / `.github/workflows/build.yml` / `security.yml` / `.github/dependabot.yml` aus `${CLAUDE_PLUGIN_ROOT}/templates/` ergänzen (Sprach-Ökosystem im dependabot.yml setzen).
 - **Board** anlegen (`gh project create`) → Nummer ins Profil.
 
+## 2a. DB-Detection (`profile.db_dialect` erstmalig setzen)
+Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §2 + §9. Läuft **nach** dem Stack-Erkennen und **vor** dem Audit, damit der `reviewer` den richtigen DB-Pack (§3) laden kann.
+
+**a) Auto-Detection — erstes Match gewinnt** (Reihenfolge bewusst: spezifische Engine-Deps vor generischen Compose-/File-Signalen):
+
+| Signal (Quelle → Wert) | → `db_dialect` | Confidence |
+|---|---|---|
+| `package.json` deps: `mongoose`, `mongodb` | `mongodb` | high |
+| `package.json` deps: `pg`, `postgres`, `pgvector`; `prisma` mit `provider = "postgresql"` | `postgres` | high |
+| `package.json` deps: `mysql2`, `mysql`, `mariadb`; `prisma` mit `provider = "mysql"` | `mysql` | high |
+| `package.json` deps: `better-sqlite3`, `sqlite3` | `sqlite` | high |
+| `pubspec.yaml` deps: `postgres`, `supabase_flutter` | `postgres` | high |
+| `pubspec.yaml` deps: `sqflite`, `drift`, `sembast_sqflite` | `sqlite` | high |
+| `pom.xml`/`build.gradle`: `org.postgresql:postgresql` | `postgres` | high |
+| `pom.xml`/`build.gradle`: `mysql:mysql-connector-j`, `org.mariadb.jdbc:mariadb-java-client` | `mysql` | high |
+| `pom.xml`/`build.gradle`: `org.mongodb:mongodb-driver-sync`, `org.springframework.data:spring-data-mongodb` | `mongodb` | high |
+| `requirements.txt`/`pyproject.toml`: `psycopg`, `psycopg2`, `asyncpg` | `postgres` | high |
+| `requirements.txt`/`pyproject.toml`: `pymongo`, `motor` | `mongodb` | high |
+| Vorhandenes `docker-compose*.yml` Service `image:` enthält `postgres`, `supabase/postgres`, `timescale`, `pgvector` | `postgres` | high |
+| Vorhandenes `docker-compose*.yml` Service `image:` enthält `mariadb`, `mysql` | `mysql` | high |
+| Vorhandenes `docker-compose*.yml` Service `image:` enthält `mongo` | `mongodb` | high |
+| Compose-Healthcheck-String: `pg_isready` | `postgres` | medium |
+| Compose-Healthcheck-String: `mongosh`, `mongo --eval` | `mongodb` | medium |
+| Env-Refs (`.env*`, `*.yml`): `SUPABASE_URL`, `PG_*`, `POSTGRES_*`, `DATABASE_URL=postgres://` | `postgres` | medium |
+| Env-Refs: `MYSQL_HOST`, `MARIADB_HOST`, `DATABASE_URL=mysql://` | `mysql` | medium |
+| Env-Refs: `MONGO_URL`, `MONGODB_URI`, `DATABASE_URL=mongodb://` | `mongodb` | medium |
+| Files `*.sqlite`, `*.sqlite3`, `*.db` im Repo-Root oder `data/` | `sqlite` | medium |
+| SQLite-CLI in Scripts (`sqlite3 path/to/file`) | `sqlite` | low |
+| `db_scripts/*.sql` enthält `SERIAL`/`BIGSERIAL`/`uuid_generate_v4` | `postgres` | low |
+| `db_scripts/*.sql` enthält `AUTO_INCREMENT`/`ENGINE=InnoDB` | `mysql` | low |
+| `db_scripts/*.js` enthält `db.createCollection` | `mongodb` | low |
+| Kein Treffer | `none` (Vorschlag) | low |
+
+**b) Evidence sammeln.** Für den höchsten Hit Pfad + Zeilennummer (oder Datei-Pfad bei File-Signalen) merken — die Evidence wird der User-Frage UND der `profile.md` als Kommentar mitgegeben („Audit-Trail").
+
+**c) User-Bestätigung — Pflicht, auch bei `high`-Confidence** (AskUserQuestion, 5 Enum-Werte vorselektiert):
+```
+Detected db_dialect: postgres (confidence: high, evidence: package.json:42 ["pg": "^8.13.0"])
+Confirm? [Y/n/postgres/mysql/sqlite/mongodb/none]
+```
+Begründung: Detection-Heuristiken haben Edge-Cases (z.B. ein altes `pg` als Transitive Dep ohne aktive DB-Nutzung) — der User entscheidet final.
+
+**d) In `.claude/profile.md` schreiben:**
+```yaml
+db_dialect: <wert>   # auto-detected from <evidence>, confirmed <YYYY-MM-DD>
+```
+
+**e) Wenn `db_dialect != none` — Compose-Fragment + Skeleton ergänzen, IDEMPOTENT:**
+- **Fragment-Quelle:** `${CLAUDE_PLUGIN_ROOT}/templates/_shared/db-<dialect>/compose.fragment.yml`.
+- **Vorhandenes Projekt-`docker-compose.yml`** ohne DB-Service (`services.db` fehlt, bei sqlite: `services.migrations` fehlt): Fragment **anhängen** (`cat fragment >> docker-compose.yml`) — sauber, weil das Fragment selbst nur die neuen Service-/Volume-Blöcke enthält. Vor dem Append eine Trennzeile `# --- db-<dialect> (added by /adopt, source: templates/_shared/db-<dialect>/compose.fragment.yml) ---` einfügen.
+- **Vorhandenes `docker-compose.yml` MIT db-Service**: **nicht überschreiben** — stattdessen Fragment als separate Datei `docker-compose.db.yml` ablegen + READMEs/Backlog-Item „Compose-DB-Service gegen Fabrik-Standard abgleichen" anlegen (Mensch entscheidet beim Merge).
+- **`db_scripts/`-Skeleton kopieren, falls Verzeichnis fehlt:**
+  - `db_scripts/000_init_meta.sql` (postgres/mysql/sqlite) bzw. `000_init_meta.js` (mongodb) aus `templates/_shared/db-<dialect>/db_scripts/`.
+  - `db_scripts/run-migrations.sh` aus demselben Ordner (ausführbar; `chmod +x`).
+- **`.env.db.example`** aus dem Template ans Repo-Root kopieren (falls noch nicht vorhanden) — als Vorlage für die DB-spezifischen env-Variablen.
+- **`scripts/db-backup.sh` + `db-restore.sh`** sind Vorlagen, **NICHT** automatisch kopieren (Brewing-Erfahrung: Backup-Strategie ist projekt-spezifisch, §7) → stattdessen Backlog-Item „Backup/Restore aus `templates/_shared/db-<dialect>/scripts/` ziehen, wenn benötigt".
+
+**f) Wenn `db_dialect != none` — DBA-Audit dispatchen** (Spec §9, Audit-Modus):
+- Der `reviewer` lädt im Audit-Modus zusätzlich zum Sprach-Pack den passenden DB-Pack (§3-Auswahl: `postgres`→`knowledge/sql.md`, `mysql`→`sql-mysql.md`, `sqlite`→`sql-sqlite.md`, `mongodb`→`mongodb.md`).
+- Prüft bei vorhandenem `db_scripts/`: **Nummerierungs-Lücken** (`001`, `002`, … lückenlos?), **doppelte Versionen**, **Idempotenz-Patterns** (`CREATE TABLE IF NOT EXISTS` etc. pro Dialekt, §4), **Forward-only-Disziplin** (keine in-place-Edits committeter Migrationen — git-log-basiert), **Security-Floor** (unparametrisierte Queries, Plaintext-Credentials in `.env.example` / SQL-Files / Code).
+- Prüft Compose-Konformität (Fragment-Pflichten §5): `restart: unless-stopped`, healthcheck vorhanden, benanntes Volume, Port-Mapping über env-Variable, **keine hartkodierten Passwörter**.
+- Findings als priorisierte Backlog-Items (Schritt 4) — Security-Floor-Verstöße → Critical, fehlende Idempotenz → Important, Style-Drift → Suggestions.
+- **Existiert nach Skeleton-Kopie immer noch kein `db_scripts/run-migrations.sh`** (Skeleton-Copy wurde übersprungen, weil ein bestehender, abweichend benannter oder strukturierter Runner gefunden wurde) → Backlog „Bestehenden Migration-Runner gegen Fabrik-Pattern angleichen (§6)".
+- **Fehlt das Compose-Fragment** und konnte nicht angehängt werden (Konflikt mit bestehendem db-Service) → Backlog „DB-Service im Compose gegen `templates/_shared/db-<dialect>/compose.fragment.yml` abgleichen" (Priority: Important).
+
+**g) Kein Auto-Fix.** Wie der ganze `/adopt`-Pfad: 2a schreibt nur `profile.db_dialect`, kopiert idempotent **Skeleton**-Dateien (die per Definition nichts überschreiben) und erzeugt Backlog-Items. **Keine** automatische Migrations-Ausführung, **kein** Auto-Patch von App-Code.
+
 ## 3. Auditieren (gegen den Fabrik-Standard)
 - **Automatik zuerst (objektiv, billig):** `gitleaks detect --source=. --no-git` (Secrets) + Dependency-Audit gemäß Sprache (`npm audit --omit=dev` / `pip-audit` / …) → Funde notieren.
 - **`reviewer` im Audit-Modus** (Task — s. `reviewer.md` „Audit-Modus"): prüft den **Bestand** (kein Diff) gegen **Security-Floor** (immer), die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** → priorisierte Funde (Critical/Important/Suggestions). Bei großen Repos **priorisiert** (Security-Floor überall; Pack-Checks auf repräsentative/heikle Dateien — Auth, Daten-/Netz-Zugriff, Eingänge; Architektur-Auffälligkeiten), NICHT zeilenweise.
@@ -37,3 +104,4 @@ Report an den User: Repo-/Fork-URL · Board-URL · Funde nach Schwere (#Critical
 - Pusht NUR auf das Org-Repo bzw. den Org-Fork — **nie** ungefragt auf ein fremdes Upstream (Upstream-PR nur auf deinen Wunsch + Approve).
 - Idempotent: bestehende `.claude/`-/`docs/`-Dateien nicht überschreiben (mergen/fragen).
 - Die **abgeleitete Spec ist Entwurf**, bis du sie bestätigst (sie ist danach die Drift-Gate-Referenz für `/flow`).
+- **DB-Detection (Schritt 2a) ist nicht-destruktiv:** schreibt `db_dialect`, hängt Compose-Fragment **nur** an, wenn noch kein db-Service existiert; bestehende `db_scripts/`-Dateien werden **nie** überschrieben — Konflikte landen als Backlog-Item, nicht als Auto-Patch.
