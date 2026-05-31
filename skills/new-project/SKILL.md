@@ -1,9 +1,9 @@
 ---
 name: new-project
-description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + GitHub-Board an, erkennt/erfragt den Stack + DB-Dialekt + optionale Companions (Cache/Queue/Sessions), scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI + optionales DB-Compose-Fragment + optionale Companion-Fragmente aus ${CLAUDE_PLUGIN_ROOT}/templates/. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
+description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + GitHub-Board an, erkennt/erfragt den Stack + DB-Dialekt + optionale Companions (Cache/Queue/Sessions) + Build-Tool + optionale Frameworks, scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI + optionales DB-Compose-Fragment + optionale Companion-Fragmente aus ${CLAUDE_PLUGIN_ROOT}/templates/. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
 ---
 
-# /new-project <name> [--lang <x>] [--db <dialect>] [--companions <list>]   ·   /init
+# /new-project <name> [--lang <x>] [--db <dialect>] [--companions <list>] [--build <build>] [--framework <id>@<major>]…   ·   /init
 
 Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`new-project`) bzw. das bestehende Repo (`init`).
 
@@ -30,9 +30,29 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
      **Default ohne Antwort: keine** (Companions sind opt-in; weniger Moving-Parts beim Bootstrap).
    - `init`: Detection wie in `/adopt` Schritt 2b — dort dokumentiert; hier nur Verweis.
    - **Erlaubte Werte (P1):** `redis` (additive Liste). **Scope-Lock:** Companions belegen **NICHT** den `db_dialect`-Slot — `companions: [redis]` mit `db_dialect: postgres` ist eine valide Kombination.
+2c. **Build-Tool-Auswahl** (Spec [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §6 + §10) — `profile.build` festlegen (single-value, Pflicht ab Sprachen mit Build-Tool; `none` für Bash/statisch).
+   - `new-project` mit `--build <build>`: kanonischer Wert aus `framework-build-subsystem.md §10` (`maven|gradle|npm|pnpm|uv|cargo|none`). Default: aus `--lang` ableiten (java→`maven`, ts→`npm`, py→`uv`, rust→`cargo`); kein Default → `none`.
+   - `new-project` ohne `--build` + interaktiv: genau **1 zusätzliche Frage** (AskUserQuestion, single-select):
+     > „Build-Tool? [maven|gradle|npm|pnpm|uv|cargo|none]"
+     Voreinstellung = der lang-abgeleitete Default oben.
+   - `init`: Detection wie in `/adopt` Schritt 2c — dort dokumentiert; hier nur Verweis, doppelt-pflegen vermeiden.
+   - **Erlaubte Werte (Spec §10 Build-Tool-Tabelle):** `maven | gradle | npm | pnpm | uv | cargo | none`. Bei ungültigem Wert: Frage wiederholen (kein Silent-Fallback auf `none`).
+2d. **Framework-Auswahl** (Spec [`docs/architecture/framework-build-subsystem.md`](../../docs/architecture/framework-build-subsystem.md) §6) — `profile.frameworks[]` festlegen (multi-value, optional, Default `[]`).
+   - `new-project` mit `--framework <id>@<major>`: **wiederholbar**. Beispiel: `--framework spring-boot@3 --framework spring-data@3`. Default: keiner (leeres Array).
+   - `new-project` ohne `--framework` + interaktiv: **1 optionale Frage** (AskUserQuestion, multi-select aus passender Liste pro Sprache; Skip-Option immer dabei):
+     > „Framework(s)? (optional, mehrfach)"
+     Vorschlags-Liste pro `lang`:
+     - **java/kotlin:** `[spring-boot@3, quarkus@3]`
+     - **ts/js:** `[react@18, react@19, vue@3, angular@17]`
+     - **py:** `[django@5, fastapi, flask]`
+     - **rust:** (keine Vorschläge in P1 — Skip oder Freitext)
+     **Default ohne Antwort: keine** (Framework-Auswahl ist opt-in; weniger Moving-Parts beim Bootstrap).
+   - `init`: Detection wie in `/adopt` Schritt 2c — dort dokumentiert; hier nur Verweis.
+   - **Polyglott-Erinnerung:** Mehrere rivalisierende Frameworks für **dieselbe Sprache** (z.B. `spring-boot@3` + `quarkus@3`) sind ein Polyglott-Fall — analog Spec §7. `/new-project` warnt explizit, der User entscheidet (Mono-Repo mit gemischten Stacks ist ungewöhnlich, aber zulässig).
 3. **Board**: `gh project create` (Org-Ebene), Status-Werte `To Do / In Progress / Blocked / In Review / Done` → Nummer notieren.
 4. **`.claude/` scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
-   - `profile.md`: `language`, `domains`, `db_dialect: <wert aus Schritt 2a>` (Pflicht, Enum `postgres|mysql|sqlite|mongodb|none`; Spec §2), `companions: [<liste aus Schritt 2b>]` (Liste, default `[]`; Spec §17 — heute nur `redis` gültig), `build`/`test`/`lint`/`smoke`, `merge_policy: pr`, `board: <nr>`, `deploy: docker`, `image: ghcr.io/studis-softwareschmiede/<name-lowercase>` (Docker/ghcr-Repo-Namen sind IMMER kleingeschrieben — Repo `Foo-Bar` → Image `foo-bar`), `registry: ghcr`, `container_port: <EXPOSE aus dem Template-Dockerfile, z.B. 80|8080>` (für `/preview`; `preview_port` wird erst beim ersten `/preview up` vergeben).
+   - `profile.md`: `language`, `domains`, `db_dialect: <wert aus Schritt 2a>` (Pflicht, Enum `postgres|mysql|sqlite|mongodb|none`; Spec §2), `companions: [<liste aus Schritt 2b>]` (Liste, default `[]`; Spec §17 — heute nur `redis` gültig), `build: <wert aus Schritt 2c>` (Pflicht ab Sprachen mit Build-Tool, Enum `maven|gradle|npm|pnpm|uv|cargo|none`; Spec framework-build-subsystem §2 + §10), `frameworks: [<liste aus Schritt 2d>]` (Liste, default `[]`, Form `<id>@<major>`; Spec §2), `test`/`lint`/`smoke`, `merge_policy: pr`, `board: <nr>`, `deploy: docker`, `image: ghcr.io/studis-softwareschmiede/<name-lowercase>` (Docker/ghcr-Repo-Namen sind IMMER kleingeschrieben — Repo `Foo-Bar` → Image `foo-bar`), `registry: ghcr`, `container_port: <EXPOSE aus dem Template-Dockerfile, z.B. 80|8080>` (für `/preview`; `preview_port` wird erst beim ersten `/preview up` vergeben).
+   - **Pack-Vorhandensein-Check** (nach Profile-Schreiben, vor Step 5): für jedes gewählte Framework + Build-Tool prüfen, ob der Pack unter `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md` bzw. `${CLAUDE_PLUGIN_ROOT}/knowledge/build/<build>.md` existiert. Fehlt: **⚠ Konsolen-Warnung** ausgeben + **Backlog-Item** anlegen („Pack `<id>` anlegen (via `/train <id>`)"). Kein Hard-Fail — Loader verhält sich graceful (Spec §11 + §12 Graceful-Degradation).
    - `CLAUDE.md`: minimaler Kontext (Template + 1–2 Fragen).
    - `lessons/{coder,reviewer,tester}.md`: leer.
 4b. **`docs/` scaffolden** (Spec-getriebene Doku, CONCEPT §4d — aus `${CLAUDE_PLUGIN_ROOT}/templates/_docs/`, sprach-neutral):
