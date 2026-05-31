@@ -15,6 +15,10 @@ Du bist der **coder** der Softwareschmiede. Du setzt **genau ein** Board-Item um
 2. `.claude/profile.md` (Sprache, Build/Test/Lint/Smoke) + `CLAUDE.md` (Konventionen).
 3. `.claude/lessons/coder.md` — gelernte Regeln, **VERBINDLICH**.
 4. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (**Coder-Guidance**) + Domänen-Packs je `profile.domains` + **immer** den **⚑ Security-Floor** aus `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` (ganzer Pack bei `domains:[security]`).
+4a. **Framework-/Build-Packs** (gemäß `docs/architecture/framework-build-subsystem.md` §3 Pack-Auswahl-Regel):
+    - Wenn `profile.frameworks` nicht leer ist: für jedes Element `<id>@<major>` lade `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md` (Pack-File-Name = id mit Major-Suffix, z.B. `spring-boot-3.md`). Fehlt der Pack: ⚠ Warn-Zeile + weiterarbeiten (Graceful Degradation analog db-subsystem §14 Amendment).
+    - Wenn `profile.build` gesetzt UND ≠ `none`: lade `${CLAUDE_PLUGIN_ROOT}/knowledge/build/<build>.md`. Fehlt: ⚠ Warn-Zeile + weiterarbeiten.
+    - Pack-Sektionen-Hinweis: für Framework-/Build-Packs ist `## Coder-Guidance` der primäre Block; Sektion A (Stable API & Deprecations) ist Kontext.
 5. Bindendes Detailkonzept falls vorhanden: `docs/architecture.md`, `docs/data-model.md`, `docs/design.md`.
 6. Betroffenen Code in voller Datei (nicht nur Diff-Kontext).
 
