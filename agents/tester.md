@@ -50,6 +50,39 @@ Greift, wenn `profile.build` einen der unten gelisteten **kanonischen Werte** tr
 - Tester ruft sprach-hartcodete Build-Logik trotz `profile.build` != Tabellen-Wert UND != Freitext → Critical („Build-Tool-Dispatch ignoriert").
 - Pack-Erweiterung ersetzt statt erweitert → Important („Pack-Override-Drift").
 
+# Migration-Apply-Dispatch
+
+Greift, wenn `profile.db_migration_tool` einen der unten gelisteten **kanonischen Werte** trägt. Der Tester führt den definierten Apply-Befehl beim Adoption-Validate-Schritt (`skills/adopt/SKILL.md` §6) oder im `/preview up`-Pfad aus, statt skeleton-`bash db_scripts/run-migrations.sh` zu rufen. Spec: `docs/architecture/migration-tool-subsystem.md` §9.
+
+| `profile.db_migration_tool` | Apply-Befehl | Voraussetzung |
+|---|---|---|
+| `skeleton` (Default) | `bash db_scripts/run-migrations.sh` | Bestand `db-subsystem.md` §6 — Marker `_schema_migrations`, lückenlose `[0-9][0-9][0-9]_*.sql`-Dateien. |
+| `flyway@9` | `mvn -B -ntp flyway:migrate` ODER `flyway migrate` | Maven-Plugin im pom.xml ODER Flyway-CLI/Docker (`flyway/flyway:9-alpine`). Migrations in `src/main/resources/db/migration/V<n>__<name>.sql`. |
+| `flyway@10` | `mvn -B -ntp flyway:migrate` ODER `flyway migrate` | wie 9, plus Java 17 Mindestversion (Flyway-CLI/Docker `flyway/flyway:10-alpine` falls keine Maven-Integration). |
+| `liquibase@4` | `mvn -B -ntp liquibase:update` ODER `liquibase update --changeLogFile=db.changelog-master.xml` | Maven-Plugin ODER Liquibase-CLI. Changelog in `src/main/resources/db/changelog/`. |
+| `prisma` | `npx prisma migrate deploy` | `prisma/schema.prisma` + `prisma/migrations/` mit `migration.sql`-Files. **NICHT** `prisma migrate dev` (das ist interaktiv). |
+| `alembic` | `alembic upgrade head` | `alembic.ini` + `alembic/versions/*.py` (oder konfigurierter Pfad). |
+| `knex` | `npx knex migrate:latest` | `knexfile.{js,ts}` + `migrations/*.{js,ts}`. |
+| `typeorm` | `npx typeorm migration:run -d <dataSourcePath>` | `ormconfig.{json,ts}` ODER explizite DataSource. |
+| `sequelize` | `npx sequelize-cli db:migrate` | `.sequelizerc` ODER `config/config.{js,json}` + `migrations/*.js`. |
+| `django-migrations` | `python manage.py migrate` | Django-Projekt mit `*/migrations/*.py`. |
+| `supabase` | `supabase db push` | `supabase/config.toml` + `supabase/migrations/*.sql`; lokaler `supabase`-CLI installiert ODER `ghcr.io/supabase/cli`-Container. |
+| `golang-migrate` | `migrate -path migrations -database "$DB_URL" up` | `migrate`-CLI (Go-Binary) ODER `migrate/migrate`-Docker. Migrations als `<version>_<name>.up.sql`. |
+| `sqlx-cli` | `sqlx migrate run` | `sqlx`-CLI (`cargo install sqlx-cli`) ODER `DATABASE_URL` + `migrations/`-Verzeichnis. |
+| `refinery` | (in-app, kein externer Apply) | Migrations werden beim App-Start aus `refinery::embed_migrations!`-Macro appliziert; Smoke = App-Boot ohne DB-Fehler. |
+| `sqflite` | (in-app, kein externer Apply) | Flutter-App: `openDatabase(..., onUpgrade: ...)` läuft beim ersten Open; Smoke = App-Start gegen die On-Device-DB. |
+
+**Fallback (Backwards-Compat):** Fehlt `profile.db_migration_tool` ODER trägt einen Wert, der NICHT in der Tabelle steht, verhält sich der Tester wie heute (skeleton-Pfad: `bash db_scripts/run-migrations.sh` wenn das Skript existiert, sonst skip mit Hinweis).
+
+**Pack-Hinweis:** Der `## Test-Approach`-Abschnitt eines Migration-Packs (`knowledge/migration/<tool>.md`) kann den Befehl **erweitern** (z.B. Flyway-Profil `-Pintegration`), darf ihn aber nicht **ersetzen** — Pack-Erweiterungen sind additiv und werden nach dem Standard-Befehl ausgeführt. Konflikt = Reviewer-Befund (Drift gegen diese Tabelle).
+
+**Verstöße:**
+- Tester ruft skeleton-`run-migrations.sh` trotz `db_migration_tool` ≠ `skeleton` ≠ Tabellen-Wert UND ≠ Fallback-Match → **Critical** („Migration-Apply-Dispatch ignoriert").
+- Pack-Erweiterung ersetzt statt erweitert → **Important** („Pack-Override-Drift").
+- In-app-Tools (`refinery`, `sqflite`): Tester versucht externen Apply-Befehl → **Important** (in-app-Sonderfall ignoriert).
+
+**Interaktion mit `/adopt` Validate-Schritt (§6):** Der Adopt-Validate-Subagent (in `skills/adopt/SKILL.md` §6.a) MUSS diesen Apply-Befehl statt `bash db_scripts/run-migrations.sh` nutzen, wenn `db_migration_tool` gesetzt ist — die Änderung der Adopt-Schritte selbst kommt in PR-Q6 (Welle 6).
+
 # DB-Subsystem-Smoke (bei Template-Diffs)
 Greift **nur im `agent-flow`-Repo selbst** (die Fabrik testet ihre eigenen Templates). Trigger via `git diff --name-only` gegen die Merge-Basis. Pfad-basierte Auswahl, damit der Loop schnell bleibt — **nicht** stumpf `run-all.sh` bei einem Ein-Dialekt-Edit:
 
@@ -87,4 +120,5 @@ Failures: <… oder none>
 - `SKIPPED-DOC-ONLY` nur, wenn der Diff ausschließlich Doku-Dateien in `tests/db-subsystem/` (z.B. README) berührt und keinerlei Skript-/Template-Diff vorliegt; dieser Status ist für den Orchestrator äquivalent zu „kein Smoke nötig" (kein human-handoff).
 - **Build-Tool-Dispatch:** wenn `profile.build` einen kanonischen Wert hat (siehe Tabelle), MUSS der dort definierte Befehl genutzt werden; eigenmächtige sprach-hartcodete Build-Logik ist verboten.
 - `SKIPPED-NO-BUILD` nur, wenn `profile.build` den Wert `none` hat (Sprach-Toolchains ohne Build wie statische HTML/CSS). Build-Stufe wird übersprungen, alle anderen Stufen (test, Security-Smoke, ggf. DB-Subsystem-Smoke) laufen normal; AC-Abgleich erfolgt wie üblich.
+- **Migration-Apply-Dispatch:** wenn `profile.db_migration_tool` einen kanonischen Wert hat (siehe Tabelle „Migration-Apply-Dispatch"), MUSS der dort definierte Apply-Befehl genutzt werden; eigenmächtige skeleton-`run-migrations.sh`-Aufrufe sind verboten, außer das Tool ist `skeleton` selbst.
 - Bekannte nicht-fatale Fehler nur tolerieren, wenn im Profil deklariert.
