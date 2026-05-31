@@ -6,6 +6,11 @@ cloudflare
 # (Hinweis: KEIN `specs/`-Ignore — seit CONCEPT §4d sind Specs durable und
 #  versioniert; `templates/_docs/specs/` und projekt-eigene `docs/specs/` werden committet.)
 
+# Projekt-lokale Lessons (Tier-1, von reviewer.md geschrieben) — NIE committen
+# Sie sind per Spec-Lifecycle projekt-lokal; retro promotet sie via PR ins
+# globale knowledge/ (4 Schutzgitter, siehe agents/retro.md).
+.claude/lessons/
+
 # OS / Editor
 .DS_Store
 *.swp
