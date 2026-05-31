@@ -112,7 +112,7 @@ log "doc verified: $row"
 # Marker-Collection: 2 Documents (000 + 001)
 applied_count="$(docker compose -p "$PROJECT" exec -T db \
                  mongosh "$mongo_uri" --quiet --eval \
-                 "print(db._schema_migrations.countDocuments({}))" \
+                 "print(db.getCollection('_schema_migrations').countDocuments({}))" \
                  | tr -d '\r ' | tail -1)"
 if [ "$applied_count" != "2" ]; then
   fail "expected 2 applied migrations (000+001), got '$applied_count'"
@@ -136,7 +136,7 @@ fi
 
 applied_after_rerun="$(docker compose -p "$PROJECT" exec -T db \
                        mongosh "$mongo_uri" --quiet --eval \
-                       "print(db._schema_migrations.countDocuments({}))" \
+                       "print(db.getCollection('_schema_migrations').countDocuments({}))" \
                        | tr -d '\r ' | tail -1)"
 if [ "$applied_after_rerun" != "2" ]; then
   fail "marker count drifted after re-run: $applied_after_rerun"
