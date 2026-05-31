@@ -200,7 +200,7 @@ Heuristik gemäß [`docs/architecture/framework-build-subsystem.md`](../../docs/
 | `pom.xml` | `build: maven` | high |
 | `build.gradle` / `build.gradle.kts` / `settings.gradle{,.kts}` | `build: gradle` | high |
 | `package.json` + `package-lock.json` | `build: npm` | high |
-| `package.json` + `pnpm-lock.yaml` | `build: pnpm` | high |
+| `pnpm-lock.yaml` | `build: pnpm` | high |
 | `pyproject.toml` + `uv.lock` | `build: uv` | high |
 | `Cargo.toml` | `build: cargo` | high |
 | keine der Signale | `build: none` (default, User-Bestätigung via AskUserQuestion) | — |
@@ -215,9 +215,9 @@ Heuristik gemäß [`docs/architecture/framework-build-subsystem.md`](../../docs/
 | `package.json` dep `react` | `frameworks += react@<major>` | high |
 | `package.json` dep `vue` | `frameworks += vue@<major>` | high |
 | `package.json` dep `@angular/core` | `frameworks += angular@<major>` | high |
-| `requirements.txt`/`pyproject.toml` mit `django>=*` | `frameworks += django@<major>` | high |
-| `requirements.txt`/`pyproject.toml` mit `fastapi>=*` | `frameworks += fastapi@<major>` | high |
-| `requirements.txt`/`pyproject.toml` mit `flask>=*` | `frameworks += flask@<major>` | high |
+| `requirements.txt`/`pyproject.toml` mit `django>=` | `frameworks += django@<major>` | high |
+| `requirements.txt`/`pyproject.toml` mit `fastapi>=` | `frameworks += fastapi@<major>` | high |
+| `requirements.txt`/`pyproject.toml` mit `flask>=` | `frameworks += flask@<major>` | high |
 
 **c) Major-Extraktion.** Aus dem Version-Constraint die niedrigste passende Major-Version nehmen (`^18.2.0` → `18`; `>=3.4,<4` → `3`; `~5.1` → `5`). Bei Spannweite über Majors (`>=2,<4`): erster Major (`2`) UND `[POLYGLOTT-WARN]`-Marker im Backlog-Item (User soll Profil schärfen). Wildcards (`*`, `x`) ohne Untergrenze → Frage an User (Spec §6 Major-Extraktion).
 
