@@ -3,6 +3,7 @@ pack: frameworks/spring-boot-3
 pack_version: 1.0
 framework_version_range: ">=3.0, <4.0"
 pack_date: 2026-05-31
+superseded_by: spring-boot-4
 primary_sources:
   - https://docs.spring.io/spring-boot/reference/
   - https://docs.spring.io/spring-boot/docs/3.0.0/reference/htmlsingle/
