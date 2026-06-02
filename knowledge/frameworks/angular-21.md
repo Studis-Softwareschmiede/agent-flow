@@ -35,7 +35,7 @@ Angular 21.x (Major-Range `>=21.0, <22.0`). Aktuelle, supportete Major (Release 
 - `angular-21/A05` — **Host-Binding-Type-Checking standardmäßig aktiv (since 21).** Bisher verborgene Typfehler in Host-Bindings können beim Build neu auftauchen. Zudem: Signal-Inputs in Custom Elements werden jetzt direkt (nicht als Function-Call) gelesen — analog Decorator-Input-Verhalten. [src: https://github.com/angular/angular/releases/tag/21.0.0, since: 21.0]
 - `angular-21/A06` — **Plattform-Support reduziert (since 21).** IE und nicht-Chromium-Edge sind nicht mehr unterstützt. `browserslist`-Konfigurationen entsprechend bereinigen. `HttpResponseBase.statusText` ist deprecated (Entfernung in künftiger Version vorgemerkt). [src: https://github.com/angular/angular/releases/tag/21.0.0, since: 21.0]
 - `angular-21/A07` — **Automatisierte Modernisierungs-Migrationen verfügbar (`ng generate @angular/core:<name>`).** Für den 13→21-Sprung relevant: `control-flow` (`*ngIf/*ngFor/*ngSwitch` → `@if/@for/@switch`), `standalone` (NgModule-Components → Standalone), `inject` (Constructor-DI → `inject()`), `signal-inputs`/`outputs`/`signal-queries` (Decorator → Signal-APIs), `cleanup-unused-imports`, `self-closing-tags`, `ngclass-to-class`/`ngstyle-to-style`, `commonmodule-to-standalone-imports`, Lazy-Loaded-Routes. Diese Schematics sind der bevorzugte Weg, alten Code aufs 21er-Idiom zu heben — nicht von Hand umschreiben. [src: https://angular.dev/reference/migrations, since: 21.0]
-- `angular-21/A08` — **Vitest ist der stabile Test-Runner; Web-Test-Runner- und Jest-Support (experimentell) sind deprecated (Entfernung in v22).** Neue Projekte/Migrationen sollten auf Vitest setzen; bestehendes Karma/Jasmine ist Legacy und sollte mitmigriert werden. [src: https://blog.angular.dev/ (v21-Announcement) — verify exakten Status gegen angular.dev/guide/testing, since: 21.0]
+- `angular-21/A08` — **Vitest ist der stabile Default-Test-Runner für neue Projekte (since 21); Karma bleibt offiziell unterstützt.** Laut `angular.dev/guide/testing`: „This guide covers the default testing setup for new Angular CLI projects, which uses Vitest." Laut `angular.dev/guide/testing/karma`: „While Vitest is the default test runner for new Angular projects, Karma is still a supported and widely used test runner." — Karma ist damit **nicht deprecated**. Die Angular-Roadmap (post-v21) nennt als nächsten Schritt: Karma-zu-Vitest-Migrations-Tool auf stable zu heben. Jest: CLI v21.0.0 erweiterte Jest-Kompatibilität auf v30 (kein Deprecation-Signal). WTR-Status nicht per Primärquelle verifizierbar (keine Erwähnung in `angular.dev`- oder CLI-21-Release-Notes). Empfehlung: Vitest für Neu-Projekte; Karma-Migrationen über offizielles Migrations-Tool. [src: https://angular.dev/guide/testing · https://angular.dev/guide/testing/karma · https://angular.dev/roadmap · https://github.com/angular/angular-cli/releases/tag/21.0.0, since: 21.0]
 
 ## B. Anti-Patterns aus Einsatz
 
@@ -62,7 +62,7 @@ _(noch keine Einträge; siehe Schutzgitter in der Spec)_
 - **Zoneless ist Default (A03):** Nicht implizit auf `NgZone`/zone.js-Verhalten verlassen. Nur wenn ein Legacy-Pfad zone-basierte CD braucht, explizit `provideZoneChangeDetection()` setzen — und im PR begründen.
 - Bei Migration aus 13: **erst die `ng update`-Leiter** (je eine Major), **dann** die `@angular/core`-Modernisierungs-Schematics (A07) laufen lassen — nicht von Hand umschreiben.
 - Entfernte APIs (A04) und Host-Binding-Type-Checking (A05) sind häufige Build-Brecher beim Upgrade — zuerst dort suchen, wenn der Build nach einem Major-Bump rot ist.
-- Tests: Vitest bevorzugen (A08); Karma/Jasmine als Legacy behandeln und mitmigrieren.
+- Tests: Vitest bevorzugen (A08); Karma bleibt unterstützt, Migration über offizielles Tool empfohlen.
 
 ## Reviewer-Checklist
 
@@ -76,12 +76,12 @@ _(noch keine Einträge; siehe Schutzgitter in der Spec)_
 - Manuelles `.subscribe()` ohne `takeUntilDestroyed()`/`async`-Pipe/Cleanup → **Important** (C05, Memory-Leak).
 - `ChangeDetectionStrategy.Default` bei reiner Display-Component → **Suggestion** (C04).
 - Eager geladene Feature-Routen statt `loadComponent`/`loadChildren` → **Suggestion** (C06).
-- Neue Tests gegen Karma/WTR/Jest statt Vitest → **Suggestion** (A08 — WTR/Jest deprecated, Entfernung v22).
+- Neue Tests gegen Karma/WTR/Jest statt Vitest → **Suggestion** (A08 — Vitest ist Default; Karma weiterhin offiziell unterstützt; für neue Projekte Vitest bevorzugen).
 
 ## Test-Approach
 
 - Build via npm/pnpm (siehe `knowledge/build/<build>.md` Test-Approach — `ng build`/`ng test` laufen im Hintergrund über das Build-Tool).
-- **Unit-Tests mit Vitest** (stabiler Default-Runner since 21, A08). Bestehendes Karma/Jasmine ist Legacy; WTR/Jest-Support ist deprecated (Entfernung v22).
+- **Unit-Tests mit Vitest** (stabiler Default-Runner since 21, A08). Karma bleibt offiziell unterstützt; Migration zu Vitest über das offizielle Tool (`angular.dev/guide/testing/migrating-to-vitest`) empfohlen.
 - Component-Tests via `TestBed`-Pattern (`fixture.detectChanges()`); im Zoneless-Default ggf. explizites `await fixture.whenStable()` statt impliziter zone-getriebener Stabilisierung.
 - E2E: Cypress/Playwright (Protractor ist seit Jahren entfernt).
 - **Upgrade-Smoke (13→21):** Nach jeder `ng update`-Stufe Build + Tests grün; Bundle-Size nach Erreichen von 21 vs. 13-Baseline vergleichen (Zoneless + neuer Builder sollten kleinere Bundles + bessere Core Web Vitals liefern).
