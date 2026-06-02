@@ -16,10 +16,12 @@ Bringt ein bestehendes Repo auf Fabrik-Standard: **clone/fork → adopt → audi
 - **Org-eigen** (`<owner>` = `studis-softwareschmiede`): `gh repo clone studis-softwareschmiede/<repo>` → cwd = Klon. App hat Schreibrecht → Branch/PR direkt.
 - **Fremd** (anderer Owner → kein Schreibrecht): **in die Org forken + klonen** — `gh repo fork <owner>/<repo> --org studis-softwareschmiede --clone --remote` (Original bleibt als `upstream`). Gearbeitet wird am **Org-Fork** (App-schreibbar); PRs gehen an den Fork; ein Upstream-PR ist optional und braucht deinen Approve.
   - **Issues am Fork einschalten** (Pflicht): GitHub liefert Forks mit **deaktivierten Issues** → direkt `gh repo edit studis-softwareschmiede/<repo> --enable-issues`. **Ohne das scheitert das Backlog** (Schritt 4, `gh issue create`). Issues/Board entstehen am **Fork**, nie am Upstream.
+  - **Fork-PR-Falle merken (für `/flow`):** Am Fork muss `flow` PRs mit `gh pr create --repo <fork> …` öffnen — **ohne** `--repo` zielt `gh` aufs Upstream-Parent (App hat dort kein Recht → `Resource not accessible by integration`, sieht fälschlich nach Permission-Mangel aus). Der echte Default-Branch (Forks erben oft `master`) wird in Schritt 2 als `profile.default_branch` festgehalten; `flow` liest ihn für PR-Base/direct-Push/CI-Watch.
 
 ## 2. Adoptieren (= `init`-Pfad des `new-project`-Skills, idempotent)
 Im Klon den **`/init`-Ablauf** ausführen — bestehende Dateien NICHT überschreiben:
 - **Stack erkennen** (pubspec→flutter · pom/gradle→java · package.json→js/angular · `*.html`→html · `*.sql`→sql-Domäne) → bestätigen → `.claude/profile.md` (+ leere `lessons/`). **`profile.image` = `ghcr.io/studis-softwareschmiede/<repo-lowercase>`** — Fork-Repos haben oft Großbuchstaben (z.B. `Spoon-Knife`), das Docker-Image ist aber `spoon-knife` (Docker erlaubt keine Großbuchstaben).
+- **`profile.default_branch` setzen** (Pflicht — Template-Default `main` ist bei Forks falsch): `default_branch: $(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)`. Forks erben den Upstream-Default (oft `master`); `flow` nutzt den Wert für PR-Base, direct-Push und CI-Watch statt hartkodiertem `main`.
 - **`docs/` scaffolden + Spec aus Code ableiten:** concept/architecture/specs als **Entwurf** — dem User zur Durchsicht vorlegen, **verbindlich erst nach OK**.
 - Fehlende `Dockerfile` / `.github/workflows/build.yml` / `security.yml` / `.github/dependabot.yml` aus `${CLAUDE_PLUGIN_ROOT}/templates/` ergänzen (Sprach-Ökosystem im dependabot.yml setzen).
 - **Board** anlegen (`gh project create`) → Nummer ins Profil.
