@@ -9,6 +9,8 @@
 
 - **Loop & Handoff-Vertrag** (CONCEPT §4b): `coder → reviewer ⇄ Loop (bis PASS) → tester`.
   Orchestrator = `/flow` (interaktive Haupt-Session) — **einziger Schreiber** von Board-Status **und** git/PR.
+  (`/upgrade` erweitert das additiv: initialer Plan-Commit + Item-Anlage + Profil-Rückschreib am Lauf-Ende —
+  `docs/architecture/upgrade-subsystem.md` §3/§7; Item-Status-Übergänge bleiben `/flow`-Hoheit.)
 - **Knowledge Packs:** `coder`/`reviewer`/`tester` laden zur Laufzeit `knowledge/<profile.language>.md`
   (+ `knowledge/<domain>.md` je `profile.domains`). Pack-Abschnitte: `Coder-Guidance`,
   `Reviewer-Checklist`, `Test-Approach`.

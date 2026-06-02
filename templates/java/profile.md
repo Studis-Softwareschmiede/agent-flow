@@ -12,3 +12,5 @@ board: <PROJECT_NUMMER>
 deploy: docker
 image: ghcr.io/studis-softwareschmiede/<name>
 registry: ghcr
+container_runtime: none                      # optional (JVM/Servlet-Stacks): tomcat | jetty | undertow | none — von /adopt aus Deps gesetzt; vom /upgrade-Solver für Runtime-Ausschlüsse genutzt (z.B. Servlet 6.1 ⇒ kein undertow). Spec: docs/architecture/upgrade-subsystem.md §13
+# upgrade: { … }                             # transienter /upgrade-Fortschrittsblock (run_id/targets/status/timeout_hours) — wird zur Laufzeit gesetzt, nicht scaffolden. Spec §13
