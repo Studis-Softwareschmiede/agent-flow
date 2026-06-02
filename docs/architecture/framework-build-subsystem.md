@@ -112,6 +112,25 @@ non_sources: [baeldung.com, dev.to, medium.com]
 
 **Regel-IDs pro Pack-Namespace** (analog DB-Subsystem §3): `spring-boot/R<NN>`, `react/R<NN>`, `maven/R<NN>`, `gradle/R<NN>`. Begründung: stabile IDs für das Observability-Ledger (CONCEPT §5a).
 
+**Pack-Constraints (optionale Solver-Metadaten — `docs/architecture/upgrade-subsystem.md` §12).** Framework-/Build-/Migration-Packs dürfen zusätzlich maschinenlesbare Achsen-Constraints im Frontmatter führen, die der `/upgrade`-Kompatibilitäts-Solver konsumiert:
+
+```yaml
+requires:                       # harte Mindest-Anforderungen an andere Achsen (SemVer-Range)
+  java: ">=17"
+  node: "^20.19.0 || ^22.12.0 || ^24.0.0"
+  typescript: ">=5.9 <6.0"
+  build: { maven: ">=3.6.3", gradle: ">=8.14" }
+compatible_with:                # bekannte Verträglichkeiten (weich, informativ für den Solver)
+  migration: { flyway: ">=10", liquibase: ">=4" }
+incompatible:                   # harte Ausschlüsse (erzeugen einen Solver-Konflikt)
+  - container=undertow
+```
+
+- **Optional + abwärtskompatibel:** fehlen die Felder, ändert sich nichts — Loader/Reviewer/Tester ignorieren sie; **nur** der `/upgrade`-Solver liest sie. Bestandspacks ohne Constraints bleiben gültig.
+- **Quelle = Sektion-A-Fakten:** die Werte spiegeln bereits belegte „Stable API & Deprecations"-Regeln maschinenlesbar wider (z.B. `spring-boot-4/A01` „Java 17 Baseline" → `requires.java: ">=17"`). **Keine neuen Wahrheiten** — jede Constraint hat ihre Quelle in Sektion A desselben Packs.
+- **Pflege durch `train`** zusammen mit Sektion A: ändert sich ein Floor in den Release-Notes, aktualisiert `train` Regel **und** Constraint im selben PR. Constraints altern so mit den Fakten mit.
+- **Schlüssel-Konvention:** Achsen-Namen folgen den Profil-Achsen — `java`/`node`/`typescript` (Sprach-/Runtime-Floors), `build.<tool>`, `migration.<tool>`, `frameworks.<id>`; `incompatible` listet `<achse>=<wert>`-Ausschlüsse (z.B. `container=undertow`).
+
 ---
 
 ## 4. Pack-Sektionen (Drei-Schichten-Aufbau)

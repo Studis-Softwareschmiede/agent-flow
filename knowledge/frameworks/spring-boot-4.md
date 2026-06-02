@@ -1,8 +1,15 @@
 ---
 pack: frameworks/spring-boot-4
-pack_version: 1.0
+pack_version: 1.1
 framework_version_range: ">=4.0, <5.0"
 pack_date: 2026-06-02
+requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01/A02
+  java: ">=17"
+  build: { maven: ">=3.6.3", gradle: ">=8.14" }
+compatible_with:                  # Quelle: A03 (Jakarta EE 11) + A04
+  migration: { flyway: ">=10", liquibase: ">=4" }
+incompatible:                     # Quelle: A03 (Servlet 6.1 — Undertow nicht mehr unterstützt)
+  - container=undertow
 primary_sources:
   - https://docs.spring.io/spring-boot/reference/
   - https://docs.spring.io/spring-boot/system-requirements.html
