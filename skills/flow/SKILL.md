@@ -8,7 +8,10 @@ description: Orchestriert die Softwareschmiede — liest das Projekt-Board und a
 Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task-Tool und bist der **einzige Schreiber** von Board-Status und git/PR. cwd = Ziel-Projekt-Repo.
 
 ## 0. Setup
-- `.claude/profile.md` lesen → Board-Referenz, `merge_policy` (`pr`|`direct`), Build/Test-Befehle.
+- `.claude/profile.md` lesen → Board-Referenz, `merge_policy` (`pr`|`direct`), Build/Test-Befehle, **`default_branch`**.
+- **Arbeits-Repo Fork-sicher auflösen** (einmal, merken): Das Arbeits-Repo ist **`origin`**. ⚠️ `gh repo view` **ohne Argument** liefert bei einem Fork das **Upstream-Parent** (gh bevorzugt den `upstream`-Remote) — deshalb IMMER die origin-URL explizit übergeben:
+  - `repo="$(gh repo view "$(git remote get-url origin)" --json nameWithOwner -q .nameWithOwner)"`
+  - Fehlt `profile.default_branch` (Alt-Repo): `default_branch="$(gh repo view "$(git remote get-url origin)" --json defaultBranchRef -q .defaultBranchRef.name)"` (NICHT `main` annehmen — adoptierte Forks haben oft `master`).
 - **Auth herstellen:** `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"` (mintet App-Token aus `.env.gpg`, loggt `gh` ein). **NICHT `gh auth login --web`.**
 - **Security-Frische (einmaliger Nudge):** `last_trained:` aus `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` lesen; ist es **> 90 Tage** her → einmal ausgeben: „🔒 security-Pack ist <N> Tage alt — `/train security` erwägen." (nur Hinweis, blockiert nicht).
 
@@ -46,8 +49,11 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 ## 5. Landen (gemäß `merge_policy`)
 - **Code UND etwaige `docs/specs/`-Deltas im selben Commit/PR** — zusammen oder gar nicht (Drift-Gate-Prinzip, CONCEPT §4d).
-- **`pr`:** Branch `item-<n>-<slug>` → commit (Message aus Item-Titel + coder-Summary) → push → `gh pr create` → Item → **In Review**. Nach deinem Merge → **Done** (+ PR verlinkt).
-- **`direct`:** commit auf `main` → push → Item → **Done** (+ Commit verlinkt).
+- **`pr`:** Branch `item-<n>-<slug>` → commit (Message aus Item-Titel + coder-Summary) → push → PR öffnen → Item → **In Review**. Nach deinem Merge → **Done** (+ PR verlinkt).
+  - **Fork-sicher öffnen** (adoptierte Repos sind oft Org-**Forks**): `gh pr create` **ohne** `--repo` zielt bei einem Fork aufs **Upstream-Parent** — dort hat die App kein Schreibrecht → `pull request create failed: Resource not accessible by integration (createPullRequest)`. Das ist **kein** Permission-Mangel, sondern ein falsches Ziel-Repo. Darum Base-**Repo** und Base-**Branch** explizit fixieren — `$repo` aus §0 (über die origin-URL aufgelöst, NICHT `gh repo view` ohne Argument, das wäre wieder das Parent):
+    `gh pr create --repo "$repo" --base "$default_branch" --head "item-<n>-<slug>" --title … --body …`
+    (`--repo "$repo"` zwingt den PR an den Org-Fork selbst; `$default_branch` aus §0 statt hartkodiertem `main`. Für nicht-geforkte Repos ist beides ein harmloser No-Op.)
+- **`direct`:** commit auf **`$default_branch`** (§0 — nicht hartkodiert `main`; adoptierte Forks haben oft `master`) → push → Item → **Done** (+ Commit verlinkt).
 - Commit-Message endet mit der `Co-Authored-By`-Zeile.
 
 ## 5a. Validate-Flag-Invalidierung (Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §18)
@@ -76,7 +82,7 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 ## 7. Abschluss-Deploy (Preview) — wenn das Board leer ist
 Nur wenn diesem Lauf mindestens ein Item gelandet ist **und** `profile.deploy == docker`:
-1. **Auf CI warten:** der letzte Merge triggert `build.yml` (Image → ghcr). `gh run watch "$(gh run list --repo <repo> --branch main --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status` (best-effort, kurzes Timeout).
+1. **Auf CI warten:** der letzte Merge triggert `build.yml` (Image → ghcr). `gh run watch "$(gh run list --repo <repo> --branch "$default_branch" --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status` (best-effort, kurzes Timeout).
 2. **Preview hochfahren:** die `up`-Logik aus dem **`preview`-Skill** ausführen (`docker pull "${image}:latest"` → `docker run … -p <preview_port>:<container_port>` → Smoke; zsh: Image-Ref immer mit `${…}`) → **Test-URL** melden (`local`: `http://localhost:<port>` · `vps`: `https://<app>.<domain>`).
 3. **Best-effort:** CI rot/Timeout oder Pull `denied` → melden + überspringen, den Flow NICHT scheitern lassen (Hinweis auf `/preview up`).
 
