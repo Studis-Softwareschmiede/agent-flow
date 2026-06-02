@@ -1,9 +1,11 @@
 ---
 pack: frameworks/spring-boot-3
-pack_version: 1.0
+pack_version: 1.1
 framework_version_range: ">=3.0, <4.0"
-pack_date: 2026-05-31
+pack_date: 2026-06-02
 superseded_by: spring-boot-4
+requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A02
+  java: ">=17"
 primary_sources:
   - https://docs.spring.io/spring-boot/reference/
   - https://docs.spring.io/spring-boot/docs/3.0.0/reference/htmlsingle/

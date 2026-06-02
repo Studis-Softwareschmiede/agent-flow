@@ -1,10 +1,12 @@
 ---
 pack: migration/flyway-9
-pack_version: 1.0
+pack_version: 1.1
 framework_version_range: ">=9.0, <10.0"
-pack_date: 2026-05-31
+pack_date: 2026-06-02
 eol: "EOL/Maintenance — verify aktuelle Lifecycle-Page (documentation.red-gate.com/fd)"
 superseded_by: flyway-10
+requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01
+  java: ">=8"
 primary_sources:
   - https://documentation.red-gate.com/fd
   - https://github.com/flyway/flyway/releases

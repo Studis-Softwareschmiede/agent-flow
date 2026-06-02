@@ -1,9 +1,12 @@
 ---
 pack: frameworks/angular-21
-pack_version: 1.0
+pack_version: 1.1
 framework_version_range: ">=21.0, <22.0"
 pack_date: 2026-06-02
 eol: "v21 aktiv bis ~2026-05-19, danach LTS (verify gegen angular.dev/reference/releases)"
+requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01/A02
+  node: "^20.19.0 || ^22.12.0 || ^24.0.0"
+  typescript: ">=5.9 <6.0"
 primary_sources:
   - https://angular.dev/reference/releases
   - https://angular.dev/reference/versions

@@ -1,8 +1,10 @@
 ---
 pack: migration/flyway-10
-pack_version: 1.0
+pack_version: 1.1
 framework_version_range: ">=10.0, <11.0"
-pack_date: 2026-05-31
+pack_date: 2026-06-02
+requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01
+  java: ">=17"
 primary_sources:
   - https://documentation.red-gate.com/fd
   - https://github.com/flyway/flyway/releases
