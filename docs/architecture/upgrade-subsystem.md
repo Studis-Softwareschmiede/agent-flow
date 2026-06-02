@@ -126,7 +126,7 @@ Der Plan ist **durable** (CONCEPT §4d, hartes Drift-Gate) — keine reine Board
 2. **Board-Items als Leiter:** ein Item pro Major-Stufe pro Achse, in `order[]`, mit `Depends-on`-Kette (jede Stufe hängt an der vorigen + an Achsen-Vorbedingungen aus dem Solver). Body je Item: `Spec: docs/specs/upgrade-<datum>.md` + `implements: AC-<…>` + `Priority` + `Depends-on`. Label `upgrade` (+ `db` wenn DB-Achse berührt → DBA-Review-Trigger in `/flow` §3.2a).
 3. **Gap-Items zuerst:** Stufen, die ein fehlendes Pack brauchen, bekommen ein vorgelagertes Gap-Item (Phase E) als `Depends-on`.
 
-`/upgrade` schreibt den Plan-Commit (Spec) + legt die Items an — das ist der einzige direkte Board-/git-Eingriff von `/upgrade` (danach `/flow`-Hoheit).
+`/upgrade` schreibt den Plan-Commit (Spec) + legt die Items an — das ist der **initiale** direkte Board-/git-Eingriff von `/upgrade`. Die einzigen weiteren `/upgrade`-eigenen Schreib-Operationen sind in Phase F der Status-Folge-Commit (`upgrade.status`) und der Profil-Rückschreib (§9); **alle** Item-Status-Übergänge und Code-PRs bleiben `/flow`-Hoheit.
 
 ---
 
@@ -143,7 +143,7 @@ train --bootstrap <pack-id>
    - requires/compatible_with/incompatible-Header aus den recherchierten Fakten setzen (§12).
 2. Schreibt das fertige Pack in ZWEI Ziele:
    (a) den hermetischen Staging-Dir des Laufs (§10) → der Lauf nutzt es SOFORT.
-   (b) einen PR gegen agent-flow (Branch upgrade-bootstrap/<pack-id>) → Durability, Mensch-Gate (§5).
+   (b) einen PR gegen agent-flow (Branch `bootstrap/<pack-id>`) → Durability, Mensch-Gate (§5).
 3. Mergt den PR NICHT (Out-of-Scope §1).
 ```
 

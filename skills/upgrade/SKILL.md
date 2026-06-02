@@ -13,7 +13,7 @@ Du hebst ein bestehendes Projekt **eingaben-frei** auf den neuesten, kompatiblen
 - `.claude/profile.md` lesen. **Vorbedingung:** Repo ist adoptiert (`profile` existiert, `adoption_validated_at != null`). Fehlt das → **STOPP** mit Hinweis „erst `/adopt` ausführen" (nichts raten).
 - Arbeits-Repo **Fork-sicher** + `default_branch` auflösen + Auth — **identisch zu `/flow` §0** (`repo` über die origin-URL, `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"`).
 - **Run-ID + hermetischer Staging-Dir** (Spec §10):
-  - `run_id` = aktuelles ISO-Datum + Kurz-Slug (z.B. `2026-06-02-upgrade`). Liegt im `profile.upgrade`-Block bereits ein `run_id` mit `status: planning|executing` → **Resume** (Phasen A–E überspringen, weiter bei §6).
+  - `run_id` = aktuelles ISO-Datum + Kurz-Slug (z.B. `2026-06-02-upgrade`). Liegt im `profile.upgrade`-Block bereits ein `run_id` mit `status: planning|executing` → **Resume**: der Staging-Dir besteht bereits — **`AGENT_FLOW_KNOWLEDGE_DIR` erneut exportieren** (s.u.), Phasen A–E überspringen, weiter bei §6. (Ein nacktes `/flow` ohne diesen Export degradiert auf den Plugin-Cache — Spec §11.)
   - Staging-Dir anlegen: `mkdir -p .claude/upgrade/<run_id>/knowledge` und die **aktiven Packs hineinkopieren** (`cp -R "$CLAUDE_PLUGIN_ROOT/knowledge/." .claude/upgrade/<run_id>/knowledge/`). `.claude/upgrade/` ist gitignored (ist es nicht → `.gitignore`-Zeile ergänzen, als Teil des Plan-Commits).
   - **`export AGENT_FLOW_KNOWLEDGE_DIR="$PWD/.claude/upgrade/<run_id>/knowledge"`** — gilt für den ganzen Lauf; alle dispatchten Agenten lesen Packs zuerst von dort (Loader-Override, `framework-build-subsystem.md` §5).
 
@@ -38,8 +38,8 @@ Quelle: **Pack-Header-Constraints** (`requires`/`compatible_with`/`incompatible`
 - **Spec schreiben** (durable, Drift-Gate): `docs/specs/upgrade-<run_id>.md` aus [`templates/_shared/upgrade-plan.md`](../../templates/_shared/upgrade-plan.md). Enthält Ist→Ziel-Tabelle je Achse, Solver-Begründung **mit Quell-Links**, und **eine nummerierte AC-Gruppe pro Leiter-Stufe** (z.B. `AC-A1: java auf 21 — Build grün`; `AC-F1: angular 13→14 — ng update + Tests grün`).
 - **Board-Items als Leiter:** **ein Item pro Major-Stufe pro Achse**, in `order[]`, mit `Depends-on`-Kette (jede Stufe hängt an der vorigen + den Achsen-Vorbedingungen aus dem Solver). Item-Body: `Spec: docs/specs/upgrade-<run_id>.md` + `implements: AC-<…>` + `Priority` + `Depends-on`. Label `upgrade` (+ `db` wenn DB-Achse berührt → DBA-Review-Trigger in `/flow`).
 - **Gap-Stufen** (Phase E nötig): bekommen ein **vorgelagertes Gap-Item** als `Depends-on`.
-- **Plan-Commit:** Spec + `.gitignore`-Zeile + `profile.upgrade`-Block (`run_id`, `targets`, `status: planning`, `timeout_hours`) committen. **Das ist der einzige direkte git/Board-Eingriff von `/upgrade`** — danach `/flow`-Hoheit (Single-Writer-Erweiterung, Spec §3/§7).
-- Board-Item-Anlage via `gh issue create` + `gh project item-add` (Mechanik wie `/requirement`/`/adopt`).
+- **Plan-Commit:** Spec + `.gitignore`-Zeile + `profile.upgrade`-Block (`run_id`, `targets`, `status: planning`, `timeout_hours`) committen. **Das ist der initiale direkte git/Board-Eingriff von `/upgrade`** — die zwei weiteren erlaubten (Status-Folge-Commit §6, Profil-Rückschreib §7) sind im Abschnitt **Grenzen** abgegrenzt; alles Übrige ist `/flow`-Hoheit (Single-Writer-Erweiterung, Spec §3/§7).
+- Board-Item-Anlage via `gh issue create` + `gh project item-add` (Mechanik wie `/requirement`/`/adopt`). **Plus ein Tracking-Item** „UpgradePlan <run_id>" (Label `upgrade`), an das §7 den Abschluss-Report hängt.
 
 ## 5. Gaps (Phase E) — fehlende Packs schließen
 Für jedes Ziel ohne passenden Pack (`target[]` gegen Staging-Dir/Plugin-Cache prüfen):
@@ -55,7 +55,7 @@ Für jedes Ziel ohne passenden Pack (`target[]` gegen Staging-Dir/Plugin-Cache p
 
 ## 7. Finalize — Profil, Retro, Report
 1. **Profil zurückschreiben:** erreichte Ziel-Versionen (alle Stufen einer Achse `Done`) in die regulären Achsen-Felder (`frameworks`, `db_migration_tool`, `language`-Toolchain, `container_runtime`). DB-Achse berührt → `adoption_validated_at: null` (Re-Validate beim nächsten `/preview`/`/adopt`, analog `/flow` §5a). `profile.upgrade.status: done` (oder `blocked`, wenn offene Stufen).
-2. **Retro:** `/retro` dispatchen — destilliert die Lauf-Lessons (`.claude/lessons/*`) in die Packs (PR+Gate, CONCEPT §5) → nächstes Upgrade effizienter.
+2. **Retro:** `/retro` dispatchen — destilliert die Lauf-Lessons (`.claude/lessons/*`) in die Packs (PR+Gate, CONCEPT §5) → nächstes Upgrade effizienter. Greift der wöchentliche Retro-Cooldown (`framework-build-subsystem.md` §9, `.retro-last-run`), überspringt `/retro` stumm → im Report vermerken („Retro-Cooldown aktiv; Lessons noch nicht promotet — `/retro --force` erwägen").
 3. **Report + Notification:** strukturierter Abschluss-Report — pro Achse Ist→Ziel + Status (`Done`/`Blocked` + Grund), Liste der offenen agent-flow-Bootstrap-PRs (zum Mensch-Merge), bekannte Restunschärfen (autonom gebootstrappte Packs). Report als Kommentar an ein Tracking-Item. **`PushNotification`** senden (Overnight → Mensch findet morgens das Ergebnis).
 4. **Staging-Dir:** kann verworfen werden (`rm -rf .claude/upgrade/<run_id>`) — gebootstrappte Packs leben via die offenen PRs regulär weiter. Bei `status: blocked` **behalten** (Resume braucht ihn).
 
