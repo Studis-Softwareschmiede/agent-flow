@@ -9,7 +9,11 @@ primary_sources:
   - https://angular.dev/reference/versions
   - https://angular.dev/update-guide
   - https://angular.dev/reference/migrations
+  - https://angular.dev/guide/testing
+  - https://angular.dev/guide/testing/karma
+  - https://angular.dev/roadmap
   - https://github.com/angular/angular/releases
+  - https://github.com/angular/angular-cli/releases
   - https://blog.angular.dev/
 non_sources:
   - dev.to
