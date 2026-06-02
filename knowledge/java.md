@@ -20,6 +20,7 @@ Expertise für Java. Geladen bei `profile.language: java`. Regel-IDs: `java/R<NN
 - `java/R13` — **Keine `public` veränderlichen Instanz-Felder.** Kapseln (`private` + gezielte Accessoren) oder, wo wirklich konstant, als `public static final` deklarieren. Für reine Datenträger ab JDK 16+ `record` bevorzugen. (Sonar `java:S1104`)
 - `java/R14` — **Keine Double-Brace-Initialisierung** (`new ArrayList<>() {{ add(x); }}`): erzeugt pro Verwendung eine anonyme Subklasse (Metaspace-Druck, hält eine versteckte `this`-Referenz auf die umschliessende Instanz → Memory-Leak- und Serialisierungs-Risiko). Stattdessen `List.of(...)`/`Map.of(...)` oder explizites Befüllen. (Sonar `java:S3599`)
 - `java/R15` — **Rückgabewerte statusliefernder Methoden prüfen.** Boolean/Status-Rückgaben wie `File.delete()`, `File.mkdirs()`, `File.createNewFile()`, `File.renameTo()` nicht ignorieren — bei `false` loggen oder behandeln (oder bewusst die `java.nio.file.Files`-Varianten nutzen, die statt `false` eine Exception werfen). (Sonar `java:S899`)
+- `java/R16` — **Charset deterministisch behandeln, Test-Encoding pinnen (JDK < 18).** Auf JDK 8/11/17 leitet die JVM die Default-`file.encoding` (und `sun.jnu.encoding`) aus der **Platform-Locale** ab; auf einer Nicht-UTF-8-Locale (z.B. `LANG=C` → US-ASCII) werden Quell-/Test-Daten mit Non-ASCII-Zeichen (Umlaute in `@Sql`-Seeds, Property-Werte, Ressourcen) **falsch dekodiert** — derselbe Build ist auf einer Maschine grün, auf der nächsten rot. Mitigation im Code: Default-Charset NIE implizit annehmen — explizit `StandardCharsets.UTF_8` an `new String(byte[], …)`, `Files.readString(…)`, Reader/Writer übergeben. Mitigation build-seitig: Surefire- **und** Failsafe-Plugin (`argLine`/`systemPropertyVariables`) mit `-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8` pinnen, damit Tests deterministisch auf jeder JDK/Locale laufen. Ab JDK 18 ist UTF-8 der plattformunabhängige Default (JEP 400) — der Test-Pin bleibt für JDK-17-Toolchains aber nötig. Quelle: [JEP 400 (UTF-8 by Default)](https://openjdk.org/jeps/400)
 
 ## Reviewer-Checklist
 - Nicht geschlossene Ressourcen (Stream/Connection) → **Critical**.
@@ -34,6 +35,7 @@ Expertise für Java. Geladen bei `profile.language: java`. Regel-IDs: `java/R<NN
 - Ignorierter Rückgabewert einer statusliefernden Methode, z.B. `File.delete()` (R15) → **Important**.
 - Ungenutztes (auch injiziertes) Feld (R12) → **Suggestion**.
 - `public` veränderliches Instanz-Feld (R13) → **Suggestion**.
+- JDK-17-(oder älter-)Toolchain ohne `-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8`-Pin auf Surefire/Failsafe, wenn Tests Non-ASCII-Daten verarbeiten (`@Sql`-Seeds mit Umlauten, locale-abhängige Ressourcen) → **Important** (R16, locale-abhängige Flakiness). Bei JDK 18+ entfällt der Befund (JEP 400).
 
 ## Test-Approach
 - Build (Maven/Gradle) grün; Unit-Tests; Smoke-Run.
