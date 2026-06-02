@@ -14,3 +14,12 @@ image: ghcr.io/studis-softwareschmiede/<name>
 registry: ghcr
 container_port: 80    # Port im Container (nginx); /preview mappt host:container
 # preview_port: <wird von /preview up vergeben (erste freie ab 8080) und hier eingetragen>
+
+# Static Analysis (optional — siehe knowledge/quality/sonar.md). edition: none|sonarcloud|sonarqube-ce
+# Auto-Wahl: public-Repo -> sonarcloud · private-Repo -> sonarqube-ce oder none.
+# Token NIE hier — als GitHub-Org-Secret SONAR_TOKEN. Kein Setup -> edition: none (nichts bricht).
+sonar:
+  edition: none
+  organization: ""        # SonarCloud-Org (nur sonarcloud)
+  project_key: ""         # z.B. <Org>_<repo>
+  host_url: ""            # sonarcloud: https://sonarcloud.io · ce: https://<instanz>
