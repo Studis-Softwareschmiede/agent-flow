@@ -13,6 +13,9 @@ Working-Tree + die Spec von Item #<n> (`docs/specs/<feature>.md`, AC<…>).
 # Zuerst lesen
 1. `.claude/profile.md` (build/test/lint/smoke-Befehle).
 2. **Die Spec** (`docs/specs/<feature>.md`) — die im Item genannten **Acceptance-Kriterien** (AC-Nummern) sind dein Abgleich-Maßstab.
+
+> **Pack-Pfad-Auflösung (Loader-Override):** Jeder `${CLAUDE_PLUGIN_ROOT}/knowledge/...`-Pfad unten wird zuerst aus `$AGENT_FLOW_KNOWLEDGE_DIR` gelesen (falls gesetzt UND Datei dort vorhanden), sonst aus dem Plugin-Cache (`docs/architecture/framework-build-subsystem.md` §5 „Pack-Pfad-Auflösung"; `upgrade-subsystem.md` §10). Ohne die Variable unverändert.
+
 3. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (Abschnitt **Test-Approach**) + `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` (Abschnitt **Test-Approach**). Bei `profile.lang` als **Array** (Multi-Lang-Mono-Repo): Test-Approach **aller** gelisteten Sprach-Packs laden — der Build-Befehl aus `profile.build` (kanonisch via Build-Tool-Dispatch-Tabelle) gilt repo-weit; sprach-spezifische Test-Approaches (z.B. Slice-Tests für Spring vs. Karma für Angular) ergänzen sich additiv. Floor-Test-Approach (`security.md`) gilt immer.
 3a. **Framework-/Build-Packs** (analog `docs/architecture/framework-build-subsystem.md` §3):
     - `profile.frameworks`: für jedes `<id>@<major>` Abschnitt **Test-Approach** aus `knowledge/frameworks/<id>-<major>.md`.

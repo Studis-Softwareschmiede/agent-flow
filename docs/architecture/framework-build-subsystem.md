@@ -171,6 +171,13 @@ Diese Regel ist die symmetrische Verlängerung von `reviewer/R01` und `coder/R02
 
 **Range-Matching-Semantik (Loader-Verhalten):** Der Pack-Loader matcht `frameworks: ["<id>@<major>"]` aus dem Profil gegen den `framework_version_range`-Header der Pack-Datei. Match-Regel: der Major aus dem Profil muss in das Range-Intervall fallen. Beispiel: Pack-Range `">=3.0, <4.0"` matcht `spring-boot@3`. Mehrere Packs mit überlappenden Ranges für denselben `<id>` sind nicht erlaubt (Build-Time-Fehler im Pack-Loader).
 
+**Pack-Pfad-Auflösung (Loader-Override, `AGENT_FLOW_KNOWLEDGE_DIR`).** Alle Pack-Pfade, die die Agenten (`coder`/`reviewer`/`tester`/`dba`) als `${CLAUDE_PLUGIN_ROOT}/knowledge/...` lesen, werden über **eine** Präzedenz aufgelöst:
+
+1. ist die Umgebungsvariable **`AGENT_FLOW_KNOWLEDGE_DIR`** gesetzt UND existiert dort die gesuchte Pack-Datei → **diese** lesen;
+2. sonst Fallback auf `${CLAUDE_PLUGIN_ROOT}/knowledge/...` (heutiges Verhalten).
+
+**Zweck:** hermetisches Pack-Loading für autonome `/upgrade`-Läufe (`docs/architecture/upgrade-subsystem.md` §10) — frisch via `train --bootstrap` erzeugte Packs liegen im Staging-Dir und werden **sofort** genutzt, ohne Merge/`/reload-plugins`. **Abwärtskompatibel:** ist `AGENT_FLOW_KNOWLEDGE_DIR` nicht gesetzt (Normalfall), gilt unverändert der Plugin-Cache. Die Override-Auflösung ist **pro Datei** (ein Pack nur im Cache, ein anderes nur im Staging-Dir → beide werden gefunden). `${CLAUDE_PLUGIN_ROOT}` bleibt für **Schreib**-Operationen (PRs via Source-Klon) wie gehabt read-only; der Override betrifft nur das **Lesen** der Packs.
+
 **Major-Optionalität:** Frameworks, die noch nie einen Cut hatten (z.B. `fastapi`, `flask` Stand 2026), dürfen ohne `@<major>` im Profil stehen (`frameworks: ["fastapi"]`). Der Loader nimmt dann den einzigen vorhandenen Pack-File-Match. Sobald ein Cut entsteht (z.B. `fastapi-2.md` neu), wird `@<major>` im Profil Pflicht — sonst Build-Time-Fehler („mehrdeutiger Match: fastapi-1.md ODER fastapi-2.md").
 
 ---
