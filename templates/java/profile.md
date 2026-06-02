@@ -14,3 +14,12 @@ image: ghcr.io/studis-softwareschmiede/<name>
 registry: ghcr
 container_runtime: none                      # optional (JVM/Servlet-Stacks): tomcat | jetty | undertow | none — von /adopt aus Deps gesetzt; vom /upgrade-Solver für Runtime-Ausschlüsse genutzt (z.B. Servlet 6.1 ⇒ kein undertow). Spec: docs/architecture/upgrade-subsystem.md §13
 # upgrade: { … }                             # transienter /upgrade-Fortschrittsblock (run_id/targets/status/timeout_hours) — wird zur Laufzeit gesetzt, nicht scaffolden. Spec §13
+
+# Static Analysis (optional — siehe knowledge/quality/sonar.md). edition: none|sonarcloud|sonarqube-ce
+# Auto-Wahl: public-Repo -> sonarcloud · private-Repo -> sonarqube-ce oder none.
+# Token NIE hier — als GitHub-Org-Secret SONAR_TOKEN. Kein Setup -> edition: none (nichts bricht).
+sonar:
+  edition: none
+  organization: ""        # SonarCloud-Org (nur sonarcloud)
+  project_key: ""         # z.B. <Org>_<repo>
+  host_url: ""            # sonarcloud: https://sonarcloud.io · ce: https://<instanz>
