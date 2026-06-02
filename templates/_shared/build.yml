@@ -1,11 +1,14 @@
 # Vorlage — von new-project nach .github/workflows/build.yml kopiert.
-# Baut bei Push auf main ein Image und pusht nach ghcr.io — via eingebautem GITHUB_TOKEN
-# (kein Push-Secret nötig). Typ-Spezifika stecken im Dockerfile.
+# Baut bei Push auf den Default-Branch ein Image und pusht nach ghcr.io — via
+# eingebautem GITHUB_TOKEN (kein Push-Secret nötig). Typ-Spezifika stecken im Dockerfile.
 # Security-Gate: secret-scan (gitleaks) MUSS grün sein, bevor das Image gebaut/gepusht wird.
 name: build
 on:
   push:
-    branches: [main]
+    # main UND master: new-project-Repos sind `main`, adoptierte Org-Forks erben oft
+    # `master`. GitHub-Actions-Trigger können keine Variable lesen → beide listen, sonst
+    # baut die CI auf einem master-Repo NIE (stiller Ausfall, kein ghcr-Image).
+    branches: [main, master]
 permissions:
   contents: read
   packages: write
