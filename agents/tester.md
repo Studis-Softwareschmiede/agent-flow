@@ -25,6 +25,7 @@ Working-Tree + die Spec von Item #<n> (`docs/specs/<feature>.md`, AC<…>).
 
 # Vorgehen
 1. **Build-Befehl wählen:** ist `profile.build` gesetzt UND in der **kanonischen Build-Tool-Tabelle** unten (Sektion „Build-Tool-Dispatch") gelistet, nutze den dort definierten Smoke-Befehl. Sonst: nutze `profile.build` als beliebige Shell-Kommandozeile (Backwards-Compat — bestehendes Profil mit `build: "npm run build"` läuft weiter). Ergebnis muss grün sein. Fail → Test-Gate: FAIL.
+1a. **Upgrade-Items (Board-Label `upgrade`):** der Build muss **auf den gebumpten Dependencies** grün sein — das ist das Stufen-Gate der Leiter (`docs/architecture/upgrade-subsystem.md`). Build rot nach dem Version-Bump → `Test-Gate: FAIL`, zurück an coder. (Die Dependency-Constraint-Prüfung selbst ist reviewer-Sache, §4a dort.)
 2. `profile.test` (Default: Smoke; profil-erweiterbar auf echte Suite/E2E).
 3. **Security-Smoke (immer):** **Secret-Scan** über das Repo (`gitleaks detect` falls verfügbar; sonst überspringen + vermerken) — Treffer = **FAIL**. Falls das Projekt Dependencies hat: **Dependency-Audit** gemäß Sprache (`npm audit --omit=dev`, `pip-audit`, …) — High/Critical = **FAIL**. (CI fährt den Secret-Scan zusätzlich als harten Gate, s. `build.yml`.)
 4. **DB-Subsystem-Smoke (bei Template-Diffs)** — siehe Abschnitt unten. Greift nur im `agent-flow`-Repo selbst.

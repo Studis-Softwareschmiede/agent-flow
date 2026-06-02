@@ -81,7 +81,7 @@ Das GitHub-Board ist nicht nur Anzeige, sondern **Arbeits-Queue UND persistenter
 
 ## 4b. /flow-Spine & Handoff-Verträge (akzeptiert)
 
-**Board-Item-Vertrag:** Title + **Acceptance Criteria** (Body) + Priority/Order + optional Depends-on + Status (**nur** der Orchestrator schreibt Status). *(Mit §4d ausgelagert: die Acceptance-Criteria leben durable in `docs/specs/<feature>.md`; das Item referenziert die **Spec-ID** statt sie zu enthalten.)*
+**Board-Item-Vertrag:** Title + **Acceptance Criteria** (Body) + Priority/Order + optional Depends-on + Status (**nur** der Orchestrator schreibt Status). *(Mit §4d ausgelagert: die Acceptance-Criteria leben durable in `docs/specs/<feature>.md`; das Item referenziert die **Spec-ID** statt sie zu enthalten.)* *(Additive Erweiterung durch **`/upgrade`**: dieser Skill legt initial die UpgradePlan-Spec + die Leiter-Items an und schreibt nach Abschluss die Ziel-Versionen ins `profile` zurück — begründete Ausnahme vom „nur `/flow` schreibt"-Prinzip; alle **Item-Status-Übergänge** und Code-PRs bleiben Orchestrator-Hoheit. Spec: [`docs/architecture/upgrade-subsystem.md`](docs/architecture/upgrade-subsystem.md) §3/§7.)*
 
 **`/flow`-Ablauf** (cwd = Ziel-Projekt-Repo):
 0. Board-Ref aus `.claude/profile.md`.
