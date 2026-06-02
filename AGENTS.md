@@ -236,6 +236,10 @@ Scope          jetzt pro Projekt; Cross-Projekt-Aggregation später (Ausbau)
 Zweck          Recherchiert aktuelle Patterns/Best-Practices/Fallen je Sprache,
                destilliert Neues+Nützliches → Update von knowledge/<lang>.md als PR.
 Trigger/Input  /train <language>   (interaktiv; z.B. /train flutter)
+               /train --bootstrap <pack-id> — fehlenden Pack ANLEGEN statt abbrechen
+                 (Skelett aus Vorgänger + Sektion A aus Quellen + Solver-Constraints;
+                  schreibt bei AGENT_FLOW_KNOWLEDGE_DIR in den Staging-Dir). Primär von
+                  /upgrade Phase E. Vertrag: docs/architecture/upgrade-subsystem.md §8.
 Lese-Pflichten • aktueller knowledge/<lang>.md  (Dedup-Basis + Stand)
                • LEARNINGS.md  (nicht Verworfenes wiederholen)
 Tools          Read, Grep, Glob, WebSearch, WebFetch, Edit, Bash(git+gh)
