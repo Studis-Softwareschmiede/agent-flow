@@ -14,6 +14,13 @@ Expertise für Java. Geladen bei `profile.language: java`. Regel-IDs: `java/R<NN
 - `java/R09` — **Flexible Constructor Bodies (JDK 25+, stabil, since: 25):** Konstruktoren dürfen vor `super(...)` / `this(...)` Statements enthalten (Prologue), sofern diese nicht auf das noch nicht konstruierte Objekt zugreifen. Erlaubt: Argument-Validierung (`if (value <= 0) throw ...`), Feldinitialisierung (`this.x = x;`), beliebige Berechnungen. Nicht erlaubt im Prologue: unqualifiziertes `this`, Instanzmethoden-Aufrufe, `super`-Member-Zugriffe. Beseitigt den bisherigen Workaround via private static Hilfsmethoden für Pre-`super`-Validierungen. Quelle: [JEP 513](https://openjdk.org/jeps/513) · [Oracle Docs JDK 25](https://docs.oracle.com/en/java/javase/25/language/flexible-constructor-bodies.html)
 - `java/R10` — **Module Import Declarations (JDK 25+, stabil, since: 25):** `import module M;` importiert on-demand alle von Modul `M` exportierten Packages (inkl. transitiver Exporte). Beispiel: `import module java.base;` ersetzt typische Sammlungen von `java.util.*`, `java.util.function.*`, `java.util.stream.*`-Importen. Namenskollisionen (gleicher Klassenname aus zwei Modulen) werden durch explizite Einzelimporte aufgelöst: `import java.awt.Label;` schlägt `import module` für `Label`. Nützlich vor allem in Lern-Code, Prototypen und Compact-Source-Files (JEP 512). Quelle: [JEP 511](https://openjdk.org/jeps/511) · [Oracle Docs JDK 25](https://docs.oracle.com/en/java/javase/25/language/module-import-declarations.html)
 
+> **Hygiene-Grundlagen (version-agnostisch, R11–R15).** R04–R10 decken moderne JDK-Features ab; R11–R15 decken die zeitlosen Code-Quality-Grundlagen ab, die unabhängig von der JDK-Version gelten (gleichermassen für JDK 8/11/17/21+). Empirisch destilliert aus realen SonarCloud-Findings (Sonar-Regel-IDs in Klammern) — genau diese Muster treten in adoptierten Bestands-Repos massenhaft auf.
+- `java/R11` — **Keine generischen Exceptions werfen** (`throw new RuntimeException(...)`, `Exception`, `Throwable`): spezifischen JDK-Typ (`IllegalArgumentException`, `IllegalStateException`, `IOException`, …) oder eigene Domain-Exception verwenden, damit Aufrufer gezielt fangen können. Cause-Chain immer über den 2-Arg-Konstruktor erhalten: `throw new MyException("msg", e)` — **nicht** `"msg" + e` (verliert den Stacktrace). (Sonar `java:S112`)
+- `java/R12` — **Keine ungenutzten Felder.** Tote private Felder und nach einem Constructor-Injection-Refactor nicht mehr verwendete injizierte Dependencies (`@Autowired`/`final`) entfernen — sie verschleiern den echten Abhängigkeitsgraphen und täuschen Kopplung vor. (Sonar `java:S1068`)
+- `java/R13` — **Keine `public` veränderlichen Instanz-Felder.** Kapseln (`private` + gezielte Accessoren) oder, wo wirklich konstant, als `public static final` deklarieren. Für reine Datenträger ab JDK 16+ `record` bevorzugen. (Sonar `java:S1104`)
+- `java/R14` — **Keine Double-Brace-Initialisierung** (`new ArrayList<>() {{ add(x); }}`): erzeugt pro Verwendung eine anonyme Subklasse (Metaspace-Druck, hält eine versteckte `this`-Referenz auf die umschliessende Instanz → Memory-Leak- und Serialisierungs-Risiko). Stattdessen `List.of(...)`/`Map.of(...)` oder explizites Befüllen. (Sonar `java:S3599`)
+- `java/R15` — **Rückgabewerte statusliefernder Methoden prüfen.** Boolean/Status-Rückgaben wie `File.delete()`, `File.mkdirs()`, `File.createNewFile()`, `File.renameTo()` nicht ignorieren — bei `false` loggen oder behandeln (oder bewusst die `java.nio.file.Files`-Varianten nutzen, die statt `false` eine Exception werfen). (Sonar `java:S899`)
+
 ## Reviewer-Checklist
 - Nicht geschlossene Ressourcen (Stream/Connection) → **Critical**.
 - Leerer `catch` ohne Log/Handling → **Important**.
@@ -22,6 +29,12 @@ Expertise für Java. Geladen bei `profile.language: java`. Regel-IDs: `java/R<NN
 - `synchronized`-Block in Virtual-Thread-Hot-Path → **Important** (gilt für JDK 21–23; seit JDK 24 durch JEP 491 behoben).
 - `ZGenerational`-Flag in JVM-Optionen bei JDK 24+ → **Important** (Obsolete-Warning; Removal/Startabbruch in einem zukünftigen Release angekündigt).
 - `ThreadLocal` in Klassen, die Virtual Threads nutzen, bei JDK 25+ → **Important** (prefer `ScopedValue`, R08).
+- `throw new RuntimeException`/generische Exception (R11) → **Important**.
+- Double-Brace-Initialisierung (R14) → **Important** (Memory-/Serialisierungs-Risiko).
+- Ignorierter Rückgabewert einer statusliefernden Methode, z.B. `File.delete()` (R15) → **Important**.
+- Ungenutztes (auch injiziertes) Feld (R12) → **Suggestion**.
+- `public` veränderliches Instanz-Feld (R13) → **Suggestion**.
 
 ## Test-Approach
 - Build (Maven/Gradle) grün; Unit-Tests; Smoke-Run.
+- **Assertion-Argument-Reihenfolge:** `assertEquals(expected, actual)` — erwarteter Wert **zuerst**, tatsächlicher danach (analog `assertSame`/`assertArrayEquals`). Vertauschte Reihenfolge verfälscht die `expected:<…> but was:<…>`-Fehlermeldung und führt bei Debugging in die Irre. (Sonar `java:S3415`)
