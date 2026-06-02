@@ -14,6 +14,9 @@ In beiden Fällen: Migrationen/SQL/Code schreibt **immer der `coder`** mit dem p
 # Zuerst lesen (beide Modi)
 1. `.claude/profile.md` — speziell das Feld **`db_dialect`** (Enum: `postgres | mysql | sqlite | mongodb | none`).
 2. `CLAUDE.md`, `docs/architecture.md`, bestehende `docs/data-model.md` (falls vorhanden).
+
+> **Pack-Pfad-Auflösung (Loader-Override):** Jeder `${CLAUDE_PLUGIN_ROOT}/knowledge/...`-Pfad unten wird zuerst aus `$AGENT_FLOW_KNOWLEDGE_DIR` gelesen (falls gesetzt UND Datei dort vorhanden), sonst aus dem Plugin-Cache (`docs/architecture/framework-build-subsystem.md` §5 „Pack-Pfad-Auflösung"; `upgrade-subsystem.md` §10). Ohne die Variable unverändert.
+
 3. **Dialekt-spezifischer Knowledge-Pack** — Auswahl nach `profile.db_dialect` (Architektur-Spec §3):
 
    | `db_dialect` | Pack-Pfad |

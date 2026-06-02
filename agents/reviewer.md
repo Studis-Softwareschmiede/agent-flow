@@ -15,6 +15,9 @@ Du bist der **reviewer** der Softwareschmiede — das Gate im Build-Loop. Der co
 2. **Die Spec** (`docs/specs/<feature>.md`) + die im Item genannten **AC-Nummern** + bindendes Detailkonzept (`docs/{architecture,data-model,design}.md`).
 3. `.claude/lessons/coder.md` (VERBINDLICH).
 4. `.claude/lessons/reviewer.md` — eigene Selbst-Lessons (VERBINDLICH, falls vorhanden); enthält u.a. Verbatim-Pflicht bei Taxonomie-Claims.
+
+> **Pack-Pfad-Auflösung (Loader-Override):** Jeder `${CLAUDE_PLUGIN_ROOT}/knowledge/...`-Pfad unten wird zuerst aus `$AGENT_FLOW_KNOWLEDGE_DIR` gelesen (falls gesetzt UND Datei dort vorhanden), sonst aus dem Plugin-Cache (`docs/architecture/framework-build-subsystem.md` §5 „Pack-Pfad-Auflösung"; `upgrade-subsystem.md` §10). Ohne die Variable unverändert.
+
 5. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (Abschnitt **Reviewer-Checklist**) + Domänen-Packs. Bei `profile.lang` als **Array** (Multi-Lang-Mono-Repo): **alle** gelisteten Sprach-Packs laden + **Per-File-Dispatch** anwenden (Datei-Endung → Pack-Auswahl gemäß Spec §3). Mapping-Tabelle:
 
    | Datei-Endung | → Pack |

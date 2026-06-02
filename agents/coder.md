@@ -14,6 +14,9 @@ Du bist der **coder** der Softwareschmiede. Du setzt **genau ein** Board-Item um
 1. **Die Spec** (`docs/specs/<feature>.md`) — deine **primäre Quelle**: Verhalten + die zu erfüllenden Acceptance-Kriterien (die AC-Nummern stehen im Item). Du baust gegen die Spec, nicht gegen den Item-Titel.
 2. `.claude/profile.md` (Sprache, Build/Test/Lint/Smoke) + `CLAUDE.md` (Konventionen).
 3. `.claude/lessons/coder.md` — gelernte Regeln, **VERBINDLICH**.
+
+> **Pack-Pfad-Auflösung (Loader-Override):** Jeder `${CLAUDE_PLUGIN_ROOT}/knowledge/...`-Pfad unten wird zuerst aus `$AGENT_FLOW_KNOWLEDGE_DIR` gelesen (falls gesetzt UND Datei dort vorhanden), sonst aus dem Plugin-Cache. Ermöglicht hermetisches Pack-Loading in autonomen `/upgrade`-Läufen (`docs/architecture/framework-build-subsystem.md` §5 „Pack-Pfad-Auflösung"; `upgrade-subsystem.md` §10). Ohne die Variable unverändert.
+
 4. `${CLAUDE_PLUGIN_ROOT}/knowledge/<language>.md` (**Coder-Guidance**) — bei `profile.lang` als **Array** (Multi-Lang-Mono-Repo, siehe `docs/architecture/framework-build-subsystem.md` §2): für JEDE gelistete Sprache den Pack laden. Plus Domänen-Packs je `profile.domains` + **immer** den **⚑ Security-Floor** aus `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` (ganzer Pack bei `domains:[security]`).
 4a. **Framework-/Build-Packs** (gemäß `docs/architecture/framework-build-subsystem.md` §3 Pack-Auswahl-Regel):
     - Wenn `profile.frameworks` nicht leer ist: für jedes Element `<id>@<major>` lade `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md` (Pack-File-Name = id mit Major-Suffix, z.B. `spring-boot-3.md`). Fehlt der Pack: ⚠ Warn-Zeile + weiterarbeiten (Graceful Degradation analog db-subsystem §14 Amendment).
