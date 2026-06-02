@@ -293,7 +293,7 @@ Harte Grenzen  • NIE Direkt-Push auf main
 - **`/retro`**, **`/train <lang>`** — triggern die gleichnamigen Meta-Agenten (oben).
 - **`/new-project` / `/init`** — Projekt-Bootstrap (Spec unten).
 - **`/adopt <owner/repo>`** — bestehendes Repo adoptieren + auf Standard heben: clone (fremd → Fork in die Org) → init (Spec aus Code) → **Audit** (reviewer Audit-Modus + gitleaks/dep-audit gegen Security-Floor/Packs/Spec) → Funde als priorisiertes **Backlog** aufs Board → `/flow`. Behebt nichts automatisch; pusht nie ungefragt aufs fremde Upstream.
-- **`/upgrade [<owner/repo>]`** — autonomer Stack-Modernisierer: Ist-Versionen erkennen → neueste recherchieren → **Cross-Achsen-Kompatibilität** auflösen (Solver) → **UpgradePlan** als Spec + Board-Leiter → fehlende Knowledge-Packs via `train --bootstrap` schließen → Stufe für Stufe via `/flow` ausführen → testen + Loop → `retro`. Läuft **eingaben-frei** (Overnight) über hermetisches Pack-Loading + Failure-Isolation/Resume. Bindende Spec: `docs/architecture/upgrade-subsystem.md`.
+- **`/agent-flow:upgrade [<owner/repo>]`** (namespaced Pflicht — bloßes `/upgrade` ist ein CLI-Built-in [Abo-Upgrade] und erreicht das Skill nicht) — autonomer Stack-Modernisierer: Ist-Versionen erkennen → neueste recherchieren → **Cross-Achsen-Kompatibilität** auflösen (Solver) → **UpgradePlan** als Spec + Board-Leiter → fehlende Knowledge-Packs via `train --bootstrap` schließen → Stufe für Stufe via `/flow` ausführen → testen + Loop → `retro`. Läuft **eingaben-frei** (Overnight) über hermetisches Pack-Loading + Failure-Isolation/Resume. Bindende Spec: `docs/architecture/upgrade-subsystem.md`.
 
 ```
 Skill: new-project  /  init

@@ -33,8 +33,10 @@ INTERAKTIV (du am Keyboard, Claude-Code unter Abo)
   /flow <task>   → coder → reviewer ⇄ Loop (bis Review-Gate: PASS) → tester → fertig
   /retro         → Retro-Agent: gesammelte Lessons → Skill-Verbesserung (als PR)
   /train <lang>  → Training-Agent: Web-Recherche neuer Patterns → Skill-/Profil-Update (als PR)
-  /upgrade <repo>→ Upgrade-Orchestrator: Versionen erkennen → Kompat-Solver → UpgradePlan aufs
-                   Board → autonom via /flow modernisieren → retro (Spec: docs/architecture/upgrade-subsystem.md)
+  /agent-flow:upgrade [<repo>]  → Upgrade-Orchestrator: Versionen erkennen → Kompat-Solver → UpgradePlan
+                   aufs Board → autonom via /flow modernisieren → retro. NICHT bloß "/upgrade" tippen —
+                   das ist ein CLI-Built-in (Abo-Upgrade); nur die namespaced Form erreicht das Skill.
+                   (Spec: docs/architecture/upgrade-subsystem.md)
 
 GITHUB (kostenlos, ohne Claude)
   Push → Actions → Build + Deploy        |   Projects v2 → Kanban/Scrum-Board pro Projekt
