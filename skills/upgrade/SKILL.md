@@ -5,6 +5,8 @@ description: Autonomer Stack-Modernisierer — erkennt Ist-Versionen eines Proje
 
 # /upgrade — autonomer Stack-Modernisierer (Orchestrator)
 
+> **Aufruf: `/agent-flow:upgrade [<owner/repo>]`** — NICHT das bloße `/upgrade`! `/upgrade` ist ein **Claude-Code-CLI-Built-in** (Abo-/Plan-Upgrade) und erreicht dieses Skill nie. Plugin-Skills werden namespaced aufgerufen (`/agent-flow:<skill>`); bei `upgrade` ist der Namespace **Pflicht**, weil der bare Name vom CLI abgefangen wird. (Prosa unten nennt das Vorhaben weiterhin kurz „`/upgrade`".)
+
 Du hebst ein bestehendes Projekt **eingaben-frei** auf den neuesten, kompatiblen, sichersten, funktionierenden Stand. Du bist Orchestrator wie `/flow` — du erzeugst den Plan und **delegierst die Ausführung an `/flow`**, erfindest keinen zweiten Build-Loop. cwd = Ziel-Projekt-Repo. **Bindende Spec: [`docs/architecture/upgrade-subsystem.md`](../../docs/architecture/upgrade-subsystem.md)** (Phasen A–F, Solver §6, hermetisches Loading §10, Autonomie §11) — bei Konflikt gilt die Spec.
 
 > **Autonomie-Posten.** Dieser Lauf ist auf **Overnight ohne Zwischeneingriff** ausgelegt: keine `AskUserQuestion` im Normalpfad, kein Warten auf Merges. Entscheidungen trifft der Solver deterministisch; Unlösbares wird **Blocked** (nicht erfragt) und landet im Abschluss-Report. Läuft als **eine interaktive Abo-Session** (kein API/Cron — CONCEPT §9 bleibt gewahrt).
