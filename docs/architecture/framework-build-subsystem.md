@@ -278,6 +278,18 @@ Promotionen aus Projekt-Lessons in Framework-/Build-Packs sind **gefährlich** (
 
 **Cross-Pack-Bündelung.** Alle Promotions für denselben Pack in einem Cooldown-Fenster = **ein PR mit mehreren Regeln**. Promotions über mehrere Packs (z.B. ein Spring-Boot-Anti-Pattern UND ein Maven-Anti-Pattern in derselben Woche) bleiben **getrennt** (ein PR pro Pack) — sonst wird der Diff unübersichtlich und der reviewer-Loop verhakt sich an gemischten Themen.
 
+### 9a. Sonar-Harvest — zweite Evidenz-Quelle (②)
+
+`retro` hat neben den projekt-lokalen Lessons (Modus A) eine zweite Quelle: **statische Analyse-Findings** (SonarCloud/SonarQube) eines oder aller adoptierten Repos. Aufruf `/retro --sonar [<repo>|all]`. Begründung: Built-in-Sonar-Rules decken Fehlerklassen auf, die der `coder` systematisch macht; diese in die Packs zu spiegeln senkt die Findings künftiger Repos von Anfang an (Prävention statt Nach-Sanierung).
+
+**Beziehung zu den zwei „Uhren".** Die *Analyse* (`sonar.yml`) läuft **pro Repo** kontinuierlich bei jedem Push/PR auf den Default-Branch (vom `new-project`/`adopt`-Scaffold gewired, sobald `profile.sonar.edition != none`; Voraussetzung Org-Secret `SONAR_TOKEN`). Der *Harvest* (dieser Abschnitt) läuft **fabrik-weit** mit eigener Kadenz: on-demand `/retro --sonar` und/oder periodischer `/schedule`-Sweep. Die beiden sind entkoppelt — die Analyse ist immer frisch, der Harvest erntet, wenn genug Signal da ist.
+
+**Maturity-Gate.** Repos ohne abgeschlossene Analyse oder mit < 20 Gesamt-Findings werden beim Harvest übersprungen (zu früh = Rauschen) — übersprungene Repos werden geloggt (kein stilles Verschlucken).
+
+**Triage (a/b/c).** Pro Top-Rule: (a) Pack-Lücke → neue Coder-Guidance-Regel bzw. Sektion-B-Regel; (b) Enforcement-Lücke → Reviewer-Checklist-/Test-Approach-Zeile; (c) Skip. Kanonische **Skip-Klassen**: Domänen-/Naming-Rules (S100/S101/S116/S117 — oft fachlich gerechtfertigt), Style-/Cleanliness-Nits (S125/S1481/S1854/S1170), Upgrade-Churn (S2293 u.ä., vergeht beim nächsten Upgrade), Einzel-Logik-Bugs (im Projekt fixen, nicht generalisieren).
+
+**G1-Sonar (ersetzt Schutzgitter #1 für diese Quelle).** Built-in-Rules sind bereits sprach-/framework-weit generalisiert (kein Projekt-Quirk), daher: **Mehr-Repo-Pfad** (Rule auf ≥2 Repo-Boards) ODER **Einzel-Repo-Pfad** (≥5× in 1 Repo + generische Built-in-Rule + User-getriggerter `/retro --sonar <repo>`). Schutzgitter #2 (Provenance: Repo + Rule-ID + count + Beleg-Issue-Keys), #3 (Cooldown, geteilte `.retro-last-run`) und #4 (Reviewer-Gate) gelten **unverändert**. Detail-Wiring: `agents/retro.md` → *Sonar-Harvest-Modus* (H1–H4).
+
 ---
 
 ## 10. Tester-Build-Dispatch
