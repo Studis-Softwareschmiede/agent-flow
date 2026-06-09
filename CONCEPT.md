@@ -59,6 +59,7 @@ vom Training-Agent gepflegten Sprach-Wissensdateien.
 - **tester** — der Abschluss nach Review-PASS: **Default „Build + Smoke"**, pro Projekt-Profil auf echte Test-Suite/E2E erweiterbar; eigenes Gate.
 - **retro** (Meta) — destilliert die gesammelten Lessons-learned in Verbesserungen der Agent-Skills. Schreibt als **PR**.
 - **train** (Meta) — recherchiert im Netz aktuelle Patterns/Best-Practices je Sprache, fließt in Skills/Sprach-Profile ein. Schreibt als **PR**.
+- **cicd** — ausführender Abschluss-Arm des Orchestrators ab tester-PASS: git-Landen (merge+push gemäss `merge_policy`), GitHub-Workflow beobachten (CI-Watch), lokaler Docker-Rollout (pull + recreate, NIEMALS restart), Disk-Hygiene (`docker image prune -f`, Pflichtschritt). Zusätzlich: Rollback, Build-Metadaten/Versionsstempel (zur Build-Zeit via Docker ARG/ENV), laufende CI-Pipeline-Pflege. Kein App-Code. Dispatcht via SHIP-TRIGGER direkt nach tester-PASS oder manuell via `/cicd ship`. Abgrenzung: `/preview` = ephemerer Dev-Preview; `/cicd ship` = vollständiger produktiver Abschluss (landen + CI + Rollout + Prune).
 - **teamLeader** (Meta, *später*) — gliedert einen NEUEN Agenten ins Team + den Workflow ein (Spec + Verdrahtung in Handoff-Kette/Skills), via **PR+Gate**. Selbst-Erweiterung der Fabrik; nicht P1.
 
 ### Kern-Loop (aus dem Brewing-Projekt übernommen, hier generisch)
@@ -90,7 +91,8 @@ Das GitHub-Board ist nicht nur Anzeige, sondern **Arbeits-Queue UND persistenter
 1. Nächstes „To Do" (höchste Priority, dessen Depends-on alle „Done") → **In Progress**. (keins → „Board leer".)
 2. LOOP (≤ 3 Iterationen): `coder → reviewer`. CHANGES-REQUIRED → Critical+Important zurück an coder → erneut; PASS → weiter. Schleifenschutz erschöpft → **Blocked** + Kommentar + Meldung an User.
 3. `tester` (interaktiv). FAIL → zurück an coder (zählt zum Schutz); PASS → weiter.
-4. Code landen gemäß `merge_policy` → Item **Done** (+ PR/Commit verlinkt) → nächstes Item.
+4. **`cicd ship`** (bei `profile.deploy == docker`): Orchestrator dispatcht `cicd` mit SHIP-TRIGGER → cicd landet den Code (merge+push gemäss `merge_policy`), beobachtet den CI-Lauf, führt lokalen Rollout + `docker image prune -f` durch. Rollout-Gate: PASS → Item **Done** (+ PR/Commit verlinkt); FAIL/NEEDS-HUMAN → **Blocked** + Kommentar → nächstes Item oder User-Rückfrage.
+   Bei `deploy != docker` oder explizit aufgeschobenem Rollout: Orchestrator landet selbst (bisheriges git-Verhalten); cicd wird separat manuell aufgerufen.
 
 **Handoff-Marker** (generalisiert aus Brewing):
 - coder → `Review-Handoff: REVIEW REQUIRED (#<n>, Iteration <N>)`
