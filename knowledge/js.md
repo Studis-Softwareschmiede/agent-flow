@@ -9,6 +9,7 @@ Expertise für JavaScript/Node. Geladen bei `profile.language: js`. Regel-IDs: `
 - `js/R04` — `url.parse()` ist in Node.js 24 **application-deprecated** (DEP0169, Stability 0) — warnt nur für eigenen Code, nicht für `node_modules` (siehe Sektion "Node Deprecation Taxonomy" für die vier Typen); stattdessen `new URL(input)` (WHATWG URL API) verwenden — seit Node.js 10+ verfügbar. Quelle: [Node.js Deprecations — DEP0169](https://nodejs.org/api/deprecations.html#dep0169-insecure-urlparse)
 - `js/R05` — Globales `fetch`, `Request`, `Response`, `Headers`, `FormData` und `WebStreams` sind seit Node.js 21 **stabil und ohne Flag** eingebaut; das Paket `node-fetch` ist für aktuelle LTS-Versionen (22+) nicht mehr nötig. Quelle: [Node.js 21 Release Announcement](https://nodejs.org/en/blog/announcements/v21-release-announce)
 - `js/R06` — `node:test` (built-in Test-Runner) ist seit Node.js 20 **stabil**; `node --test` läuft Dateien parallel, `describe`/`it`/`mock` sind ohne Extra-Abhängigkeiten verfügbar. Reporters und Coverage (`--experimental-test-coverage`) bleiben experimentell. Quelle: [Node.js 20 Release Announcement](https://nodejs.org/en/blog/announcements/v20-release-announce) · [node:test Docs](https://nodejs.org/api/test.html)
+- `js/R07` — **Jest in einem Repo mit parallelen git-Worktrees** (z.B. die agent-flow-Worktrees unter `.claude/worktrees/`): die jest-Config MUSS diese Pfade aus **beidem** ausschließen — der Test-Auswahl (`testPathIgnorePatterns`) **und** der Modul-/Haste-Map (`modulePathIgnorePatterns`), je mit `'/\\.claude/worktrees/'`. Sonst nimmt jest die `src/`-Duplikate der Worktrees als *duplicate haste modules* auf und der **geteilte Transform-Cache** transformiert dieselbe Datei mal als CJS, mal als ESM → `SyntaxError: Cannot use import statement outside a module` bzw. `Test suite failed to run` in einer Datei, die niemand geändert hat. `testPathIgnorePatterns` allein maskiert nur das Symptom im Lauf, die Haste-/Cache-Vergiftung bleibt. **Akut-Reparatur** eines bereits vergifteten Caches: `jest --clearCache`.
 
 ## Reviewer-Checklist
 - Unbehandelte async-Fehler / fehlender Timeout bei Fetch → **Important**.
@@ -16,10 +17,12 @@ Expertise für JavaScript/Node. Geladen bei `profile.language: js`. Regel-IDs: `
 - String-Interpolation in DB-Queries → **Critical** (siehe `sql`-Pack).
 - `url.parse()` verwendet (application-deprecated seit Node.js 24, DEP0169 — warnt nur für eigenen Code, nicht `node_modules`) → **Important**: auf `new URL()` migrieren.
 - `node-fetch` als Abhängigkeit auf Node.js 21+ → **Important**: eingebautes `fetch` bevorzugen.
+- jest-Repo, das parallele git-Worktrees nutzt, aber `.claude/worktrees/` NICHT aus `testPathIgnorePatterns` **und** `modulePathIgnorePatterns` ausschließt (`js/R07`) → **Important**: fremde Worktree-Modulkopien vergiften Haste-Map und Transform-Cache.
 
 ## Test-Approach
 - Lint; Build; Node-Smoke / Unit-Tests.
 - Ab Node.js 20: `node:test` als zero-dependency Alternative zu Jest/Mocha prüfen (`node --test **/*.test.js`).
+- **`Test suite failed to run` / `Cannot use import statement outside a module` / `duplicate haste module` in einer Datei, die der aktuelle Diff NICHT geändert hat = fast immer Umgebungs-/Cache-Artefakt, KEIN Code-FAIL.** Zuerst `jest --clearCache` + erneut laufen (häufigste Wurzel: Worktree-Interferenz, `js/R07`), bevor ein FAIL gemeldet wird. Bleibt es nach sauberem Cache rot → echter Defekt.
 
 ## Node Deprecation Taxonomy
 
