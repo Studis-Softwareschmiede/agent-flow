@@ -26,6 +26,8 @@ durch zwei Meta-Agenten (Retro + Training) besser — versioniert, geprüft, pro
 **Kostenfolge:** laufender Betrieb vom Abo gedeckt; keine separate API-Rechnung. (Wer später unattended
 über die API automatisieren will, verlässt dieses Modell bewusst.)
 
+**Cost-Mode (Token-Hebel).** Das Abo ist zwar pro-Token-kostenfrei, hat aber **Nutzungs-Limits** (5h-/Wochen-Fenster). Damit ein Lauf zwischen *sparsam* und *maximaler Qualität* wählbar ist, steuert ein **Cost-Mode** (`low-cost | balanced | max-quality`) pro Lauf, **mit welchem Modell jeder Agent dispatcht** wird — ein günstigeres Modell für Wegwerf-Prototypen, das teuerste für kritische Reviews/Tests/Retros. `balanced` ist der Default und entspricht dem bisherigen Zustand (das `model:`-Frontmatter jedes Agenten) — **kein Regress**. Auflösung: `--cost`-Argument > `profile.cost_mode` > `balanced`. Die Rolle×Modus-Matrix + Mechanik sind eine eigene Quer-Achse: `docs/architecture/model-tier-subsystem.md` (Referenz-Tabelle: `knowledge/model-tiers.md`).
+
 ## 3. Eine Ebene, kein Cloud-Plane
 
 ```
