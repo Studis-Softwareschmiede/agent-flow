@@ -22,7 +22,8 @@
   security-reviewer (Pack-Prinzip). Floor ≠ Gold-Plating (`coder/R01`): Hygiene ist Pflicht, fügt aber
   keine user-sichtbaren Features hinzu.
 - **Per-Projekt-Zustand** (im Projekt-Repo, nicht in der Fabrik): `CLAUDE.md`, `.claude/profile.md`
-  (Sprache, Build/Test/Lint/Smoke, `merge_policy: pr|direct`, Board-Ref), `.claude/lessons/*`, das Board.
+  (Sprache, Build/Test/Lint/Smoke, `merge_policy: pr|direct`, `cost_mode: low-cost|balanced|max-quality`, Board-Ref), `.claude/lessons/*`, das Board.
+- **Modell-Wahl je Agent (Cost-Mode, Token-Hebel):** das `model:`-**Frontmatter** jedes Agenten ist der **`balanced`-Default**, NICHT eine fixe Zuordnung. Der aktive Cost-Mode (`--cost`-Argument > `profile.cost_mode` > `balanced`) überschreibt es zur Laufzeit per `model`-Override beim Task-Dispatch — `balanced` setzt keinen Override (Frontmatter gilt). Die bindende Rolle×Modus-Matrix + Auflösungs-/Override-Mechanik: `docs/architecture/model-tier-subsystem.md` (Referenz-Tabelle `knowledge/model-tiers.md`). Beim Justieren der Modelle die Matrix pflegen, nicht das Frontmatter.
 - **Spec-getriebene Doku (CONCEPT §4d):** durable, sprach-neutrale Source of Truth unter `docs/` —
   `concept.md` → `architecture.md`/`data-model.md`/`design.md` (Detailkonzept) → `specs/<feature>.md`
   (testbare Acceptance-Kriterien AC1…). `requirement` schreibt sie, `coder`/`reviewer`/`tester` konsumieren
