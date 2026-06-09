@@ -59,6 +59,7 @@ vom Training-Agent gepflegten Sprach-Wissensdateien.
 - **tester** — der Abschluss nach Review-PASS: **Default „Build + Smoke"**, pro Projekt-Profil auf echte Test-Suite/E2E erweiterbar; eigenes Gate.
 - **retro** (Meta) — destilliert die gesammelten Lessons-learned in Verbesserungen der Agent-Skills. Schreibt als **PR**.
 - **train** (Meta) — recherchiert im Netz aktuelle Patterns/Best-Practices je Sprache, fließt in Skills/Sprach-Profile ein. Schreibt als **PR**.
+- **cicd** — besitzt produktiven Rollout/Release (pull + recreate, Rollback, Versions-Verifikation), Build-Metadaten/Versionsstempel (zur Build-Zeit via Docker ARG/ENV ins Image), laufende CI-Pipeline-Pflege (build.yml diagnostizieren/härten, Secret-Scan-Gate). Kein App-Code. Dispatcht nach tester-PASS + Landen + CI-grün oder manuell via `/cicd`. Abgrenzung: `/preview` = ephemerer Dev-Preview; `/cicd rollout` = produktiver Rollout.
 - **teamLeader** (Meta, *später*) — gliedert einen NEUEN Agenten ins Team + den Workflow ein (Spec + Verdrahtung in Handoff-Kette/Skills), via **PR+Gate**. Selbst-Erweiterung der Fabrik; nicht P1.
 
 ### Kern-Loop (aus dem Brewing-Projekt übernommen, hier generisch)

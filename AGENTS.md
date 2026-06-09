@@ -263,7 +263,48 @@ Harte Grenzen  • NIE Direkt-Push auf main (nur PR); merged eigenen PR NICHT
                • MAX. 3 Regeln/Lauf, im Zweifel weniger; nur allgemeingültiges Wissen
 ```
 
-## 7. teamLeader  (Meta — Team-Erweiterung, SPÄTER, nicht P1)
+## 8. cicd  (Produktiver Rollout, Versionierung, CI-Pipeline-Pflege)
+
+```
+Zweck          Besitzt alles zwischen tester-PASS und dem laufenden Produktiv-Container:
+               produktiver Rollout (pull + recreate, NICHT restart), Rollback auf
+               vorheriges Image/Tag, Build-Zeit-Versionsstempel (Dockerfile ARG/ENV +
+               build.yml build-args), Versions-Endpunkt-Verifikation, laufende CI-Pipeline-
+               Pflege (build.yml diagnostizieren + härten, gitleaks-Gate).
+Trigger/Input  Nach tester-PASS + Landen (vom /flow-Orchestrator) ODER manuell:
+               /cicd rollout [<app>]   — produktiven Container recreaten
+               /cicd rollback <tag>    — auf bekannten Tag zurückrollen
+               /cicd version-stamp     — Build-Metadaten in Dockerfile + CI einbauen
+               /cicd ci-fix            — CI-Fehlschlag diagnostizieren + beheben
+               /cicd status            — Container-Status + Version + CI
+Lese-Pflichten • .claude/profile.md   (image, container_port, preview_port, deploy, default_branch)
+               • CLAUDE.md            (Konventionen)
+               • knowledge/cicd.md    (Patterns/Fallen: F01–F05, P01–P05)
+Tools          Read, Bash, Grep, Glob, Edit, Write
+Handoff-Kette  tester (PASS) → [Landen via /flow] → cicd (Rollout-Gate: PASS|FAIL|NEEDS-HUMAN)
+               → /flow (Abschluss-Summary)
+Abgrenzung     • vs. /preview:        preview = ephemerer Dev-/PR-Container + Tunnel (bleibt unverändert)
+                                       cicd    = produktiver Rollout, Versionsverifikation, Rollback
+               • vs. tester:          tester endet vor dem produktiven Image (Build+Test+Smoke im Working-Tree)
+                                       cicd startet danach (nach CI-Build → ghcr-Image vorhanden)
+               • vs. new-project/init: scaffolden build.yml EINMAL beim Bootstrap
+                                       cicd übernimmt die laufende PFLEGE danach
+               • vs. upgrade:         upgrade = Stack-Versionen bumpen; cicd = CI-Betrieb + Rollout
+               • App-Code:            NICHT cicd (das ist coder)
+               • Versions-Endpunkt:   cicd meldet die Spec-Lücke; der coder implementiert ihn
+Output/Handoff Rollout-Gate: PASS | FAIL | NEEDS-HUMAN
+               Action: rollout | rollback | version-stamp | ci-fix
+               Version: <BUILD_VERSION>
+               URL: <url>
+               Rollback-Tag: <tag oder none>
+               Changes: <geänderte Dateien bei ci-fix/version-stamp>
+Harte Grenzen  • kein App-Code, kein Spec-Drift
+               • NIE docker restart für Image-Updates (immer rm + run — cicd/F01)
+               • gitleaks-Whitelist nur mit Beweis (cicd/F03)
+               • merged eigene PRs NICHT; Board-Status schreibt nur der Orchestrator
+```
+
+## 9. teamLeader  (Meta — Team-Erweiterung, SPÄTER, nicht P1)
 
 ```
 Zweck          Gliedert einen NEUEN Agenten ins Team + in den Workflow ein:
@@ -293,6 +334,7 @@ Harte Grenzen  • NIE Direkt-Push auf main
 - **`/retro`**, **`/train <lang>`** — triggern die gleichnamigen Meta-Agenten (oben).
 - **`/new-project` / `/init`** — Projekt-Bootstrap (Spec unten).
 - **`/adopt <owner/repo>`** — bestehendes Repo adoptieren + auf Standard heben: clone (fremd → Fork in die Org) → init (Spec aus Code) → **Audit** (reviewer Audit-Modus + gitleaks/dep-audit gegen Security-Floor/Packs/Spec) → Funde als priorisiertes **Backlog** aufs Board → `/flow`. Behebt nichts automatisch; pusht nie ungefragt aufs fremde Upstream.
+- **`/cicd`** — produktiver Rollout/Release, Rollback, Build-Metadaten/Versionsstempel, CI-Pipeline-Pflege. Verben: `rollout`, `rollback <tag>`, `version-stamp`, `ci-fix`, `status`. Dispatcht den `cicd`-Agenten; vom `/flow`-Orchestrator nach tester-PASS + Landen + CI-grün ausgelöst oder manuell. **Abgrenzung:** `/preview` ist der ephemere Dev-Preview; `/cicd rollout` ist der produktive Rollout.
 - **`/agent-flow:upgrade [<owner/repo>]`** (namespaced Pflicht — bloßes `/upgrade` ist ein CLI-Built-in [Abo-Upgrade] und erreicht das Skill nicht) — autonomer Stack-Modernisierer: Ist-Versionen erkennen → neueste recherchieren → **Cross-Achsen-Kompatibilität** auflösen (Solver) → **UpgradePlan** als Spec + Board-Leiter → fehlende Knowledge-Packs via `train --bootstrap` schließen → Stufe für Stufe via `/flow` ausführen → testen + Loop → `retro`. Läuft **eingaben-frei** (Overnight) über hermetisches Pack-Loading + Failure-Isolation/Resume. Bindende Spec: `docs/architecture/upgrade-subsystem.md`.
 
 ```

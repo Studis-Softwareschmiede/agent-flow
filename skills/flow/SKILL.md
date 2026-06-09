@@ -85,11 +85,22 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 ## 6. Nächstes
 - Zurück zu 1, bis das Board leer ist oder der User stoppt.
 
-## 7. Abschluss-Deploy (Preview) — wenn das Board leer ist
+## 7. Abschluss-Deploy — wenn das Board leer ist
 Nur wenn diesem Lauf mindestens ein Item gelandet ist **und** `profile.deploy == docker`:
 1. **Auf CI warten:** der letzte Merge triggert `build.yml` (Image → ghcr). `gh run watch "$(gh run list --repo <repo> --branch "$default_branch" --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status` (best-effort, kurzes Timeout).
-2. **Preview hochfahren:** die `up`-Logik aus dem **`preview`-Skill** ausführen (`docker pull "${image}:latest"` → `docker run … -p <preview_port>:<container_port>` → Smoke; zsh: Image-Ref immer mit `${…}`) → **Test-URL** melden (`local`: `http://localhost:<port>` · `vps`: `https://<app>.<domain>`).
-3. **Best-effort:** CI rot/Timeout oder Pull `denied` → melden + überspringen, den Flow NICHT scheitern lassen (Hinweis auf `/preview up`).
+2. **Rollout-Entscheidung:**
+   - **Produktiver Rollout gewünscht** (VPS oder explizit User-bestätigt): **`cicd`-Agent** (Task) dispatchen:
+     ```
+     ROLLOUT-TRIGGER: Board leer, CI grün — bitte produktiv ausrollen
+     IMAGE: <profile.image>:latest
+     ```
+     Lies `Rollout-Gate`:
+     - `PASS` → **Test-URL** aus cicd-Output melden.
+     - `FAIL` → melden + überspringen (Hinweis auf `/cicd rollout`), Flow NICHT scheitern lassen.
+     - `NEEDS-HUMAN` → melden, User vorlegen.
+   - **Dev-Preview** (Mac-Entwicklungsloop, kein Produktiv-Rollout gewünscht): die `up`-Logik aus dem **`preview`-Skill** ausführen (`docker pull "${image}:latest"` → `docker run … -p <preview_port>:<container_port>` → Smoke; zsh: Image-Ref immer mit `${…}`) → **Test-URL** melden (`local`: `http://localhost:<port>`).
+   - **Faustregel:** `DEPLOY_ROLE=vps` → cicd dispatchen; `local` ohne expliziten Rollout-Wunsch → preview-Skill.
+3. **Best-effort:** CI rot/Timeout oder Pull `denied` → melden + überspringen, den Flow NICHT scheitern lassen (Hinweis auf `/cicd rollout` bzw. `/preview up`).
 
 Dann stoppen mit Zusammenfassung (gelandete Items + Test-URL).
 
