@@ -112,6 +112,29 @@ Beim Rollout den `sha-`-Tag in einem Label speichern → für Rollback verfügba
 
 ---
 
+### cicd/F06 — Rollout ohne CI-Watch (KRITISCH)
+**Problem:** Image wird lokal gepullt und Container neu gestartet, bevor der GitHub-Actions-Build abgeschlossen ist. Ergebnis: `docker pull` liefert das alte `latest`-Image (der neue Build hat es noch nicht überschrieben).
+
+**Symptom:** Betreiber sieht nach dem Rollout noch die alte Version, obwohl der Push schon stattgefunden hat.
+
+**Korrekte Mechanik:** Erst `gh run watch <run-id> --exit-status` abwarten (Abschnitt A2 in `agents/cicd.md`). Dann `docker pull`.
+
+---
+
+### cicd/F07 — `docker image prune` vergessen (WICHTIG)
+**Problem:** Nach jedem Rollout bleiben das alte `latest`-Image und dangling Layers auf dem Host liegen. Bei regelmässigem Betrieb füllt sich die Disk.
+
+**Symptom:** `docker images` zeigt viele `<none>`-Zeilen oder mehrere versionierte Images. `df -h` zeigt Disk-Druck.
+
+**Korrekte Mechanik (nach jedem Rollout/Rollback, Pflicht):**
+```bash
+docker image prune -f
+```
+
+`-f` überspringt die Bestätigungs-Abfrage. Bereinigt dangling Images (kein `--all` — das würde auch Images entfernen, die von Containern noch referenziert werden).
+
+---
+
 ## Patterns / Best-Practices (P-Regeln)
 
 ### cicd/P01 — Rollout-Verifikation via Versions-Endpunkt
@@ -175,13 +198,47 @@ docker compose ps                           # Status verifizieren
 
 ---
 
+### cicd/P06 — Kanonische ship-Sequenz (merge → push → CI-Watch → Rollout → Prune)
+
+Die vollständige Abschluss-Sequenz nach `tester`-PASS (Abschnitt A in `agents/cicd.md`):
+
+```
+1. git merge + push  (gemäss merge_policy: direct oder PR)
+2. gh run watch <run-id> --exit-status  →  nur bei Grün weiter
+3. docker pull "${image}:latest"
+4. docker rm -f "$app" && docker run -d --name "$app" … "${image}:latest"
+5. docker image prune -f                ← Pflicht, nicht auslassbar
+```
+
+Jede Abweichung von dieser Reihenfolge ist ein Fehler:
+- Schritt 2 überspringen → `F06` (Rollout auf altem Image)
+- Schritt 5 überspringen → `F07` (Disk-Drift)
+- `docker restart` statt Schritt 4 → `F01` (Image-Update ausbleibend)
+
+---
+
+### cicd/P07 — CI-Watch-Befehl (Standard)
+
+```bash
+run_id=$(gh run list --repo "$repo" --branch "$default_branch" --limit 1 \
+  --json databaseId --jq '.[0].databaseId')
+gh run watch "$run_id" --repo "$repo" --exit-status
+```
+
+`--exit-status` gibt Exit-Code != 0 bei Fehlschlag — damit lässt sich der Rollout sauber abbrechen. Alternative: `gh run watch --interval 10` für explizites Polling-Intervall.
+
+---
+
 ## Reviewer-Checklist (für den `reviewer`-Agenten)
 - CI-Workflow-Änderungen (`build.yml`): `permissions: packages: write` vorhanden? Secret-Scan vor Build-Step? (`cicd/P03`, `cicd/F04`)
 - Dockerfile-Änderungen: `ARG BUILD_VERSION` + `ENV BUILD_VERSION` + `LABEL build.version` vorhanden? (`cicd/F02`)
 - Rollout-Skripte/-Doku: `docker restart` statt `rm + run`? → **Important** (`cicd/F01`)
+- Rollout-Skripte/-Doku: `docker image prune -f` vorhanden? Fehlt → **Important** (`cicd/F07`)
+- Rollout-Skripte/-Doku: CI-Watch vor `docker pull`? Fehlt → **Important** (`cicd/F06`)
 - gitleaks-Allowlist-Änderungen: jeder neue Entry mit Begründung + bewiesener Nicht-Secret-Nachweis? (`cicd/F03`)
 
 ## Test-Approach (für den `tester`-Agenten)
 - Nach einem Rollout: Smoke `curl -fsS http://localhost:<port>/` → HTTP 200.
 - Versions-Stempel-Check: `docker inspect --format '{{index .Config.Labels "build.version"}}' <image>:latest` → nicht leer, nicht `dev`.
 - CI-Pipeline nach dem Fix: `gh run list --limit 1 --json conclusion` → `success`.
+- Prune-Check: `docker images --filter dangling=true` → nach `prune -f` sollte die Liste leer sein.

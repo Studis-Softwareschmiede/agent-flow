@@ -7,8 +7,8 @@
 
 ## Gemeinsamer Kontext (gilt für alle)
 
-- **Loop & Handoff-Vertrag** (CONCEPT §4b): `coder → reviewer ⇄ Loop (bis PASS) → tester`.
-  Orchestrator = `/flow` (interaktive Haupt-Session) — **einziger Schreiber** von Board-Status **und** git/PR.
+- **Loop & Handoff-Vertrag** (CONCEPT §4b): `coder → reviewer ⇄ Loop (bis PASS) → tester → cicd (ship)`.
+  Orchestrator = `/flow` (interaktive Haupt-Session) — **einziger Schreiber** von Board-Status. Git/PR-Abschluss-Operationen delegiert `/flow` an `cicd` als ausführenden Abschluss-Arm (Beauftragung via SHIP-TRIGGER); die konzeptuelle Hoheit über den Flow-Ablauf und die Board-Übergänge bleibt beim Orchestrator.
   (`/upgrade` erweitert das additiv: initialer Plan-Commit + Item-Anlage + Profil-Rückschreib am Lauf-Ende —
   `docs/architecture/upgrade-subsystem.md` §3/§7; Item-Status-Übergänge bleiben `/flow`-Hoheit.)
 - **Knowledge Packs:** `coder`/`reviewer`/`tester` laden zur Laufzeit `knowledge/<profile.language>.md`
@@ -263,45 +263,57 @@ Harte Grenzen  • NIE Direkt-Push auf main (nur PR); merged eigenen PR NICHT
                • MAX. 3 Regeln/Lauf, im Zweifel weniger; nur allgemeingültiges Wissen
 ```
 
-## 8. cicd  (Produktiver Rollout, Versionierung, CI-Pipeline-Pflege)
+## 8. cicd  (Abschluss-Arm: Landen, CI-Watch, Rollout, Disk-Hygiene; Versionierung, CI-Pflege)
 
 ```
-Zweck          Besitzt alles zwischen tester-PASS und dem laufenden Produktiv-Container:
-               produktiver Rollout (pull + recreate, NICHT restart), Rollback auf
-               vorheriges Image/Tag, Build-Zeit-Versionsstempel (Dockerfile ARG/ENV +
-               build.yml build-args), Versions-Endpunkt-Verifikation, laufende CI-Pipeline-
-               Pflege (build.yml diagnostizieren + härten, gitleaks-Gate).
-Trigger/Input  Nach tester-PASS + Landen (vom /flow-Orchestrator) ODER manuell:
-               /cicd rollout [<app>]   — produktiven Container recreaten
+Zweck          Ausführender Abschluss-Arm des /flow-Orchestrators ab tester-PASS:
+               (1) git-Landen (merge + push gemäss merge_policy, im Auftrag von /flow),
+               (2) GitHub-Workflow beobachten (gh run watch, CI-Watch-Gate),
+               (3) lokaler Docker-Rollout (pull + recreate, NIEMALS restart),
+               (4) Disk-Hygiene (docker image prune -f, Pflichtschritt).
+               Zusätzlich: Rollback auf vorheriges Image/Tag, Build-Zeit-Versionsstempel
+               (Dockerfile ARG/ENV + build.yml build-args), Versions-Endpunkt-Verifikation,
+               laufende CI-Pipeline-Pflege (build.yml diagnostizieren + härten, gitleaks-Gate).
+Trigger/Input  Nach tester-PASS (vom /flow-Orchestrator, SHIP-TRIGGER) ODER manuell:
+               /cicd ship              — kanonische Abschluss-Sequenz (merge+push+CI-Watch+Rollout+Prune)
+               /cicd rollout [<app>]   — nur Rollout (Code bereits gelandet)
                /cicd rollback <tag>    — auf bekannten Tag zurückrollen
                /cicd version-stamp     — Build-Metadaten in Dockerfile + CI einbauen
                /cicd ci-fix            — CI-Fehlschlag diagnostizieren + beheben
                /cicd status            — Container-Status + Version + CI
-Lese-Pflichten • .claude/profile.md   (image, container_port, preview_port, deploy, default_branch)
+Lese-Pflichten • .claude/profile.md   (image, container_port, preview_port, deploy, default_branch, merge_policy)
                • CLAUDE.md            (Konventionen)
-               • knowledge/cicd.md    (Patterns/Fallen: F01–F05, P01–P05)
+               • knowledge/cicd.md    (Patterns/Fallen: F01–F07, P01–P07)
 Tools          Read, Bash, Grep, Glob, Edit, Write
-Handoff-Kette  tester (PASS) → [Landen via /flow] → cicd (Rollout-Gate: PASS|FAIL|NEEDS-HUMAN)
-               → /flow (Abschluss-Summary)
+Handoff-Kette  tester (PASS) → cicd-ship (merge+push → CI-Watch → Rollout → Prune)
+                               → Rollout-Gate: PASS|FAIL|NEEDS-HUMAN + Version + Prune
+               → /flow (Abschluss-Summary + Board-Done)
+               Eintritt: nach tester-PASS (Vorbedingung erfüllt — cicd vertraut tester-Gate)
+               Austritt: Rollout-Gate + Version + Prune-Ergebnis
 Abgrenzung     • vs. /preview:        preview = ephemerer Dev-/PR-Container + Tunnel (bleibt unverändert)
-                                       cicd    = produktiver Rollout, Versionsverifikation, Rollback
+                                       cicd    = git-Landen + CI-Watch + produktiver Rollout + Prune
                • vs. tester:          tester endet vor dem produktiven Image (Build+Test+Smoke im Working-Tree)
-                                       cicd startet danach (nach CI-Build → ghcr-Image vorhanden)
+                                       cicd startet danach und vertraut dem tester-Gate
                • vs. new-project/init: scaffolden build.yml EINMAL beim Bootstrap
                                        cicd übernimmt die laufende PFLEGE danach
                • vs. upgrade:         upgrade = Stack-Versionen bumpen; cicd = CI-Betrieb + Rollout
                • App-Code:            NICHT cicd (das ist coder)
                • Versions-Endpunkt:   cicd meldet die Spec-Lücke; der coder implementiert ihn
 Output/Handoff Rollout-Gate: PASS | FAIL | NEEDS-HUMAN
-               Action: rollout | rollback | version-stamp | ci-fix
+               Action: ship | rollout | rollback | version-stamp | ci-fix
                Version: <BUILD_VERSION>
                URL: <url>
                Rollback-Tag: <tag oder none>
+               Prune: <Ergebnis docker image prune -f>
                Changes: <geänderte Dateien bei ci-fix/version-stamp>
 Harte Grenzen  • kein App-Code, kein Spec-Drift
                • NIE docker restart für Image-Updates (immer rm + run — cicd/F01)
+               • docker image prune -f IMMER nach Rollout/Rollback (cicd/F07)
+               • CI-Watch vor Rollout — niemals Rollout bei rotem CI (cicd/F06)
                • gitleaks-Whitelist nur mit Beweis (cicd/F03)
-               • merged eigene PRs NICHT; Board-Status schreibt nur der Orchestrator
+               • merged eigene PRs NICHT (bei pr-Policy: PR erstellen, User mergt)
+               • Board-Status schreibt nur der Orchestrator
+               • vertraut dem tester-Gate — kein eigener Re-Test
 ```
 
 ## 9. teamLeader  (Meta — Team-Erweiterung, SPÄTER, nicht P1)
@@ -334,7 +346,7 @@ Harte Grenzen  • NIE Direkt-Push auf main
 - **`/retro`**, **`/train <lang>`** — triggern die gleichnamigen Meta-Agenten (oben).
 - **`/new-project` / `/init`** — Projekt-Bootstrap (Spec unten).
 - **`/adopt <owner/repo>`** — bestehendes Repo adoptieren + auf Standard heben: clone (fremd → Fork in die Org) → init (Spec aus Code) → **Audit** (reviewer Audit-Modus + gitleaks/dep-audit gegen Security-Floor/Packs/Spec) → Funde als priorisiertes **Backlog** aufs Board → `/flow`. Behebt nichts automatisch; pusht nie ungefragt aufs fremde Upstream.
-- **`/cicd`** — produktiver Rollout/Release, Rollback, Build-Metadaten/Versionsstempel, CI-Pipeline-Pflege. Verben: `rollout`, `rollback <tag>`, `version-stamp`, `ci-fix`, `status`. Dispatcht den `cicd`-Agenten; vom `/flow`-Orchestrator nach tester-PASS + Landen + CI-grün ausgelöst oder manuell. **Abgrenzung:** `/preview` ist der ephemere Dev-Preview; `/cicd rollout` ist der produktive Rollout.
+- **`/cicd`** — Abschluss-Arm nach tester-PASS: git-Landen (merge+push), CI-Watch, lokaler Docker-Rollout, Disk-Hygiene (`docker image prune -f`). Verben: `ship` (kanonischer Modus), `rollout`, `rollback <tag>`, `version-stamp`, `ci-fix`, `status`. Dispatcht den `cicd`-Agenten; vom `/flow`-Orchestrator direkt nach tester-PASS ausgelöst (via SHIP-TRIGGER) oder manuell. **Abgrenzung:** `/preview` ist der ephemere Dev-Preview; `/cicd ship` ist der vollständige produktive Abschluss.
 - **`/agent-flow:upgrade [<owner/repo>]`** (namespaced Pflicht — bloßes `/upgrade` ist ein CLI-Built-in [Abo-Upgrade] und erreicht das Skill nicht) — autonomer Stack-Modernisierer: Ist-Versionen erkennen → neueste recherchieren → **Cross-Achsen-Kompatibilität** auflösen (Solver) → **UpgradePlan** als Spec + Board-Leiter → fehlende Knowledge-Packs via `train --bootstrap` schließen → Stufe für Stufe via `/flow` ausführen → testen + Loop → `retro`. Läuft **eingaben-frei** (Overnight) über hermetisches Pack-Loading + Failure-Isolation/Resume. Bindende Spec: `docs/architecture/upgrade-subsystem.md`.
 
 ```
