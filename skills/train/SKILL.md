@@ -3,7 +3,9 @@ name: train
 description: Startet den train-Agenten — recherchiert im Netz aktuelle Patterns für eine Sprache, ein Framework oder ein Build-Tool und öffnet einen PR, der den entsprechenden Pack aktualisiert (mit Quellen, PR+Gate). Aufruf: /train <pack-id>.
 ---
 
-# /train <pack-id>
+# /train [--cost <mode>] <pack-id>
+
+**Cost-Mode auflösen:** Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced` (Kurzformen `low`/`max` normalisieren). Beim Task-Dispatch den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Rolle `train`) mitgeben; bei `balanced` **keinen** Override (Frontmatter `sonnet` gilt). Das `--cost`-Token gehört NICHT zur pack-id — vor dem Resolver entfernen.
 
 Starte den **train**-Agenten (Task-Tool) für eine **Sprache**, ein **Framework** oder ein **Build-Tool**. Pack-ID-Resolver (analog `docs/architecture/framework-build-subsystem.md` §8):
 

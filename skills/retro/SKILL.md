@@ -3,7 +3,9 @@ name: retro
 description: Startet den retro-Agenten — destilliert projekt-lokale Lessons (Tier 1) ODER Sonar-Findings (--sonar) in Verbesserungen der globalen Knowledge Packs / Skills und öffnet dafür einen PR (PR+Gate). Im Projekt-Repo ausführen. Aufruf: /retro [--force] | /retro --sonar [<repo>|all].
 ---
 
-# /retro [--force] | /retro --sonar [<repo>|all]
+# /retro [--cost <mode>] [--force] | /retro [--cost <mode>] --sonar [<repo>|all]
+
+**Cost-Mode auflösen:** Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced` (Kurzformen `low`/`max` normalisieren). Beim Task-Dispatch den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Rolle `retro`) mitgeben; bei `balanced` **keinen** Override (Frontmatter `opus` gilt). Das `--cost`-Token NICHT als `--force`/`--sonar`-Argument fehldeuten — vorher herausparsen.
 
 Starte den **retro**-Agenten (Task-Tool). Zwei Evidenz-Quellen:
 
