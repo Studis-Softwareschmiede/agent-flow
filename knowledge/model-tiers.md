@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** never — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-06-10 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -77,3 +77,31 @@ model = (cost_mode == "balanced") ? <kein Override>  // Frontmatter gilt
   Wegwerf-/Explorations-Läufe gedacht.
 - **Matrix justieren:** Diese Tabelle ist der **einzige** Ort der Wahrheit. Frontmatter der Agenten
   NICHT ändern (es ist der `balanced`-Default). Modi/Rollen hier pflegen.
+
+## Beobachtete neue Modell-Klasse: `fable` (V3a-Trigger, Kurator-Lauf 2026-06-10)
+
+**Befund (autoritativ verifiziert, Models overview + Pricing — primary_sources):**
+Claude Fable 5 (`claude-fable-5`) ist seit 9. Juni 2026 GA auf Claude API, Bedrock, Vertex AI und
+Microsoft Foundry. Die offizielle Beschreibung laut Models overview:
+
+> "Claude Fable 5 (`claude-fable-5`) is Anthropic's most capable widely released model."
+
+Preislich liegt `fable` **über** dem opus-Tier: $10/$50 MTok (Input/Output) vs. opus $5/$25 MTok.
+Kein Extended Thinking; Adaptive Thinking "always on" (laut Tabelle: `fable`: Extended Thinking =
+No, Adaptive Thinking = Yes — identisch zu Claude Mythos 5). Quellen:
+- Models overview: https://platform.claude.com/docs/en/about-claude/models/overview
+- Pricing: https://platform.claude.com/docs/en/about-claude/pricing
+
+**Warum die Matrix UNVERÄNDERT bleibt (Scope-Cut, Designentscheidung):**
+`fable` passt nicht in die bestehenden drei Spalten (`low-cost`/`balanced`/`max-quality`), weil die
+Modus-Enum heute nur `haiku | sonnet | opus` als Modell-Werte kennt (Override-Mechanik §5,
+`model-tier-subsystem.md`). `fable` als eigene Klasse einzuführen erfordert eine
+**Subsystem-Erweiterung** (dev-gui COST_MODES-Enum + agent-flow model-tier-subsystem.md +
+Override-Mechanik). Das ist nicht Kurator-Scope.
+
+**Empfehlung (offen, für Folge-Requirement):**
+Eigenen opt-in-Modus `frontier` (fable, künftig ggf. mythos) als Subsystem-Erweiterung über beide
+Repos (dev-gui + agent-flow) einführen — getrennt von `max-quality` (bleibt opus, bewährt). Offen
+zu verifizieren: ob agent-flow-Subagenten `fable` als model-Override akzeptieren (Task-Tool
+`model`-Parameter). Die Erweiterung ist eine getrennte requirement-Aufgabe und liegt ausserhalb
+dieses Kurator-Laufs.
