@@ -1,5 +1,14 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
+> **last_curated:** never — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+>
+> **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
+> - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
+> - *Model deprecations / Lifecycle* — https://platform.claude.com/docs/en/about-claude/model-deprecations
+> - *Pricing* (**nur informativ** für die relative Tier-Einordnung, nie Dollar-Zielwert — ADR-001: Abo, keine API-Kosten) — https://platform.claude.com/docs/en/about-claude/pricing
+>
+> **non_sources:** Blogs, Foren, Drittanbieter-Tabellen, Social-Media — nie als Beleg zitieren.
+
 > **Zweck.** Ein **Schalter** (`cost_mode`) steuert, mit welchem Modell jeder Agent dispatcht wird —
 > token-schonend für Prototypen, voll aufgedreht für kritische Reviews/Tests/Retros. Die Skills
 > (`/flow`, `/requirement`, `/retro`, `/train`) lesen diese Matrix und geben beim **Task-Dispatch**
