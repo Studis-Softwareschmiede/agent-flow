@@ -5,7 +5,7 @@ description: Startet den retro-Agenten — destilliert projekt-lokale Lessons (T
 
 # /retro [--cost <mode>] [--force] | /retro [--cost <mode>] --sonar [<repo>|all]
 
-**Cost-Mode auflösen:** Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced` (Kurzformen `low`/`max` normalisieren). Beim Task-Dispatch den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Rolle `retro`) mitgeben; bei `balanced` **keinen** Override (Frontmatter `opus` gilt). Das `--cost`-Token NICHT als `--force`/`--sonar`-Argument fehldeuten — vorher herausparsen.
+**Cost-Mode auflösen:** Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced` (Kurzformen `low`/`max`/`front` normalisieren; `front`→`frontier`). Beim Task-Dispatch den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Rolle `retro`) mitgeben; bei `balanced` **keinen** Override (Frontmatter `opus` gilt). Das `--cost`-Token NICHT als `--force`/`--sonar`-Argument fehldeuten — vorher herausparsen.
 
 Starte den **retro**-Agenten (Task-Tool). Zwei Evidenz-Quellen:
 
