@@ -1,7 +1,7 @@
 ---
 id: frontier-cost-mode
 title: Vierter Cost-Modus `frontier` (opt-in, Modell-Klasse fable)
-status: draft
+status: approved
 version: 1
 ---
 
@@ -56,10 +56,7 @@ Die `frontier`-Spalte der Matrix wird **aus der `max-quality`-Spalte abgeleitet*
 
 Diese Einordnung wahrt **I2** (`max-quality ≤ frontier`): jede Rolle ist in `frontier` ≥ ihrem `max-quality`-Wert.
 
-> **OFFENE ENTSCHEIDUNG (D1) — vor Merge zu bestätigen.** Variante (b) ist hier als Default eingetragen (Empfehlung: kontingent-schonend + `fable` ohne Extended Thinking ⇒ nicht pauschal über Opus). Alternativen, falls der User umschaltet:
-> - **(a) opus→fable überall:** alle elf `opus`-Slots der `max-quality`-Spalte → `fable`; cicd bleibt `sonnet`. Einfachste 1:1-Regel.
-> - **(c) fable überall:** alle Rollen inkl. `tester` und `cicd` → `fable`. Maximaler/teuerster Modus.
-> Diese Wahl betrifft **nur** die konkreten Zellen der `frontier`-Spalte in `knowledge/model-tiers.md`; V1/V2/V4–V6 und alle AC bleiben unverändert gültig. Der `coder` setzt die hier eingetragene Variante (b) um, sofern der User nicht vor Merge eine andere bestätigt.
+> **Designentscheidung D1 — bestätigt (2026-06-10): Variante (b) „Selektiv".** Nur die Top-Reasoning-Rollen (architekt/requirement/reviewer/coder) laufen auf `fable`; die übrigen behalten ihren `max-quality`-Wert. Begründung: `fable` ist ~2× teurer (Kontingent) + hat kein Extended Thinking ⇒ nicht pauschal über Opus. Verworfene Alternativen: **(a)** opus→fable überall (cicd bleibt sonnet); **(c)** fable überall inkl. tester/cicd (maximaler/teuerster Modus). Eine spätere Umstellung beträfe nur die Zellen der `frontier`-Spalte in `knowledge/model-tiers.md`; V1/V2/V4–V6 und alle AC bleiben gültig.
 
 ### V4 — Override-Mechanik (unverändert, vierte Klasse zulässig)
 Beim `Task`-Dispatch gilt weiterhin:
