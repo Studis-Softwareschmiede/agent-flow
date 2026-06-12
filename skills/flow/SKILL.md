@@ -30,26 +30,132 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a in `agents/reviewer.md`) — kein separater Agent-Dispatch. Der Reviewer prüft im normalen Build-Loop, ob der Diff env-Variablen einführt ohne `.env.example`/`.env.gpg` nachzuziehen. Keine Änderung am Dispatch-Ablauf nötig.
 
+## 2b. Metrik-Erfassung — Ledger-Touchpoints (Spec [`docs/architecture/metrics-subsystem.md`](../../docs/architecture/metrics-subsystem.md) §2–§4)
+
+> **Einziger Schreiber:** Nur `/flow` schreibt `.claude/metrics/dispatches.jsonl` + `items.jsonl` — kein anderer Agent berührt diese Dateien (K2). Erfassung ist deterministische Arithmetik, **~0 zusätzliche LLM-Token**. Jeder Metrik-Fehler wird **still übergangen** (K3) — Messen blockiert nie den Loop und verändert kein Gate.
+
+### Ledger-Verzeichnis
+Bei Bedarf `.claude/metrics/` anlegen (falls nicht vorhanden). Schreiben **ausschließlich append-only** (`>>` / `jq -c . >> datei`). Historische Zeilen werden nie gelöscht oder umgeschrieben (Ausnahme: späterer `tok`-Patch durch `metrics-token-collect`).
+
+### Vor jedem Agent-Dispatch (coder / reviewer / dba / tester / cicd)
+```bash
+T0=$(date -u +%s)
+```
+Diesen Wert für den nachfolgenden Dispatch-Schlusspunkt merken.
+
+### Nach jedem Agent-Dispatch — eine Zeile nach `dispatches.jsonl`
+Aus dem Klartext-Handoff deterministisch zählen (**kein** zweiter LLM-Lauf):
+
+| Feld | Quelle |
+|---|---|
+| `ts` | `date -u +%Y-%m-%dT%H:%M:%SZ` |
+| `item` | Board-Item-Nummer |
+| `seq` | laufende Dispatch-Nummer **innerhalb** des Items (ab 1 hochzählen) |
+| `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` |
+| `iter` | N aus `Review-Handoff … (Iteration N)`; bei nicht-Loop-Rollen die zugehörige Iteration |
+| `gate` | `PASS` \| `CHANGES-REQUIRED` \| `FAIL` \| `SKIPPED-*` \| `null` (rollen-abhängig) |
+| `crit` | #Einträge unter `## Critical` (nur reviewer/dba; sonst 0) |
+| `imp` | #Einträge unter `## Important` (nur reviewer/dba; sonst 0) |
+| `rule_hits` | Regel-ID-Tags aus den Befunden (z.B. `["coder/R01"]`); keine Tags → `[]` |
+| `secs` | `$(date -u +%s) − T0` |
+| `tok` | `null` (Phase 0; Befüllung durch `metrics-token-collect`) |
+| `cost_mode` | aktiver Cost-Mode dieses Laufs |
+
+Fehlender / nicht parsbarer Marker → Feld `null` / `0` / `[]`, **nie raten**. Zeile wegschreiben, auch wenn einzelne Felder `null` sind.
+
+Beispiel-Append (jq):
+```bash
+jq -nc \
+  --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --argjson item 42 --argjson seq 1 \
+  --arg agent "coder" --argjson iter 1 \
+  --argjson gate 'null' --argjson crit 0 --argjson imp 0 \
+  --argjson rule_hits '[]' \
+  --argjson secs "$(($(date -u +%s) - T0))" \
+  --arg cost_mode "balanced" \
+  '{ts:$ts, item:$item, seq:$seq, agent:$agent, iter:$iter,
+    gate:$gate, crit:$crit, imp:$imp, rule_hits:$rule_hits,
+    secs:$secs, tok:null, cost_mode:$cost_mode}' \
+  >> .claude/metrics/dispatches.jsonl || true
+```
+Das Beispiel zeigt den **coder**-Dispatch (`gate` = `null`, da der coder kein Gate
+setzt). Für **reviewer/dba/tester** stattdessen den echten Gate-Wert als String
+übergeben — `--arg gate "PASS"` (bzw. `"CHANGES-REQUIRED"` / `"FAIL"` / `"SKIPPED-*"`);
+`gate:$gate` im Body bleibt unverändert und ist Schema-konform (`gate: string | null`).
+Das `|| true` stellt sicher, dass ein jq-/IO-Fehler den Loop nicht abbricht (K3).
+
+### Beim Done (Item → `Done`, nach Rollout-Gate: PASS) — eine Zeile nach `items.jsonl`
+
+1. **`loc`/`files`** aus `git diff --shortstat` des Item-Diffs gegen `$default_branch`-Stand bei Item-Eintritt: `loc` = insertions + deletions, `files` = #geänderte Dateien.
+2. **Aggregation** über alle `dispatches.jsonl`-Zeilen des Items (filter `item == <n>`):
+   - `iters` = max der `iter`-Werte
+   - `crit` = Σ `crit`
+   - `imp` = Σ `imp`
+   - `test_fails` = Anzahl Zeilen mit `gate == "FAIL"` und `agent == "tester"`
+   - `rule_hits` = Vereinigung aller `rule_hits`-Arrays
+   - `secs_total` = Σ `secs` (null-Felder als 0)
+3. **EP-Formel** (Startgewichte, es sei denn `baseline.json.weights` vorhanden → diese haben Vorrang):
+   ```
+   EP = 1
+      + 2 · (iters − 1)
+      + 1 · crit
+      + 0.5 · imp
+      + 2 · test_fails
+      + round(log10(loc + 1))
+      + 3 · blocked
+   ```
+4. **`blocked`** = 1 wenn das Item zwischenzeitlich den Status `NEEDS-HUMAN`, ungelöste `depends` oder manuellen Eingriff hatte, sonst 0.
+5. **Phase-0-Felder:** `tok` / `tok_total` / `ep_est` = `null`; `size_est` = best-effort aus Item-Kontext (Default `"M"`) — Befüllung durch `metrics-estimation` (spätere Phase).
+
+Felder der `items.jsonl`-Zeile (subsystem §2.2):
+
+| Feld | Wert |
+|---|---|
+| `ts` | Done-Zeitstempel (ISO-8601 UTC) |
+| `item` | Board-Item-Nummer |
+| `size_est` | best-effort oder `"M"` |
+| `ep_est` | `null` (Phase 0) |
+| `ep_act` | EP nach obiger Formel |
+| `iters` | max `iter` der Dispatches |
+| `crit` | Σ `crit` |
+| `imp` | Σ `imp` |
+| `test_fails` | #`Test-Gate: FAIL` |
+| `rule_hits` | Vereinigung aller Regel-IDs |
+| `loc` | insertions + deletions (shortstat) |
+| `files` | #geänderte Dateien (shortstat) |
+| `tok_total` | `null` (Phase 0) |
+| `secs_total` | Σ `secs` |
+| `blocked` | 0 \| 1 |
+| `lang` | `profile.lang` (`language:`-Wert aus `.claude/profile.md`) |
+| `cost_mode` | aktiver Cost-Mode |
+
+Append analog zu `dispatches.jsonl` mit `|| true` (kein Loop-Abbruch bei Fehler, K3).
+
+### Datei-Hygiene (Spec V11 / subsystem §11)
+- `dispatches.jsonl` + `items.jsonl`: gitignored (`.gitignore`).
+- `baseline.json`: committet (von `retro` gepflegt, analog `LEARNINGS.md`).
+- Kein Secret, keine Diff-Inhalte, keine Befund-Prosa im Ledger (K6).
+
 ## 3. Build-Loop (max. 3 Iterationen, N = 1..3)
 
 > **Parallele Worktrees — Frische + Hot-Spot-Warnung (flow/P1).** Beim Dispatch von mehreren coder-Tasks parallel oder in schneller Folge: (a) **Worktree-Frische:** weise jeden coder an, `git fetch origin && git reset --hard origin/<default_branch>` auszuführen und das Vorhandensein erwarteter Vorgänger-Artefakte zu verifizieren, bevor er implementiert (`coder/R03`). (b) **Hot-Spot-Files:** wenn mehrere parallele Items dieselben zentralen Wiring-Dateien berühren (z. B. `server.js`-Router-Registrierung, `App.jsx`-Route-Map, `index.ts`-Re-Exporte), serialisiere die betreffenden Items ODER vereinbare ein append-only/Block-Konvention für diese Dateien und plane frühe Rebase-Punkte ein. Unkontrollierte parallele Edits an Hot-Spot-Files erzeugen wiederkehrende Merge-Konflikte. *[seen-in: dev-gui-cloudflare Items #107–#111 (server.js-Router-Overlap, DeployOrchestrator-Duplikat); promoted: 2026-06-09]*
 
-1. **coder** (Task): `TASK #<n>` · `SPEC: docs/specs/<feature>.md (AC<…>)` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Er editiert nur den Working-Tree (Code + ggf. kleine Spec-Präzisierung).
-2. **reviewer** (Task): `git diff` + die **Spec** (`docs/specs/<feature>.md`, AC<…>). Lies sein `Review-Gate`:
+1. **coder** (Task): `TASK #<n>` · `SPEC: docs/specs/<feature>.md (AC<…>)` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Er editiert nur den Working-Tree (Code + ggf. kleine Spec-Präzisierung). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)*
+2. **reviewer** (Task): `git diff` + die **Spec** (`docs/specs/<feature>.md`, AC<…>). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies sein `Review-Gate`:
    - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` merken, N++ → zurück zu 3.1.
    - `PASS` → **DB-Trigger prüfen** (siehe 3.2a). Triggert er → weiter zu 3.2a; sonst → weiter zu 4.
 2a. **DBA-Zweit-Review (nur bei DB-Trigger)** — Trigger gilt, wenn **eines** zutrifft (Architektur-Spec §11):
     - Board-Item hat Label `db`, ODER
     - `git diff` berührt `db_scripts/`, `docs/data-model.md`, ODER Datenzugriffscode (Heuristik: Imports von `pg`/`postgres`/`mysql2`/`mariadb`/`better-sqlite3`/`sqlite3`/`mongoose`/`mongodb`/`prisma`/`drizzle`/`supabase`).
 
-    Dann zusätzlich **dba** (Task, Review-Modus): `git diff` + Spec + Item-Label. Lies sein `Review-Gate`:
+    Dann zusätzlich **dba** (Task, Review-Modus): `git diff` + Spec + Item-Label. *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies sein `Review-Gate`:
     - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` an coder zurück, N++ → 3.1.
     - `PASS` → **beide Gates PASS** → weiter zu 4 (Tester). Pflicht: **beide** Reviews müssen PASS sagen, bevor `tester` läuft.
 - **SPEC-LÜCKE:** meldet der coder eine strukturelle/Scope-Lücke (oder der reviewer/dba verweist auf `requirement`) → Item → **Blocked** (+ Kommentar „Spec unvollständig — `/requirement` nötig"), dem User melden. Nicht im Loop raten.
 - **Schleifenschutz:** überlebt derselbe Befund N=3 → Item → **Blocked** (+ Kommentar), melde es dem User, frage ob mit den restlichen Items weiter. Dann 1.
 
 ## 4. Test-Gate
-- **tester** (Task): Working-Tree + die **Spec** (AC<…>). Lies `Test-Gate`:
+- **tester** (Task): Working-Tree + die **Spec** (AC<…>). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies `Test-Gate`:
   - `FAIL` → als Befund zurück an coder (zählt zum Schleifenschutz) → 3.1.
   - `PASS` → weiter zu 5.
   - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): Item → **Blocked** (Kommentar „DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"), dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert.
@@ -59,7 +165,7 @@ Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a 
 
 ## 5. Landen — delegiert an `cicd` als ausführenden Abschluss-Arm
 
-Nach `tester`-PASS: **`cicd`-Agent** (Task) dispatchen mit dem SHIP-TRIGGER. cicd führt die git-Operationen (merge + push) im Auftrag des Orchestrators durch, beobachtet den CI-Lauf und führt den lokalen Rollout + Disk-Hygiene durch.
+Nach `tester`-PASS: **`cicd`-Agent** (Task) dispatchen mit dem SHIP-TRIGGER. *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* cicd führt die git-Operationen (merge + push) im Auftrag des Orchestrators durch, beobachtet den CI-Lauf und führt den lokalen Rollout + Disk-Hygiene durch.
 
 **Warum cicd statt Orchestrator-eigene git-Operationen:** der Orchestrator bleibt der konzeptuelle Eigner des Flows und der Board-Übergänge; cicd ist der spezialisierte Ausführungs-Arm für den technischen Abschluss (git + Docker + Prune). Das ist keine Verletzung des „einziger git-Schreiber"-Prinzips — der Orchestrator delegiert explizit (via SHIP-TRIGGER), cicd handelt nicht eigenständig.
 
@@ -84,7 +190,7 @@ IMAGE: <profile.image>:latest
 - Commit-Message endet mit der `Co-Authored-By`-Zeile (von cicd ausgeführt).
 
 **Orchestrator nach cicd-Rückgabe:**
-- `Rollout-Gate: PASS` → Item → **Done** (+ PR/Commit verlinkt) + Test-URL melden.
+- `Rollout-Gate: PASS` → Item → **Done** (+ PR/Commit verlinkt) + Test-URL melden. *(Metrik: §2b „Beim Done"-Schritt ausführen — `items.jsonl`-Rollup-Zeile appenden.)*
 - `Rollout-Gate: FAIL` → melden + Item → **Blocked** (Kommentar: CI rot oder Smoke fehlgeschlagen), User fragen.
 - `Rollout-Gate: NEEDS-HUMAN` → Item → **Blocked**, User vorlegen.
 
