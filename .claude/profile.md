@@ -7,7 +7,7 @@ lint: "true"
 merge_policy: direct
 board: 5
 deploy: none
-default_branch: feat/metrics-subsystem
+default_branch: main
 cost_mode: balanced
 ---
 
@@ -23,7 +23,7 @@ Bash-Scripts), **kein deploybares Programm**. Daher:
   dispatcht der `tester` selbst (`tests/db-subsystem/*.sh`); reine
   Doku-/Markdown-Diffs → `SKIPPED-DOC-ONLY`.
 - `deploy: none` — kein Docker-Rollout; `cicd` landet nur (merge + push).
-- `default_branch: feat/metrics-subsystem` — **temporärer Integrations-Branch**
-  für den Metrik-Subsystem-Lauf (paralleler Lauf arbeitet auf `main`). Nach
-  Abschluss zurück auf `main` setzen.
+- `default_branch: main` — der Metrik-Subsystem-Lauf nutzte temporär den
+  Integrations-Branch `feat/metrics-subsystem` (paralleler Lauf arbeitete auf
+  `main`); nach Abschluss auf `main` zurückgesetzt.
 - `board: 5` — Org-Project „agent-flow improvements".
