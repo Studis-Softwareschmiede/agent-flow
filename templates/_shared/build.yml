@@ -43,3 +43,13 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 # Härtung später (train/teamLeader): Actions auf SHA pinnen.
+#
+# SECRETS — Build-Time-Pfad (INAKTIV, P1):
+# Dieser Workflow enthält KEINEN decrypt-Schritt und KEIN App-Secret.
+# App-Secrets leben in .env.gpg und werden ausschliesslich zur LAUFZEIT entschlüsselt
+# (bash scripts/decrypt-env.sh auf dem Deploy-Host → docker run --env-file .env).
+# Wenn eine App künftig ein Build-Time-Secret braucht (z.B. private Registry),
+# kommt es als GitHub-Actions-Secret (secrets.<NAME>) in diesen Workflow —
+# NICHT via .env.gpg-decrypt in CI (würde die geteilte Fabrik-Passphrase exponieren).
+# Spec: docs/architecture/secrets-subsystem.md §8. Ein Diff, der die Fabrik-Passphrase
+# oder einen .env.gpg-decrypt in diesen Workflow einführt, ist ein Critical-Befund.

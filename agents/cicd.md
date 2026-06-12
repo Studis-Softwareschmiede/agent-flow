@@ -146,7 +146,13 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
    ```bash
    PREV_TAG=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$app" 2>/dev/null || echo "")
    ```
-5. **Container recreaten** (`--force-recreate`-Semantik — NIEMALS `docker restart`):
+5. **App-Secrets entschlüsseln** (Spec [`docs/architecture/secrets-subsystem.md`](../../docs/architecture/secrets-subsystem.md) §7 — Passphrase muss auf dem Deploy-Host provisioniert sein):
+   ```bash
+   bash scripts/decrypt-env.sh   # .env.gpg → .env (0600), Passphrase aus Kette (§3)
+   ```
+   **Invariante:** Das Image enthält **keine** App-Secrets — Secret-Injektion ist eine Laufzeit-Eigenschaft des Containers, nicht des Images. `build.yml` enthält **keinen** decrypt-Schritt und **kein** App-Secret (GE3, §8 Build-Time-Pfad inaktiv).
+
+6. **Container recreaten** (`--force-recreate`-Semantik — NIEMALS `docker restart`):
    ```bash
    docker rm -f "$app" 2>/dev/null || true
    docker run -d --name "$app" \
@@ -154,22 +160,23 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
      --label agent-flow.build-version="$BUILD_VERSION" \
      --restart unless-stopped \
      -p "${preview_port}:${container_port}" \
+     --env-file .env \
      "${image}:latest"
    ```
    **Warum nicht `docker restart`:** `restart` startet denselben Container mit demselben alten Image-Layer neu — es zieht NICHT das neue Image. Das neue Image wird erst nach `rm + run` aktiv (`cicd/F01`).
-6. **Smoke-Verifikation:**
+7. **Smoke-Verifikation:**
    ```bash
    sleep 2
    HTTP_CODE=$(curl -fsS -o /dev/null -w '%{http_code}' "http://localhost:${preview_port}/" 2>/dev/null || echo "000")
    ```
    Schlägt fehl → Logs zeigen (`docker logs "$app" --tail 50`), `Rollout-Gate: FAIL` melden.
-7. **Versions-Endpunkt abgleichen** (falls vorhanden, best-effort):
+8. **Versions-Endpunkt abgleichen** (falls vorhanden, best-effort):
    ```bash
    VERSION_ENDPOINT=$(curl -fsS "http://localhost:${preview_port}/api/version" 2>/dev/null || echo "")
    ```
    Enthält der Response `$BUILD_VERSION` → Verifikation OK. Fehlt der Endpunkt → Hinweis ausgeben, nicht scheitern.
 
-**A3-VPS (Variante):** Wenn `DEPLOY_ROLE=vps` (aus factory-`.env` oder `/etc/softwareschmiede/role`): Rollout läuft remote auf dem VPS; nach Container-Recreate Cloudflare-Route sicherstellen (s. CONCEPT §8a). Sequenz identisch, URL = `https://<app>.<domain>`.
+**A3-VPS (Variante):** Wenn `DEPLOY_ROLE=vps` (aus factory-`.env` oder `/etc/softwareschmiede/role`): Rollout läuft remote auf dem VPS; `bash scripts/decrypt-env.sh` auf dem VPS ausführen (Passphrase ist dort provisioniert — eine der vier Ketten-Quellen, Spec §3); danach Container-Recreate mit `--env-file .env`; Cloudflare-Route sicherstellen (s. CONCEPT §8a). Sequenz identisch zu lokal, URL = `https://<app>.<domain>`.
 
 ### A4. Disk-Hygiene (Pflichtschritt)
 

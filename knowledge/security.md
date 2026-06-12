@@ -5,7 +5,7 @@
 Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains: [security]`) für die *Tiefe*; die mit **⚑** markierten Punkte sind der **Security-Floor**, den der `reviewer` **IMMER** anwendet (auch ohne `domains:[security]`) und der `coder` immer befolgt. Regel-IDs: `security/R<NN>`. Orientierung: OWASP Top 10.
 
 ## Coder-Guidance
-- `security/R01` ⚑ — **Keine Secrets im Code/Repo** (Keys, Tokens, Passwörter, Connection-Strings) → aus Env/Secret-Store laden; Secrets **nie loggen**.
+- `security/R01` ⚑ — **Keine Klartext-Secrets im Code/Repo** (Keys, Tokens, Passwörter, Connection-Strings — hartkodiert oder als unverschlüsselte Datei committed) → aus Env/Secret-Store laden; Secrets **nie loggen**. **Erlaubt (GE6):** eine committete `.env.gpg`-Datei (GPG-symmetrisch AES256, geteilte Fabrik-Passphrase) ist der **vorgesehene** Weg, App-Secrets versioniert mitzuführen — sie ist **kein** Befund. Klartext-`.env` oder hartkodierte Werte bleiben Critical.
 - `security/R02` ⚑ — **Jeden untrusted Input** (User, Netzwerk, Datei, URL-Param) validieren/normalisieren; **Output kontext-gerecht encoden** (HTML / Attribut / URL / SQL) → gegen XSS/Injection.
 - `security/R03` ⚑ — Datenzugriff **parametrisiert** (Prepared Statements / sicheres ORM); Befehle/Pfade/`eval` **nie** aus Roh-Input bauen (SQL-/Command-/Path-Injection).
 - `security/R04` ⚑ — **Authentifizierung + Autorisierung serverseitig auf JEDER geschützten Aktion** prüfen (nicht nur UI ausblenden); **Default deny**, Objekt-Ebene mitdenken (IDOR).
@@ -18,6 +18,11 @@ Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains:
 
 ## Reviewer-Checklist
 - ⚑ Hartkodiertes Secret (Key/Token/Passwort/Connection-String) im Diff → **Critical** (`security/R01`).
+- ⚑ Klartext-`.env` oder `.env.*` (ohne `!`-Negation) im Index/Commit committed → **Critical** (`security/R01`). Committed `.env.gpg` (verschlüsselt, GPG AES256) → **erlaubt** (GE6, Spec `docs/architecture/secrets-subsystem.md` §6).
+- ⚑ Diff führt neue App-env-Variable ein (z.B. `process.env.X` / `os.environ["X"]`), aber `.env.example` listet `X` nicht → **Important** „Secret-Sync: `.env.example` referenziert `X` nicht — Re-Encrypt-Konvention §9 verletzt" (`secrets-subsystem.md` §9).
+- ⚑ Diff ändert `.env.example` (neue Variable), aber `.env.gpg` ist im selben Diff **unverändert** → **Important** „`.env.gpg` nicht re-encrypted nach `.env.example`-Änderung — bitte verify" (Heuristik, §9).
+- Diff committet `.env.gpg` ohne zugehörige `.env.example`-/Code-Änderung → **Suggestion** (kann legitim sein — Wert-Rotation).
+- gitleaks-Allowlist erlaubt `.env` oder `.env.*` (Klartext) → **Critical** (hebelt `security/R01` aus; nur `^\.env\.gpg$` ist erlaubt — Spec §6).
 - ⚑ Untrusted Input ohne Validierung in einen Sink (DB / HTML / Shell / Pfad / `eval`) → **Critical** (`security/R02`).
 - ⚑ String-Interpolation in Query/Command/Pfad statt Parametrisierung → **Critical** (`security/R03`).
 - ⚑ Geschützte Aktion ohne serverseitige Authz-Prüfung (oder Authz nur im UI) → **Critical** (`security/R04`).
