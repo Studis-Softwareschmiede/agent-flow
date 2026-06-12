@@ -28,6 +28,26 @@
 # auch keine secs-Daten vorhanden sind.
 # ─────────────────────────────────────────────────────────────────────────────
 #
+# ─── Phase 3: Defektrate je Regel-ID (AC1, §9 Arch) ─────────────────────────
+# Zusätzlich zu Medianen/Kalibrierung berechnet das Script die Defektrate je
+# Regel-ID aus rule_hits der items.jsonl:
+#
+#   Defektrate(rule_id) = (Σ Treffer von rule_id in items.rule_hits)
+#                         ─────────────────────────────────────────── × 100
+#                         (Σ ep_act aller Items mit ≥1 rule_hits)
+#
+# Normiert auf EP (nicht Item-Zahl) → über unterschiedlich grosse Sprints
+# vergleichbar. Ausgabe als `defect_rates`-Objekt in baseline.json:
+#   {
+#     "<rule_id>": { "hits": <int>, "ep_total": <float>, "rate_per_100ep": <float>,
+#                    "n_items": <int>, "window_items": [<item1>, <item2>, ...] }
+#   }
+# Für Zeit-/Item-Fenster: das Script gibt die gesamte History aus; retro kann
+# Fenster via `since_item`-Parameter einschränken (optional, Standard = alle).
+#
+# Robust: 0 rule_hits in allen Items → defect_rates = {} (kein Abbruch).
+# ─────────────────────────────────────────────────────────────────────────────
+#
 # Robust gegen leere/kleine Ledger:
 #   - < MIN_ITEMS Items mit Daten → Regression wird übersprungen (null)
 #   - < MIN_MEDIAN Einträge in einem Schnitt → Median bleibt null
@@ -35,7 +55,9 @@
 #
 # Requires: bash ≥3, jq, python3
 #
-# Usage: scripts/metrics-aggregate.sh [--repo-root <path>]
+# Usage: scripts/metrics-aggregate.sh [--repo-root <path>] [--since-item <N>]
+#   --since-item N   Nur Items mit item >= N in Defektrate einbeziehen
+#                    (für Fenster-Auswertung; 0 = alle, Default = 0)
 #
 
 set -euo pipefail
@@ -43,12 +65,14 @@ set -euo pipefail
 MIN_ITEMS=5          # Minimum Items für lineare Regression (EP-Kalibrierung)
 MIN_MEDIAN=2         # Minimum Einträge für einen validen Median-Schnitt
 CACHE_KAPPA="0.1"    # Cache-Token-Gewichtungsfaktor (κ = ~Preis-Verhältnis)
+SINCE_ITEM="0"       # Untere Grenze für Defektrate-Fenster (0 = alle Items)
 
 # ─── Argumente / Pfade ────────────────────────────────────────────────────────
 REPO_ROOT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo-root) REPO_ROOT="$2"; shift 2 ;;
+    --repo-root)   REPO_ROOT="$2";   shift 2 ;;
+    --since-item)  SINCE_ITEM="$2";  shift 2 ;;
     *) shift ;;
   esac
 done
@@ -98,6 +122,7 @@ python3 - \
   "$MIN_MEDIAN" \
   "$CACHE_KAPPA" \
   "$BASELINE_FILE" \
+  "$SINCE_ITEM" \
   <<'PYEOF'
 
 import sys
@@ -114,6 +139,7 @@ min_items       = int(sys.argv[4])
 min_median      = int(sys.argv[5])
 cache_kappa     = float(sys.argv[6])
 baseline_file   = sys.argv[7]
+since_item      = int(sys.argv[8]) if len(sys.argv) > 8 else 0
 
 # ─── Ledger-Daten lesen ───────────────────────────────────────────────────────
 def read_jsonl(path):
@@ -368,6 +394,112 @@ if len(items_with_est) >= min_median:
     if abs_errs:
         forecast_mae = round(statistics.mean(abs_errs), 4)
 
+# ─── Defektrate je Regel-ID (Phase 3 / AC1) ──────────────────────────────────
+# Normierung: Treffer pro 100 EP.
+# Fenster: nur Items mit item >= since_item (0 = alle).
+# Toleranz (AC6): 0 rule_hits oder leere items-Menge → defect_rates = {}
+#
+# Aus items.jsonl: rule_hits = ["coder/R01", "sql/R03", ...] (Vereinigung je Item).
+# ep_total für Normierung = Σ ep_act ALLER Items im Fenster (mit UND ohne rule_hits)
+# — siehe window_ep_total unten und die Architektur-Entscheidung im nächsten Absatz.
+#
+# Architektur-Entscheidung: ep_total je Regel bezieht sich auf ALLE Items im
+# Fenster (mit UND ohne rule_hits), um den echten Aufwand zu normieren.
+# Begründung: eine Regel schützt vor Fehlern auf ALLEN Items — auch die, die
+# gar keinen Befund erzeugten, zählen zum "geschützten" Aufwand.
+
+defect_rates = {}
+
+# Alle Items im Fenster (Normierungs-Basis = gesamter EP-Aufwand im Fenster)
+window_items = [it for it in valid_items if it['item'] is None or it['item'] >= since_item]
+window_ep_total = sum(it['ep_act'] for it in window_items)
+
+if window_ep_total > 0:
+    # Treffer je Regel-ID akkumulieren.
+    # valid_items enthält kein rule_hits-Feld — wir lesen direkt aus items[] (raw),
+    # den Rohdaten aus read_jsonl(items_file). Fenster-Filter: item >= since_item
+    # UND ep_act vorhanden (identische Kriterien wie window_items-Aufbau oben).
+    rule_hits_count = {}    # rule_id → int
+    rule_items_set  = {}    # rule_id → list of item IDs (Deduplizierung)
+
+    for raw_item in items:
+        raw_item_id = raw_item.get('item')
+        raw_ep = safe_num(raw_item.get('ep_act'))
+        if raw_ep is None or raw_ep <= 0:
+            continue
+        if since_item > 0 and raw_item_id is not None and raw_item_id < since_item:
+            continue
+
+        hits = raw_item.get('rule_hits')
+        if not isinstance(hits, list) or len(hits) == 0:
+            continue
+
+        for rule_id in hits:
+            if not isinstance(rule_id, str) or not rule_id.strip():
+                continue
+            rule_id = rule_id.strip()
+            rule_hits_count[rule_id] = rule_hits_count.get(rule_id, 0) + 1
+            if rule_id not in rule_items_set:
+                rule_items_set[rule_id] = []
+            if raw_item_id is not None and raw_item_id not in rule_items_set[rule_id]:
+                rule_items_set[rule_id].append(raw_item_id)
+
+    for rule_id, hits in sorted(rule_hits_count.items()):
+        rate = round(hits / window_ep_total * 100, 4) if window_ep_total > 0 else None
+        defect_rates[rule_id] = {
+            "hits": hits,
+            "ep_total": round(window_ep_total, 4),
+            "rate_per_100ep": rate,
+            "n_items": len(rule_items_set.get(rule_id, [])),
+            "window_items": sorted(rule_items_set.get(rule_id, [])),
+        }
+
+# ─── Gesamt-Retro-Effektivitäts-Kennzahl (AC4) ───────────────────────────────
+# Berechnet aus baseline.json.learnings_rules (wird von retro beim Promoten
+# befüllt — siehe retro.md Modus D). Format der Einträge:
+#   { "rule_id": "coder/R01", "status": "Validated"|"Measuring"|"Reverted",
+#     "baseline_rate": 4.2, "measured_rate": 0.8, "measured_n": 30,
+#     "promoted_after_item": 100 }
+#   (Feldname measured_n — konsistent mit arch §2.3, spec V6b, retro.md D2.)
+#
+# Gesamt-Effektivität = Σ (baseline_rate - measured_rate) * (measured_n/100)
+#                         über alle Validated-Regeln
+#                     - Σ (measured_rate - baseline_rate) * (measured_n/100)
+#                         über alle Reverted-Regeln
+#
+# Einheit: "EP-äquivalente Defekt-Reduktion" (normiert auf 100 EP).
+# Null, wenn keine Validated/Reverted-Daten vorhanden.
+
+retro_effectiveness = None
+learnings_rules = []
+
+# Bestehende learnings_rules aus baseline.json lesen (persistent über Läufe)
+if Path(baseline_file).is_file():
+    try:
+        with open(baseline_file, encoding='utf-8') as f:
+            existing_baseline = json.load(f)
+        lr = existing_baseline.get('learnings_rules')
+        if isinstance(lr, list):
+            learnings_rules = lr
+    except Exception:
+        pass
+
+validated = [r for r in learnings_rules if r.get('status') == 'Validated'
+             and r.get('baseline_rate') is not None and r.get('measured_rate') is not None
+             and r.get('measured_n') is not None]
+reverted  = [r for r in learnings_rules if r.get('status') == 'Reverted'
+             and r.get('baseline_rate') is not None and r.get('measured_rate') is not None
+             and r.get('measured_n') is not None]
+
+if validated or reverted:
+    gain   = sum((r['baseline_rate'] - r['measured_rate']) * r['measured_n'] / 100
+                 for r in validated
+                 if r['baseline_rate'] > r['measured_rate'])
+    damage = sum((r['measured_rate'] - r['baseline_rate']) * r['measured_n'] / 100
+                 for r in reverted
+                 if r['measured_rate'] > r['baseline_rate'])
+    retro_effectiveness = round(gain - damage, 4)
+
 # ─── baseline.json schreiben ──────────────────────────────────────────────────
 calibrated_at = datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
@@ -380,6 +512,9 @@ output = {
     "weights": calibrated_weights,
     "medians": medians,
     "forecast_mae": forecast_mae,
+    "defect_rates": defect_rates,
+    "retro_effectiveness": retro_effectiveness,
+    "learnings_rules": learnings_rules,
 }
 
 if calibration_note:
@@ -390,10 +525,13 @@ with open(work_out, 'w', encoding='utf-8') as f:
     f.write('\n')
 
 # Status-Ausgabe — auf stderr (stdout bleibt sauber; konsistent mit metrics-collect.sh)
+n_rules = len(defect_rates)
 print(f"[metrics-aggregate] OK: {n_items} Items, "
       f"{len(medians)} Median-Schnitte, "
       f"ep_per_token={'%.6f' % ep_per_token if ep_per_token is not None else 'null'}, "
-      f"forecast_mae={forecast_mae}", file=sys.stderr)
+      f"forecast_mae={forecast_mae}, "
+      f"defect_rates={n_rules} Regeln, "
+      f"retro_effectiveness={retro_effectiveness}", file=sys.stderr)
 PYEOF
 
 EXIT_CODE=$?

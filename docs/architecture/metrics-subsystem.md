@@ -92,7 +92,15 @@ Mediane je **Grösse × Sprache × cost_mode** plus die kalibrierten EP-Gewichte
     "md|balanced|S": { "n": 12, "ep": 3.0, "iters": 1, "crit": 0, "tok_total": 1400, "secs_total": 95 },
     "md|balanced|M": { "n": 48, "ep": 7.5, "iters": 2, "crit": 1, "tok_total": 5200, "secs_total": 310 }
   },
-  "forecast_mae": 0.34
+  "forecast_mae": 0.34,
+  "defect_rates": {
+    "coder/R01": { "hits": 12, "ep_total": 284.5, "rate_per_100ep": 4.22, "n_items": 12, "window_items": [100, 101] }
+  },
+  "retro_effectiveness": 1.27,
+  "learnings_rules": [
+    { "rule_id": "coder/R01", "status": "Validated", "baseline_rate": 4.22, "baseline_n": 50,
+      "promoted_after_item": 100, "measured_rate": 0.8, "measured_n": 30 }
+  ]
 }
 ```
 
@@ -101,6 +109,9 @@ Mediane je **Grösse × Sprache × cost_mode** plus die kalibrierten EP-Gewichte
 - `ep_per_token` = das Eich-Ergebnis (1 EP ≈ X **effektive** Token, §8). **Effektive Token** = `in + out + κ·cache` mit `κ = cache_kappa` (typisch 0.1), da Cache-Reads ~10× billiger sind als frischer Input — ungewichtetes `tok_total` würde vom Cache-Volumen dominiert und `ep_per_token` verzerren.
 - `cache_kappa` = verwendeter κ-Faktor für Cache-Gewichtung (dokumentiert für Konsumenten).
 - `forecast_mae` = mittlerer absoluter Forecast-Fehler `|ep_est − ep_act| / ep_act` über die Historie (Prognosegüte-Tracker).
+- `defect_rates` = Defektrate je Regel-ID (§8); Objekt `rule_id → { hits, ep_total, rate_per_100ep, n_items, window_items }`. Leer (`{}`) wenn keine `rule_hits` in den Ledgern vorhanden. Fenster via `--since-item` einschränkbar.
+- `retro_effectiveness` = Gesamt-Retro-Effektivitäts-Kennzahl (§8): Σ Reduktion Validated − Schaden Reverted; `null` wenn keine Validated/Reverted-Daten vorhanden.
+- `learnings_rules` = Array von Einträgen je `Measuring`/`Validated`/`Reverted`-Regel: `{ rule_id, status, baseline_rate, baseline_n, promoted_after_item, measured_rate, measured_n }`. Von retro (Modus D) befüllt, persistent über Aggregationsläufe.
 
 ---
 

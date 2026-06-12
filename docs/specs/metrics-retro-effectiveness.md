@@ -32,13 +32,22 @@ CONCEPT §5a fragt: *„kehrt der adressierte Fehler weiter wieder?"* — bisher
 Beim Promoten einer Regel (Status `Measuring`) hält `retro` die **Baseline-Defektrate** der adressierten Regel-ID fest (als Zahl in `LEARNINGS.md` bzw. dem Improvement-Board-Eintrag).
 
 ### V3 — Validated/Reverted quantitativ
-Nach **N** weiteren Items misst `retro` die neue Rate: signifikant gesunken → Status `Validated` **mit Zahl** (z.B. „`coder/R01`: 4.2 → 0.8 Treffer/100 EP über 30 Items"); kein Effekt/schlechter → `Reverted` (`git revert`), die Zahl ist die Begründung.
+Nach **N** weiteren Items (N_MIN = 10 Items, Mindest-Stichprobe) misst `retro` die neue Rate: signifikant gesunken (neue Rate < Baseline × 0.5, d.h. > 50% Reduktion) → Status `Validated` **mit Zahl** (z.B. „`coder/R01`: 4.2 → 0.8 Treffer/100 EP über 30 Items"); kein Effekt/schlechter (Rate ≥ Baseline × 0.5) → `Reverted` (`git revert`), die Zahl ist die Begründung. < N_MIN Items seit Promotion → kein Statuswechsel (AC6).
 
 ### V4 — Gesamt-Effektivität
 `retro` aggregiert die EP-/Defekt-Reduktion über alle `Validated` minus dem Schaden der `Reverted` zu einer Gesamt-Retro-Effektivitäts-Kennzahl (Teil des retro-Mess-Outputs).
 
 ### V5 — Tier-1 unverändert + Schutzgitter
-Die Auswertung läuft im retro-Mess-Schritt (zusätzlich zu `metrics-retro-aggregation`), ohne Tier-1-Verhalten, Cooldown (G3) oder PR+Gate-Mechanik zu verändern. `agents/retro.md` wird um diese Auswertung erweitert.
+Die Auswertung läuft im retro-Mess-Schritt (Modus D, nach Modus C), ohne Tier-1-Verhalten, Cooldown (G3) oder PR+Gate-Mechanik zu verändern. `agents/retro.md` wird um Modus D erweitert.
+
+### V6a — LEARNINGS.md-Format (Präzisierung)
+Das erweiterte Status-Feld-Suffix: `Measuring · baseline=<rate>/100EP@N<n>` → `Validated · <baseline> → <new>/100EP über N Items` bzw. `Reverted · <baseline> → <new>/100EP über N Items`. Bestehende Spalten (`ID | Datum | Pack/Skill | Regel | Quelle | PR | Status`) bleiben unverändert. Das Suffix ist rückwärtskompatibel.
+
+### V6b — `baseline.json`-Erweiterung (Präzisierung)
+`metrics-aggregate.sh` gibt zusätzlich aus:
+- `defect_rates` — Objekt: Regel-ID → `{ hits, ep_total, rate_per_100ep, n_items, window_items }` (AC1)
+- `retro_effectiveness` — Kennzahl (Zahl oder null) (AC4)
+- `learnings_rules` — Array von `{ rule_id, status, baseline_rate, baseline_n, promoted_after_item, measured_rate, measured_n }` — persistent über Läufe (von retro Modus D befüllt/aktualisiert)
 
 ### V6 — Datenmangel-Toleranz
 Fehlen `rule_hits` oder ist die Item-Zahl seit Promotion < N, bleibt der Status `Measuring` (keine voreilige Promotion/Revert); kein Abbruch.
