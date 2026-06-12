@@ -82,20 +82,24 @@ Mediane je **Grösse × Sprache × cost_mode** plus die kalibrierten EP-Gewichte
 
 ```json
 {
+  "schema_version": 1,
   "calibrated_at": "2026-06-12",
   "n_items": 137,
   "ep_per_token": 0.0021,
+  "cache_kappa": 0.1,
   "weights": { "iter": 2, "crit": 1, "imp": 0.5, "test_fail": 2, "loc_log": 1, "blocked": 3 },
   "medians": {
-    "md|balanced|S": { "ep": 3.0, "iters": 1, "crit": 0, "tok_total": 1400, "secs_total": 95 },
-    "md|balanced|M": { "ep": 7.5, "iters": 2, "crit": 1, "tok_total": 5200, "secs_total": 310 }
+    "md|balanced|S": { "n": 12, "ep": 3.0, "iters": 1, "crit": 0, "tok_total": 1400, "secs_total": 95 },
+    "md|balanced|M": { "n": 48, "ep": 7.5, "iters": 2, "crit": 1, "tok_total": 5200, "secs_total": 310 }
   },
   "forecast_mae": 0.34
 }
 ```
 
-- `medians`-Schlüssel = `<lang>|<cost_mode>|<size>`. Fehlt ein Schnitt → §7-Fallback (nächstgröbere Aggregation, zuletzt globaler Median).
-- `ep_per_token` = das Eich-Ergebnis (1 EP ≈ X echte Token, §8).
+- `schema_version` = ganzzahlige Schema-Version (aktuell `1`); ermöglicht künftige Migrations-Checks in Konsumenten (z.B. `/flow`).
+- `medians`-Schlüssel = `<lang>|<cost_mode>|<size>`. Fehlt ein Schnitt → §7-Fallback (nächstgröbere Aggregation, zuletzt globaler Median). `n` = Stichprobengrösse des Schnitts (Qualitätsindikator).
+- `ep_per_token` = das Eich-Ergebnis (1 EP ≈ X **effektive** Token, §8). **Effektive Token** = `in + out + κ·cache` mit `κ = cache_kappa` (typisch 0.1), da Cache-Reads ~10× billiger sind als frischer Input — ungewichtetes `tok_total` würde vom Cache-Volumen dominiert und `ep_per_token` verzerren.
+- `cache_kappa` = verwendeter κ-Faktor für Cache-Gewichtung (dokumentiert für Konsumenten).
 - `forecast_mae` = mittlerer absoluter Forecast-Fehler `|ep_est − ep_act| / ep_act` über die Historie (Prognosegüte-Tracker).
 
 ---

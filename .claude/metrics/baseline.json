@@ -1,8 +1,10 @@
 {
-  "_comment": "Aggregat von retro geschrieben (docs/architecture/metrics-subsystem.md §7). In Phase 0 noch leer — keine Baseline-Daten vorhanden.",
+  "_comment": "Aggregat von retro geschrieben (docs/architecture/metrics-subsystem.md §7). In Phase 0 noch leer — keine Baseline-Daten vorhanden. Wird durch scripts/metrics-aggregate.sh befüllt.",
+  "schema_version": 1,
   "calibrated_at": null,
   "n_items": 0,
   "ep_per_token": null,
+  "cache_kappa": 0.1,
   "weights": {
     "iter": 2,
     "crit": 1,

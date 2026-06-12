@@ -29,10 +29,12 @@ version: 1
 Im retro-Lauf liest `retro` `dispatches.jsonl` + `items.jsonl` und bildet Mediane je Schnitt `<lang>|<cost_mode>|<size>`: `ep`, `iters`, `crit`, `tok_total`, `secs_total` (subsystem §2.3).
 
 ### V2 — baseline.json schreiben
-`retro` schreibt `.claude/metrics/baseline.json` mit der Struktur aus subsystem §2.3: `calibrated_at`, `n_items`, `ep_per_token`, `weights`, `medians` (Schlüssel `<lang>|<cost_mode>|<size>`), `forecast_mae`. Die Datei wird committet (Teil des regulären retro-Outputs/PR).
+`retro` schreibt `.claude/metrics/baseline.json` mit der Struktur aus subsystem §2.3: `schema_version` (1), `calibrated_at`, `n_items`, `ep_per_token`, `cache_kappa`, `weights`, `medians` (Schlüssel `<lang>|<cost_mode>|<size>`, je mit Sample-Count `n`), `forecast_mae`. Die Datei wird committet (Teil des regulären retro-Outputs/PR).
 
 ### V3 — EP-Kalibrierung (lineare Regression)
-`retro` eicht die EP-Gewichte gegen die echten `tok_total`/`secs_total` per linearer Regression: `ep_per_token` (1 EP ≈ X echte Token) wird bestimmt; einzelne `weights` (`iter`/`crit`/`imp`/`test_fail`/`loc_log`/`blocked`) ggf. nachjustiert. Die kalibrierten `weights` landen in `baseline.json.weights`.
+`retro` eicht die EP-Gewichte gegen die echten Token/`secs_total` per linearer Regression: `ep_per_token` (1 EP ≈ X **effektive** Token) wird bestimmt; einzelne `weights` (`iter`/`crit`/`imp`/`test_fail`/`loc_log`/`blocked`) ggf. nachjustiert. Die kalibrierten `weights` landen in `baseline.json.weights`.
+
+**Cache-Token-Gewichtung (Design-Entscheidung, bindend):** Cache-Reads sind ~10× billiger als frischer Input (empirisch belegt: #109 zeigte ~15.4M Cache- vs. ~302 Input-Token je Dispatch). Würde man ungewichtetes `tok_total` (in+out+cache) als Eich-Ziel nehmen, dominiert das Cache-Volumen alles andere und verzerrt `ep_per_token`. Die Kalibrierung verwendet daher **effektive Token**: `tok_eff = in + out + κ·cache` mit κ = 0.1 (approximiert das Preis-Verhältnis). Der κ-Wert wird als `cache_kappa` in `baseline.json` dokumentiert.
 
 ### V4 — Vorrang der kalibrierten Gewichte
 Sind kalibrierte `weights` in `baseline.json` vorhanden, haben sie in `/flow` Vorrang vor den Startgewichten der EP-Formel (subsystem §3) — ohne erneuten Code-Eingriff in `/flow` (es liest `baseline.json.weights`, falls vorhanden).
