@@ -131,6 +131,21 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 
 Append analog zu `dispatches.jsonl` mit `|| true` (kein Loop-Abbruch bei Fehler, K3).
 
+### Token-Nachtrag (out-of-band, Spec `metrics-token-collect` V4 / subsystem §4 Schritt 4)
+
+Nach dem Append der `items.jsonl`-Zeile (`tok_total` initial `null`) sofort:
+
+```bash
+bash "$REPO_ROOT/scripts/metrics-collect.sh" "$ITEM_NR" >&2 || true
+```
+
+Das Script parst die Subagent-Transcript-JSONL, summiert echte Token je Dispatch
+und patcht die `tok`-Felder der betroffenen `dispatches.jsonl`-Zeilen + `tok_total`
+der `items.jsonl`-Zeile (nur `null`-Felder, bestehende Werte bleiben). Schlägt das
+Script fehl oder findet es keine Transcripts → Felder bleiben `null`, **kein Abbruch**,
+das Item bleibt `Done` (K3/K4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis, das
+`scripts/` enthält); bei Dogfooding-Lauf = cwd des agent-flow-Repos.
+
 ### Datei-Hygiene (Spec V11 / subsystem §11)
 - `dispatches.jsonl` + `items.jsonl`: gitignored (`.gitignore`).
 - `baseline.json`: committet (von `retro` gepflegt, analog `LEARNINGS.md`).

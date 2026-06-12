@@ -28,6 +28,29 @@ Echte Token sind die spätere **Eich-Datenquelle** für die EP-Kalibrierung. Sie
 ### V1 — Phase-0-Verifikation (Pflicht-Vorbedingung)
 Vor produktivem Einsatz wird der **tatsächliche** Transcript-Pfad + das `usage`-Feldformat empirisch verifiziert (ein realer Dispatch, Pfad gelistet, `usage`-Keys belegt: `input_tokens`/`output_tokens`/`cache_*` o.Ä.). Das Ergebnis (verifizierter Pfad/Format ODER „nicht parsebar → Fallback") wird in der Spec/im Script-Header dokumentiert. Ist nichts verifizierbar → das Script ist ein No-Op, der `tok` sauber auf `null` lässt.
 
+**Phase-0-Ergebnis (verifiziert 2026-06-12, Item #109):**
+
+Transcript-Dateien wurden unter `~/.claude/projects/<escaped-cwd>/<session-uuid>/subagents/` gefunden. Escaping: cwd-Pfad mit `/` → `-` (z.B. `/Users/alex/Git/Studis-Softwareschmiede` → `-Users-alex-Git-Studis-Softwareschmiede`). Jede Subagent-Dispatch hat zwei Dateien: `agent-<id>.jsonl` (Conversation-Log) und `agent-<id>.meta.json` (Metadaten mit `agentType` und `description`). Die `description` im meta.json enthält beim Dispatch durch `/flow` zuverlässig `#<item>` (z.B. `"coder #108 Ledger-Schema"`), was die Item-Zuordnung ermöglicht.
+
+Format der `usage`-Felder in assistant-Zeilen des JSONL (alle Keys konsistent über alle geprüften Subagents):
+```json
+{
+  "input_tokens": <int>,
+  "output_tokens": <int>,
+  "cache_creation_input_tokens": <int>,
+  "cache_read_input_tokens": <int>,
+  "server_tool_use": { ... },
+  "service_tier": "standard",
+  "cache_creation": { ... },
+  "inference_geo": "not_available",
+  "iterations": [ ... ],
+  "speed": "standard"
+}
+```
+Summierung je Subagent: `in = Σ input_tokens`, `out = Σ output_tokens`, `cache = Σ (cache_creation_input_tokens + cache_read_input_tokens)` über alle assistant-Zeilen.
+
+**Einschränkung:** Der Transcript-Pfad hängt vom cwd der Eltern-Session ab, nicht vom cwd des Subagents. Das Script durchsucht deshalb alle Projekt-Verzeichnisse nach `#<item>` in der `description`. Für Items, die nicht von `/flow` dispatcht wurden (fehlende `#N`-Konvention in der description), findet das Script keine Transcripts und fällt auf `null` zurück — das ist korrekt und erwartet.
+
 ### V2 — Script `scripts/metrics-collect.sh`
 Ein committetes Bash/jq-Script `scripts/metrics-collect.sh <item>`: parst die Subagent-Transcript-JSONL des Items, summiert `input`/`output`/`cache`-Token je Dispatch, und ordnet sie den Dispatch-Zeilen des Items zu (über die Dispatch-/Zeit-Korrelation, die `/flow` kennt).
 
