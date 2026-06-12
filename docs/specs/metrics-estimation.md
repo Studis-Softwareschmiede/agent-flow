@@ -25,7 +25,7 @@ Ziel des Subsystems ist Vorhersagbarkeit: Soll vs. Ist gegenüberstellen. Diese 
 ## Verhalten
 
 ### V1 — Grössenklasse heuristisch (token-frei)
-Beim Item-Eintritt leitet `/flow` `S` | `M` | `L` | `XL` ab aus: (a) #Acceptance-Kriterien der referenzierten Spec, (b) Labels (`db`, `security`, `ui` gewichten hoch), (c) #genannter Komponenten/Dateien im Item-Body. Die Schwellen sind deterministisch fixiert (z.B. AC-Anzahl-Bänder + Label-Aufschlag). S/M/L/XL ist token-frei bestimmbar.
+Beim Item-Eintritt leitet `/flow` `S` | `M` | `L` | `XL` ab aus: (a) #Acceptance-Kriterien der referenzierten Spec, (b) Labels (`db`, `security`, `ui` gewichten hoch), (c) #genannter Komponenten/Dateien im Item-Body. Die Schwellen sind deterministisch fixiert: **Score = n_ac + n_comp + label_bump** (label_bump: +1 je Label `db`/`security`/`ui`, max +3). Mapping: Score 0–3 → `S`, 4–7 → `M`, 8–12 → `L`, ≥ 13 → `XL`. S/M/L/XL ist token-frei bestimmbar.
 
 ### V2 — LLM-Korrektur nur bei L/XL
 Wird ein Item heuristisch als `L` oder `XL` eingestuft, holt `/flow` eine **1-Satz**-Plausibilitätskorrektur per LLM (token-sparsam) und passt `size_est` ggf. an. `S`/`M` laufen ohne LLM.
@@ -44,7 +44,7 @@ Die Schätzung blockiert nie den Loop; bei fehlender Baseline oder unklarer Heur
 
 ## Acceptance-Kriterien
 
-- **AC1** — `/flow` leitet beim Item-Eintritt `size_est` ∈ {S,M,L,XL} deterministisch aus #AC + Labels (`db`/`security`/`ui`) + #Komponenten ab; Schwellen sind fixiert; S/M/L/XL token-frei. *(V1)*
+- **AC1** — `/flow` leitet beim Item-Eintritt `size_est` ∈ {S,M,L,XL} deterministisch aus #AC + Labels (`db`/`security`/`ui`) + #Komponenten ab; Schwellen sind fixiert (Score = n_ac + n_comp + label_bump: 0–3→S, 4–7→M, 8–12→L, ≥13→XL); S/M/L/XL token-frei. *(V1)*
 - **AC2** — Nur für `L`/`XL` wird eine 1-Satz-LLM-Korrektur geholt; `S`/`M` laufen ohne LLM. *(V2)*
 - **AC3** — `ep_est` wird über `baseline.json.medians[<lang>|<cost_mode>|<size>]` gemappt; fehlender Schnitt → gröbere Aggregation → globaler Median; keine Baseline → `ep_est = null`. *(V3)*
 - **AC4** — Beim Done steht `ep_est` neben `ep_act` in derselben `items.jsonl`-Zeile. *(V4)*

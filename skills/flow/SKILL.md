@@ -23,6 +23,45 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 - Aus dem Item-Body die **Spec-Referenz** lesen: `Spec: docs/specs/<feature>.md` + `implements: AC<…>` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Item-Titel).
 - Keins → weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
 
+### 1a. A-priori-Grössenklasse + `ep_est` (Spec `metrics-estimation` AC1–AC3, §2b)
+
+> **Einziger Schreiber:** Schätzung + Mapping laufen hier in /flow; das Ergebnis (`size_est`, `ep_est`) wird beim Done in `items.jsonl` eingetragen. **Kein LLM-Aufruf für S/M.** Fehler → `size_est = "M"`, `ep_est = null`, kein Loop-Abbruch (K3).
+
+**Schritt A — Heuristik (token-frei, deterministisch):**
+
+Zähle aus Item-Body + referenzierter Spec (`docs/specs/<feature>.md`):
+- `n_ac` = #Acceptance-Kriterien (Zeilen die mit `- **AC` beginnen oder AC-Nummerierung tragen)
+- `n_comp` = #genannter Komponenten/Dateien (grobe Zählung: Pfade, Agenten, Scripts im Item-Body)
+- `label_bump` = +1 für jedes der Labels `db`, `security`, `ui` am Board-Item (max +3)
+
+**Roher Score:** `score = n_ac + n_comp + label_bump`
+
+**Mapping Score → Grössenklasse** (Schwellen fixiert, Spec `metrics-estimation` AC1):
+
+| Score | `size_est` |
+|---|---|
+| 0–3   | `S` |
+| 4–7   | `M` |
+| 8–12  | `L` |
+| ≥ 13  | `XL` |
+
+**Schritt B — LLM-Korrektur nur bei L/XL (AC2):**
+
+Wurde `size_est` als `L` oder `XL` eingestuft: formuliere **1 Satz** (token-sparsam): „Ist diese Schätzung plausibel oder soll ich auf [kleinere/grössere Klasse] anpassen?" und beantworte die Frage im selben Reasoning-Schritt anhand des tatsächlichen Item-Umfangs. Korrigiere `size_est` falls offensichtlich falsch — keine eigene LLM-Runde, integriert in den laufenden Reasoning-Kontext. **S/M laufen ohne diese Korrektur.**
+
+**Schritt C — Mapping size_est → ep_est (AC3):**
+
+Lese `.claude/metrics/baseline.json` (falls vorhanden). Lookup-Reihenfolge:
+
+1. Exakter Schnitt: `medians["<lang>|<cost_mode>|<size_est>"]` → `ep_est = medians[key].ep`
+2. Fehlt exakter Schnitt: aggregiere alle Einträge mit passendem `<lang>|<cost_mode>` unabhängig von Size → Median der `.ep`-Werte dieser Gruppe.
+3. Fehlt auch das: globaler Median aller `.ep`-Werte in `medians` → `ep_est`.
+4. Keine `baseline.json` vorhanden oder alle `.ep`-Werte `null`/leer → `ep_est = null` (erwarteter Zustand bis genug Historie).
+
+`ep_est` (und `size_est`) als Session-Variable merken → beim Done in `items.jsonl` eintragen (§2b unten).
+
+Wenn `medians[key].n` < 3: Schnitt vorhanden aber dünn — trotzdem verwenden (kein spezieller Fallback), aber intern notieren (kein User-Output nötig).
+
 ## 2. In Progress
 - Board-Item-Status → **In Progress**.
 
@@ -105,7 +144,7 @@ Das `|| true` stellt sicher, dass ein jq-/IO-Fehler den Loop nicht abbricht (K3)
       + 3 · blocked
    ```
 4. **`blocked`** = 1 wenn das Item zwischenzeitlich den Status `NEEDS-HUMAN`, ungelöste `depends` oder manuellen Eingriff hatte, sonst 0.
-5. **Phase-0-Felder:** `tok` / `tok_total` / `ep_est` = `null`; `size_est` = best-effort aus Item-Kontext (Default `"M"`) — Befüllung durch `metrics-estimation` (spätere Phase).
+5. **Schätzfelder:** `size_est` + `ep_est` aus §1a (beim Item-Eintritt bestimmt, Session-Variable). War §1a nicht ausführbar oder ergab keinen Wert → `size_est = "M"`, `ep_est = null` (K3). `tok` / `tok_total` = `null` (Phase 0, Befüllung durch `metrics-token-collect`).
 
 Felder der `items.jsonl`-Zeile (subsystem §2.2):
 
@@ -113,8 +152,8 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 |---|---|
 | `ts` | Done-Zeitstempel (ISO-8601 UTC) |
 | `item` | Board-Item-Nummer |
-| `size_est` | best-effort oder `"M"` |
-| `ep_est` | `null` (Phase 0) |
+| `size_est` | aus §1a (Heuristik + ggf. L/XL-Korrektur); Default `"M"` |
+| `ep_est` | aus §1a-Mapping über `baseline.json`; `null` wenn keine Baseline |
 | `ep_act` | EP nach obiger Formel |
 | `iters` | max `iter` der Dispatches |
 | `crit` | Σ `crit` |
