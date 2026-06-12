@@ -26,6 +26,10 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 ## 2. In Progress
 - Board-Item-Status → **In Progress**.
 
+## 2a. Secret-Sync-Gate (Spec [`docs/architecture/secrets-subsystem.md`](../../docs/architecture/secrets-subsystem.md) §9)
+
+Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a in `agents/reviewer.md`) — kein separater Agent-Dispatch. Der Reviewer prüft im normalen Build-Loop, ob der Diff env-Variablen einführt ohne `.env.example`/`.env.gpg` nachzuziehen. Keine Änderung am Dispatch-Ablauf nötig.
+
 ## 3. Build-Loop (max. 3 Iterationen, N = 1..3)
 
 > **Parallele Worktrees — Frische + Hot-Spot-Warnung (flow/P1).** Beim Dispatch von mehreren coder-Tasks parallel oder in schneller Folge: (a) **Worktree-Frische:** weise jeden coder an, `git fetch origin && git reset --hard origin/<default_branch>` auszuführen und das Vorhandensein erwarteter Vorgänger-Artefakte zu verifizieren, bevor er implementiert (`coder/R03`). (b) **Hot-Spot-Files:** wenn mehrere parallele Items dieselben zentralen Wiring-Dateien berühren (z. B. `server.js`-Router-Registrierung, `App.jsx`-Route-Map, `index.ts`-Re-Exporte), serialisiere die betreffenden Items ODER vereinbare ein append-only/Block-Konvention für diese Dateien und plane frühe Rebase-Punkte ein. Unkontrollierte parallele Edits an Hot-Spot-Files erzeugen wiederkehrende Merge-Konflikte. *[seen-in: dev-gui-cloudflare Items #107–#111 (server.js-Router-Overlap, DeployOrchestrator-Duplikat); promoted: 2026-06-09]*

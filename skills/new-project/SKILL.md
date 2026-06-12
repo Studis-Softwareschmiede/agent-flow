@@ -87,6 +87,16 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
    - **`.env.<name>.example`** (z.B. `.env.redis.example`) ans Repo-Root kopieren (Vorlage für Connection-Variablen).
    - **KEIN `db_scripts/`, KEIN Migrations-Runner, KEIN Backup-Skript** — Scope-Lock §17 (Companions haben keine Schema-Evolution).
    - **`README.md` um Companion-Abschnitt erweitern** (kurz): Use-Case, Connect-Env (`<NAME>_HOST` / `<NAME>_PORT`), Verweis auf `templates/_shared/companion-<name>/README.md` für Details (Production-Password-Setup etc.).
+4e. **Secrets-Subsystem scaffolden** (Spec [`docs/architecture/secrets-subsystem.md`](../../docs/architecture/secrets-subsystem.md) §10) — **immer** (keine Opt-in-Frage, jede App bekommt es):
+   1. **Script-Set kopieren:** `${CLAUDE_PLUGIN_ROOT}/templates/_shared/secrets/{_lib.sh,encrypt-env.sh,decrypt-env.sh,load-env.sh}` → `scripts/` (encrypt/decrypt/load-env: `chmod +x`; `_lib.sh` ohne `+x` — nur via `source`).
+   2. **`.env.example` kopieren** ans Repo-Root (Vorlage, committed).
+   3. **`.gitignore` ergänzen** um `${CLAUDE_PLUGIN_ROOT}/templates/_shared/secrets/gitignore.snippet` (idempotent — nicht doppelt anhängen, prüfen ob Block bereits vorhanden).
+   4. **`.gitleaks.toml` kopieren** ans Repo-Root (§6 Allowlist-Scaffold).
+   5. **Initiales `.env.gpg` anlegen + committen (GE4):**
+      - Aus `.env.example` (Platzhalter, keine echten Werte) per `bash scripts/encrypt-env.sh` ein initiales `.env.gpg` erzeugen — **vorausgesetzt die Passphrase-Kette (§3) ist auf dem Scaffold-Host auflösbar** (d.h. `resolve_pass_file` gibt einen Pfad zurück ODER `$GPG_PASSPHRASE` gesetzt).
+      - **Passphrase nicht auflösbar** (non-interaktiv, kein `gpg.pass`, kein `$GPG_PASSPHRASE`): kein Hard-Fail — Backlog-Item anlegen „Initiales `.env.gpg` erzeugen (`bash scripts/encrypt-env.sh`, sobald Passphrase provisioniert ist — Spec §10 GE4)" + Konsolen-Warnung ausgeben. Das übrige Scaffold (Scripts, `.gitignore`, `.gitleaks.toml`, `.env.example`) liegt trotzdem.
+   6. **README um Secrets-Abschnitt erweitern** (am Ende anhängen): Verweis auf `docs/architecture/secrets-subsystem.md`, `.env`/`.env.gpg`-Modell, Workflow (`bash scripts/decrypt-env.sh` lokal → `.env` editieren → `bash scripts/encrypt-env.sh` → `.env.gpg` + `.env.example` committen).
+
 5. **Deploy scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
    - `Dockerfile`.
    - `.github/workflows/build.yml`: on push `main` → **Secret-Scan-Gate (gitleaks)** dann Image bauen + Push nach `ghcr.io/studis-softwareschmiede/<name>` via eingebautem `GITHUB_TOKEN` (`permissions: packages: write`).

@@ -347,6 +347,31 @@ db_migration_tool: <wert>   # auto-detected from <evidence>, confirmed <YYYY-MM-
 - **Tool-Mix erkannt:** wenn die Detection-Heuristik 2+ Tools mit `high`-Confidence findet (z.B. flyway-Dep UND prisma-Dep im selben Repo), Backlog-Item „Tool-Mix erkannt: <X>+<Y> — Anti-Pattern (Spec §13), Architektur-Entscheidung dokumentieren". Im Profil das Tool des dominanten Sub-Moduls eintragen (per AskUserQuestion).
 - **Kein Auto-Fix.** Wie der ganze `/adopt`-Pfad: 2f schreibt nur `profile.db_migration_tool`, erzeugt Backlog-Items, fasst Tool-spezifische Verzeichnisse (Flyway-Migrations, Prisma-Schema, etc.) **niemals** an.
 
+## 2g. Secrets-Subsystem — Detection, Scaffold + Audit-Finding (Spec [`docs/architecture/secrets-subsystem.md`](../../docs/architecture/secrets-subsystem.md) §11)
+
+Läuft **nach** der Migration-Tool-Detection (2f) und **vor** dem Audit (3) — idempotent, kein Auto-Fix, kein History-Rewrite.
+
+**a) Scaffold ergänzen, falls fehlend** (nicht-destruktiv):
+- Fehlt `scripts/encrypt-env.sh`: Script-Set kopieren (`${CLAUDE_PLUGIN_ROOT}/templates/_shared/secrets/{_lib.sh,encrypt-env.sh,decrypt-env.sh,load-env.sh}` → `scripts/`; encrypt/decrypt/load-env: `chmod +x`; `_lib.sh` ohne `+x`).
+- Fehlt `.env.example`: kopieren ans Repo-Root.
+- `.gitignore` prüfen: enthält sie die §5-Regeln (`.env` ignoriert, `.env.gpg` + `.env.example` negiert)? Falls nicht → `gitignore.snippet` anhängen (idempotent).
+- Fehlt `.gitleaks.toml`: `templates/_shared/secrets/gitleaks.toml` ans Repo-Root kopieren.
+- **Bestehende `.gitleaks.toml`** vorhanden: Regeln **mergen** (Allowlist-Eintrag `^\.env\.gpg$` + `useDefault = true` ergänzen, falls fehlend). Konflikte (bestehende Allowlist erlaubt bereits `.env` Klartext) → **Audit-Finding (Critical)** statt Auto-Patch (Spec §11, Invariante).
+- **Initiales `.env.gpg`** ist bei `/adopt` **optional** (Spec §11, Invariante): Scaffold liegt, `.env.gpg` entsteht beim ersten echten Secret. Kein GE4-Zwang.
+
+**b) Klartext-`.env` in der HEAD-Arbeitskopie** (getrackt):
+- `git ls-files .env '.env.*' | grep -vE '^\.env\.(gpg|example)$'` liefert einen Treffer → **Audit-Finding (Critical)**:
+  > `Klartext-.env ist getrackt — aus dem Index nehmen (git rm --cached .env), in .gitignore aufnehmen, Werte nach .env.gpg verschlüsseln (bash scripts/encrypt-env.sh). security/R01, Spec secrets-subsystem.md §11.`
+
+**c) Klartext-`.env` in der HISTORY (GE5 — KEIN History-Rewrite)**:
+- `git log --all --full-history --diff-filter=A --name-only --pretty=format:'' -- '.env' '.env.*' | grep -vE '^\.env\.(gpg|example)$' | grep -v '^$'` liefert einen Treffer → **Audit-Finding (Important)**, Board-Item anlegen:
+  - **Titel:** `🔒 SECRET-IN-HISTORY: Klartext-.env in der git-History (kein Auto-Rewrite)`
+  - **Body:** Pfad + erster Commit-SHA; Hinweis, dass die betroffenen Secrets als **kompromittiert** zu behandeln und zu **rotieren** sind (History-Rewrite ist destruktiv und wird bewusst NICHT automatisch ausgeführt — Mensch entscheidet, ob `git filter-repo`/BFG sinnvoll ist); Verweis auf `docs/architecture/secrets-subsystem.md` §11.
+  - **Labels:** `security`, `secrets-history` (Fallback ohne Labels, falls Label-Setup fehlt, analog Polyglott-Eskalation).
+- History-Rewrite wird **nie** automatisch ausgeführt (GE5, Invariante).
+
+**d) Kein Auto-Fix.** Schritt 2g schreibt nur Scaffold-Dateien (nur wenn fehlend), erzeugt Backlog-Items, fasst git-History **nie** an.
+
 ## 3. Auditieren (gegen den Fabrik-Standard)
 - **Automatik zuerst (objektiv, billig):** `gitleaks detect --source=. --no-git` (Secrets) + Dependency-Audit gemäß Sprache (`npm audit --omit=dev` / `pip-audit` / …) → Funde notieren.
 - **`reviewer` im Audit-Modus** (Task — s. `reviewer.md` „Audit-Modus"): prüft den **Bestand** (kein Diff) gegen **Security-Floor** (immer), die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** → priorisierte Funde (Critical/Important/Suggestions). Bei großen Repos **priorisiert** (Security-Floor überall; Pack-Checks auf repräsentative/heikle Dateien — Auth, Daten-/Netz-Zugriff, Eingänge; Architektur-Auffälligkeiten), NICHT zeilenweise.

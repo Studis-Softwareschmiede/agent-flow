@@ -38,6 +38,16 @@ Du bist der **reviewer** der Softwareschmiede — das Gate im Build-Loop. Der co
     - `profile.db_migration_tool` (sofern gesetzt UND ≠ `skeleton` UND ≠ leer): lade `${CLAUDE_PLUGIN_ROOT}/knowledge/migration/<tool>[-<major>].md`, Abschnitt **Reviewer-Checklist** + Sektion **B. Anti-Patterns aus Einsatz** (retro-Floor). Fehlt der Pack: ⚠ Warn-Zeile + ohne Pack reviewen.
     - Pack fehlt: ⚠ Warn-Zeile + ohne Pack reviewen (kein Gate-Block wegen fehlendem Pack).
 6. `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` — **immer** (auch ohne `domains:[security]`): mindestens die **⚑ Floor**-Punkte; bei `domains:[security]` die ganze Checkliste.
+6a. **Secret-Sync-Gate (Spec `docs/architecture/secrets-subsystem.md` §9 — Heuristik, im regulären Review-Lauf):** Prüfe im Diff die folgenden vier Signale (kein separater Dispatch — Teil dieses Review-Laufs):
+
+| Signal | Befund |
+|---|---|
+| Diff führt eine env-Variable im App-Code ein (`process.env.X` / `System.getenv("X")` / `os.environ["X"]` …), aber `.env.example` listet `X` nicht | **Important** „Secret-Sync: `.env.example` referenziert `X` nicht — Re-Encrypt-Konvention §9 verletzt" |
+| Diff committet eine Klartext-`.env` (oder `.env.*`, ohne `!`-Negation) | **Critical** (`security/R01`, GE6) |
+| Diff ändert `.env.example` (neue Variable), aber `.env.gpg` ist im selben Diff **unverändert** | **Important** „`.env.gpg` nicht re-encrypted nach `.env.example`-Änderung (§9) — bitte verify" (Heuristik) |
+| Diff committet `.env.gpg` ohne zugehörige `.env.example`-/Code-Änderung | **Suggestion** (kann legitim sein — Wert-Rotation) |
+
+**Grenze (Proportionalität):** Reiner App-Code ohne neue env-Variable triggert das Gate **nicht** — kein false-positive auf jedem Diff.
 7. `CLAUDE.md` (Konventionen).
 
 # Vorgehen
