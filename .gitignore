@@ -3,6 +3,11 @@
 *.plain
 cloudflare
 
+# Metrik-Ledger (lokale, pro-Lauf wachsende Mess-Daten — docs/architecture/metrics-subsystem.md §11)
+# dispatches.jsonl + items.jsonl gitignored; baseline.json bleibt committet.
+.claude/metrics/dispatches.jsonl
+.claude/metrics/items.jsonl
+
 # (Hinweis: KEIN `specs/`-Ignore — seit CONCEPT §4d sind Specs durable und
 #  versioniert; `templates/_docs/specs/` und projekt-eigene `docs/specs/` werden committet.)
 

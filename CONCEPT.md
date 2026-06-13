@@ -187,9 +187,9 @@ Damit Self-Improvement **messbar** bleibt (nicht im Kreis dreht):
 
 **Reversibilität** eingebaut: jede Promotion ist Commit/PR → schlechte Lektion zurückrollbar.
 
-**Tier 2 (später):** `/flow` loggt pro Item Metriken (Iterationen-bis-PASS, #Critical/Important, Test-First-Pass, Blocked) → Trends + GitHub Projects Insights-Charts.
+**Tier 2 — Metrik-/Performance-Subsystem:** `/flow` loggt pro Item Metriken (Iterationen-bis-PASS, #Critical/Important, Test-First-Pass, Blocked, Wall-Clock, Effort Points) + Soll-Ist-Abrechnung + Retro-Effektivitätsmessung via Regel-ID-Defektraten. Ausgestaltung, Datenmodell (JSONL-Ledger), EP-Formel und Rollout-Phasen: **[`docs/architecture/metrics-subsystem.md`](docs/architecture/metrics-subsystem.md)** (Source of Truth für Tier 2).
 
-Touchpoints: `reviewer` (Regel-ID-Tagging), `retro`/`train` (Ledger + Board pflegen).
+Touchpoints: `reviewer` (Regel-ID-Tagging), `retro`/`train` (Ledger + Board pflegen), `/flow` (einziger Metrik-Schreiber).
 
 ## 6. Verteilung: Repo-first, Plugin-ready
 
