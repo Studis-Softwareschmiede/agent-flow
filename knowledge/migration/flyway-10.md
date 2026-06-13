@@ -32,9 +32,9 @@ Flyway 10.x — Java-Migration-Tool, Current-Major mit **Java 17 als Mindest-Ver
 
 ## B. Anti-Patterns aus Einsatz
 
-> Felderfahrung (`retro`-Land). Initial leer.
+> Felderfahrung (`retro`-Land).
 
-_(noch keine Einträge)_
+- `flyway-10/B01` — **Dialekt-Modul-Lücke beim SB2→3-BOM-Bump bleibt unsichtbar bis zum Boot.** Hebt ein Spring-Boot-2→3-Upgrade Flyway transitiv über die BOM von 8/9 auf 10, fügt **OpenRewrite das nach `flyway-10/A05` nun pflichtige `flyway-database-<dialect>`-Modul NICHT hinzu** — der Diff sieht grün aus, kompiliert, und Unit-Tests (insb. mit `spring.flyway.enabled=false`) bleiben grün. Erst der **echte Boot** wirft `Unsupported Database: <engine>`. Zusätzlich ist Flyway 10s Engine-Erkennung **strenger** als 9.x: ein MariaDB-Server hinter `db_dialect=mysql` + MySQL-Connector, den Flyway 8/9 noch stillschweigend tolerierte, wird jetzt abgelehnt — Engine, JDBC-Treiber und `flyway-database-<dialect>`-Modul müssen konsistent zum **real laufenden** Server sein, nicht nur zum konfigurierten Dialekt. **Pflicht:** Bei jedem Upgrade, das Flyway transitiv auf 10 hebt, das Dialekt-Modul explizit ergänzen (A05/C05) UND einen Real-DB-Boot-Smoke gegen die tatsächliche Engine fahren (Querverweis `upgrade-subsystem §17-R1/R2` — Unit-Gate sieht diese Klasse strukturell nicht). [seen-in: 1 Projekt, promoted: 2026-06-03]
 
 ## C. Konventionen (Floor)
 
@@ -54,6 +54,8 @@ _(noch keine Einträge)_
 
 - Java-Toolchain < 17 + flyway-10-Dep → **Critical** (A01, kompiliert nicht).
 - `flyway-core` ohne passenden `flyway-database-<dialect>` Dep → **Important** (A05/C05 — fehlender Treiber, Boot-Fehler).
+- Upgrade-Diff hebt Flyway transitiv (BOM) auf 10, aber Dialekt-Modul fehlt im `pom` ODER kein Real-DB-Boot-Smoke gefahren → **Critical** (B01 — grüne Unit-Tests verdecken den `Unsupported Database`-Boot-Fehler; vgl. `upgrade-subsystem §17-R2`).
+- `db_dialect`/Connector ≠ real laufende Engine (z.B. `mysql`-Connector gegen MariaDB-Server) → **Critical** (B01 — Flyway 10 erkennt strenger als 9.x).
 - In-place-Edit einer committeten `V<n>`-Migration → **Critical** (C02).
 - `spring.jpa.hibernate.ddl-auto=update`/`create` UND Flyway aktiv → **Critical** (C04).
 - `U<n>`-Undo-Migration in OSS-Edition → **Important** (A04).

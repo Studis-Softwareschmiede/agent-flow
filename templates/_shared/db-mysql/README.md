@@ -15,7 +15,9 @@
 | Lizenz | GPLv2 — kein Oracle-Lizenz-Risiko, keine OCI-Tracking-Klauseln |
 | Drift | Knowledge-Pack `knowledge/sql-mysql.md` deckt beide explizit ab (Regeln `mysql/R01`–`R05` gelten für MySQL 8.0/8.4 LTS und MariaDB 11 LTS) |
 
-Wer zwingend Oracle-MySQL braucht: das Fragment funktioniert mit `image: mysql:8.4` 1:1, nur der Healthcheck-Befehl wechselt von `healthcheck.sh --connect --innodb_initialized` auf `mysqladmin ping`.
+Wer zwingend Oracle-MySQL braucht: das Fragment funktioniert mit `image: mysql:8.4` 1:1, nur der Healthcheck-Befehl wechselt von `healthcheck.sh --connect --innodb_initialized` auf `mysqladmin ping`. **Pin auf eine konkrete Version (`8.4`), nie floating `mysql:8`** — der Major-Tag driftet (8.0→8.4) und kann die Engine-Erkennung neuerer Migrationstools brechen.
+
+> **Dialekt↔Engine↔Treiber↔Migrationstool-Modul müssen konsistent sein.** Die Wire-Protokoll-Kompatibilität (Zeile oben) verleitet zur Annahme „JDBC/Treiber sind interchangeable" — das gilt **nicht durchgängig** für moderne Migrationstools. Flyway 10 z.B. erkennt MariaDB vs. MySQL strenger als 9.x und lehnt einen MySQL-Connector gegen einen MariaDB-Server ab (Detail: `knowledge/migration/flyway-10.md §B/B01`). Wenn `profile.db_dialect: mysql` real gegen die hier deployte **MariaDB** läuft, muss das **bewusst & konsistent** sein: passender JDBC-Treiber UND passendes `flyway-database-<dialect>`-Modul zur **tatsächlich laufenden** Engine. Querverweis Runtime-Verify-Pflicht: `docs/architecture/upgrade-subsystem.md §17`.
 
 ---
 
@@ -132,6 +134,7 @@ Bezüglich Migrations:
 
 - **Forward-only.** Eine committete `NNN_*.sql` wird NIE editiert; der Runner erkennt Drift via SHA-256 und bricht ab.
 - `CREATE INDEX IF NOT EXISTS` ist in MySQL **nicht** verfügbar (MariaDB schon, versions-abhängig) → die Marker-Tabelle ist die alleinige Schutzschicht.
+- **Dialekt-Konsistenz (Critical).** `db_dialect`/JDBC-Treiber/Migrationstool-Dialekt-Modul müssen zur **real laufenden** Engine passen (`mysql`-Connector gegen MariaDB-Server ist bei Flyway 10 ein Boot-Fehler, nicht nur ein Warning). DB-Image auf konkrete Version pinnen, nie floating Major-Tag.
 - `DATETIME` ohne Timezone (MySQL/MariaDB können kein `TIMESTAMPTZ`) — Server-`time_zone` global auf `+00:00` setzen, App stellt um.
 
 ---
