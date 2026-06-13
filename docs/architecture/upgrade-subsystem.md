@@ -156,8 +156,8 @@ train --bootstrap <pack-id>
 ## 9. Phase F — Execute + Test-Loop + Retro
 
 1. **`/flow` übernimmt** und arbeitet die Leiter-Items in `Depends-on`-Reihenfolge ab — unverändertes `coder → reviewer ⇄ Loop → tester → landen`-Spiel (CONCEPT §4b). Jede Stufe = ein `ng update`/Dependency-Bump + Schematics + Build/Tests grün als AC.
-2. **Pro Stufe harte Gates:** kein Landen auf rotem Review/Test (bestehende Gates, unverändert). Der reviewer prüft zusätzlich den Dependency-Compat-Check (§13/Welle 6).
-3. **Abschluss-Test:** nach der letzten Stufe voller Build + Test-Suite + Smoke; bei FAIL zurück in den Loop (Schleifenschutz max. 3 greift pro Item).
+2. **Pro Stufe harte Gates:** kein Landen auf rotem Review/Test (bestehende Gates, unverändert). Der reviewer prüft zusätzlich den Dependency-Compat-Check (§13/Welle 6). **Beachte die Execute-Disziplin-Feld-Lessons (§16):** Encoding-Pin pro java-Rung (§16-L1), OpenRewrite-Recipe-Bündelung (§16-L2), Lifecycle-Audit nach Test-Framework-Migration (§16-L3), Supervised-Runtime-Verify für ungetestete Pfade mit Breaking Changes (§16-L4), Online-Build nach Major (§16-L5).
+3. **Abschluss-Test:** nach der letzten Stufe voller Build + Test-Suite + Smoke; bei FAIL zurück in den Loop (Schleifenschutz max. 3 greift pro Item). „Build + Unit grün" ist bei API-Breaking-Changes in **nicht unit-getesteten** Pfaden **kein** ausreichendes Gate → supervised Runtime-Verify (§16-L4).
 4. **Profil zurückschreiben:** erreichte Ziel-Versionen ins `profile` (`/flow` §5a-analoge Invalidierung von `adoption_validated_at` falls DB-Achse berührt).
 5. **`retro` am Ende:** `/upgrade` triggert `/retro`, um die im Lauf gesammelten Lessons (`.claude/lessons/*`) in die Packs zu destillieren → das nächste Upgrade wird effizienter. Normaler PR+Gate-Weg (CONCEPT §5).
 
@@ -250,3 +250,19 @@ Nach Abschluss werden die `targets` in die regulären Achsen-Felder übernommen 
 | **6** | reviewer/tester + Profil-Achse | `agents/{reviewer,tester}.md` (Dependency-Compat-Check), `container_runtime`+`upgrade`-Block in `templates/*/profile.md` + `db-subsystem.md`, Verdrahtung in AGENTS.md/CONCEPT.md |
 
 Jede Welle landet als eigener PR (reviewer-Check + Mensch-Approve, CONCEPT §5).
+
+---
+
+## 16. Feld-Lessons (Execute-Disziplin)
+
+> Aus realen `/upgrade`-Läufen via `retro` destillierte, **method-generalisierbare** Befunde (kein Pack-API-Wissen — das lebt in den Packs). Gilt für Phase F (§9). Quelle der initialen Einträge: climatedataanalyser-Lauf 2026-06-02 (java 11→21, spring-boot 2.6→3.3.13; SB4 BLOCKED).
+
+- **§16-L1 — Language-Rung Encoding-Pin (java).** Bei jeder **java-version-Bump-Stufe** auf einer JDK-17-(oder älter-)Toolchain proaktiv `-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8` auf Surefire **und** Failsafe pinnen, **bevor** Tests laufen. Grund: JDK < 18 leitet `file.encoding` aus der Platform-Locale ab → Non-ASCII-Test-Daten (Umlaute in `@Sql`-Seeds u.ä.) werden auf Nicht-UTF-8-Locales falsch dekodiert; ein Bump kann grün auf der CI-JDK und rot auf der Ziel-JDK sein, ohne dass Produktivcode sich änderte. Detail + Reviewer-Schwere: `knowledge/java.md` `java/R16`. (Ab JDK 18 default UTF-8, JEP 400 — Pin nur für 17er-Stufen.)
+
+- **§16-L2 — OpenRewrite Recipe-Ordering / Chicken-Egg.** Ein Framework-Major-Recipe migriert nicht automatisch alle Sub-Frameworks (gesehen: `UpgradeSpringBoot_3_x` migriert Spring Batch **nicht**). Ein nachgelagertes Sub-Recipe (z.B. `SpringBatch4To5Migration`) schlägt fehl, wenn der noch un-migrierte Code unter der neuen Major-Version **nicht kompiliert** — OpenRewrite kann dann keine Typ-Attribution durchführen (Henne-Ei). **Regel:** Framework-Major-Recipe + zugehörige Sub-Recipes in **derselben** `activeRecipes`-Liste (komma-separiert) gemeinsam aktivieren; ODER zuerst die kompilierbarkeits-brechenden Altreste manuell entfernen (Compile herstellen), **dann** das Sub-Recipe. Die Plan-Stufe (§7) sollte zusammengehörige Recipes als **eine** AC-Gruppe bündeln, nicht als getrennte, voneinander abhängige Stufen.
+
+- **§16-L3 — Test-Framework-Migration kann tote Lifecycle-Methoden aktivieren.** Eine reine Annotation-Migration (gesehen: JUnit 4 `@Before` → JUnit 5 `@BeforeEach` via OpenRewrite) kann eine Lifecycle-Methode **erstmals zur Ausführung bringen**, die unter dem alten Framework still ignoriert wurde (eine `@Before`-annotierte Methode in einer Klasse, deren Runner sie nie aufrief) → Testdaten/Verhalten ändern sich, obwohl „nur Annotationen migriert" wurden. **Regel:** Nach Test-Framework-Migration die **neu laufenden** `@BeforeEach`/`@AfterEach`/`@BeforeAll`-Methoden auditieren (Diff der tatsächlich ausgeführten Setups), nicht nur den grünen Build vertrauen. Reviewer-Hook: `agents/reviewer.md` §4a(d).
+
+- **§16-L4 — „Compile + Unit grün" ≠ verifiziert; ungetestete Runtime-Pfade brauchen Supervised-Verify.** Code-Pfade ohne Unit-Coverage (gesehen: Spring-Batch-Item-Reader / File-Import, von der Test-Suite nicht abgedeckt) können nach einem Major-Bump mit Breaking API-Änderungen **kompilieren und alle Tests bestehen, aber zur Laufzeit brechen** (z.B. entfernte no-arg-Konstruktoren, verschobene Packages, `saveOrUpdate`→`merge`). **Regel:** Erkennt eine Upgrade-Stufe einen API-Breaking-Change in einem **nicht unit-getesteten** Pfad, ist „Build+Unit grün" **kein** ausreichendes Stufen-Gate → Stufe als **supervised Runtime-Verify** markieren (Mensch verifiziert den Pfad real, z.B. echten File-Import fahren) **vor** Merge, statt autonom zu landen. Andernfalls Stufe BLOCKED (§11) mit Begründung. Verhindert false-green Merges bei SB4/Batch6/Hibernate7-Sprüngen.
+
+- **§16-L5 — Stepping-Stones + Online-Build nach Major.** Mehrere Majors einer Achse **stufenweise** über aufeinanderfolgende Recipes fahren (z.B. spring-boot 3.3→3.5→4.0), **nach jedem Major grün verifizieren**, bevor der nächste läuft — bestätigt das Leiter-Prinzip (§1, „eine Major-Stufe nach der anderen"). Praxis-Detail: `mvn -o` (offline) **bricht direkt nach einem Major-Bump**, weil die neuen Plugin-/Dependency-Versionen noch nicht im lokalen Cache liegen → die erste Build-Verifikation einer neuen Major-Stufe **online** fahren.
