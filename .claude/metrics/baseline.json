@@ -17,5 +17,7 @@
   "forecast_mae": null,
   "defect_rates": {},
   "retro_effectiveness": null,
-  "learnings_rules": []
+  "learnings_rules": [],
+  "estimator_bias": {},
+  "estimator_calibration": []
 }
