@@ -25,7 +25,7 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 
 ### 1a. A-priori-Grössenklasse + `ep_est` (Spec `metrics-estimation` AC1–AC3, §2b)
 
-> **Einziger Schreiber:** Schätzung + Mapping laufen hier in /flow; das Ergebnis (`size_est`, `ep_est`) wird beim Done in `items.jsonl` eingetragen. **Kein LLM-Aufruf für S/M.** Fehler → `size_est = "M"`, `ep_est = null`, kein Loop-Abbruch (K3).
+> **Einziger Schreiber:** Schätzung + Mapping laufen hier in /flow; das Ergebnis (`size_est`, `ep_est`) wird beim Done in `items.jsonl` eingetragen. **Kein LLM-Aufruf für S/M** — L/XL dispatchen den `estimator`-Agenten (Schritt B). Fehler → `size_est = "M"`, `ep_est = null`, kein Loop-Abbruch (K3).
 
 **Schritt A — Heuristik (token-frei, deterministisch):**
 
@@ -45,13 +45,43 @@ Zähle aus Item-Body + referenzierter Spec (`docs/specs/<feature>.md`):
 | 8–12  | `L` |
 | ≥ 13  | `XL` |
 
-**Schritt B — LLM-Korrektur nur bei L/XL (AC2):**
+**Schritt B — estimator-Dispatch nur bei L/XL (AC1, replaces früherer 1-Satz-LLM-Korrektur):**
 
-Wurde `size_est` als `L` oder `XL` eingestuft: formuliere **1 Satz** (token-sparsam): „Ist diese Schätzung plausibel oder soll ich auf [kleinere/grössere Klasse] anpassen?" und beantworte die Frage im selben Reasoning-Schritt anhand des tatsächlichen Item-Umfangs. Korrigiere `size_est` falls offensichtlich falsch — keine eigene LLM-Runde, integriert in den laufenden Reasoning-Kontext. **S/M laufen ohne diese Korrektur.**
+Wurde `size_est` als `L` oder `XL` eingestuft — oder wurde `--estimate` explizit übergeben — dispatche den **`estimator`-Agenten** (Task). `S`/`M` überspringen diesen Schritt vollständig (keine LLM-Runde).
+
+**Übergabe an estimator** (via Task-Tool, `agents/estimator.md`):
+```
+STORY: <story-id>           # z.B. S-023
+SIZE_EST: <L|XL>
+SPEC: docs/specs/<feature>.md (AC<…>)
+COST_MODE: <aktiver Cost-Mode>
+```
+Der estimator liest selbst die Story-YAML, die Spec, `knowledge/reference-stories.md`,
+`baseline.json` und `items.jsonl` (Few-shot-Retrieval S1). Er gibt zurück:
+```json
+{ "dispo_est": <float|null>, "tok_est": <int|null>,
+  "confidence": "high|medium|low", "estimate_note": "<1-2 Sätze>",
+  "split_suggestion": null|{ "into": <n>, "rationale": "<text>" } }
+```
+
+**Empfang und Sofort-Persistenz** (fehlerresistent, blockiert nie den Loop):
+
+1. Parse das JSON-Objekt aus dem estimator-Output. Schlägt das Parsen fehl → `dispo_est_from_estimator = null`, `estimate_note_from_estimator = "estimator-Dispatch fehlgeschlagen"`, `confidence_from_estimator = "low"`.
+2. Speichere `dispo_est_from_estimator` (float|null) als Session-Variable (für Schritt C unten).
+3. Persistiere sofort via `board set` (alle mit `|| true` — fehlende Story-YAML oder CLI-Fehler blockieren nie):
+```bash
+board set <story-id> dispo_est "$dispo_est_from_estimator"        || true
+board set <story-id> estimate_note "$estimate_note_from_estimator" || true
+board set <story-id> confidence "$confidence_from_estimator"       || true
+```
+4. Liegt eine `split_suggestion` vor (nicht null): gib sie in der laufenden Session als informativen Hinweis aus (ändere das Board **nicht** — rein beratend, AC6).
+5. *(Metrik: T0 vor Dispatch setzen; nach Handoff Dispatch-Zeile in `dispatches.jsonl` appenden — Agent-Rolle `estimator`, `gate: null`.)*
 
 **Schritt C — Mapping size_est → ep_est (AC3):**
 
-Lese `.claude/metrics/baseline.json` (falls vorhanden). Lookup-Reihenfolge:
+**Bei `L`/`XL`** (estimator wurde dispatcht): `ep_est = dispo_est_from_estimator` (direkt übernehmen, kann `null` sein — erwarteter Zustand bei Cold-Start oder Fehlerpfad). **Schritt C-Lookup unten entfällt** für L/XL (estimator ersetzt die Heuristik-Tabelle).
+
+**Bei `S`/`M`** (kein estimator): Lese `.claude/metrics/baseline.json` (falls vorhanden). Lookup-Reihenfolge:
 
 1. Exakter Schnitt: `medians["<lang>|<cost_mode>|<size_est>"]` → `ep_est = medians[key].ep`
 2. Fehlt exakter Schnitt: aggregiere alle Einträge mit passendem `<lang>|<cost_mode>` unabhängig von Size → Median der `.ep`-Werte dieser Gruppe.
@@ -77,7 +107,7 @@ Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a 
 ### Ledger-Verzeichnis
 Bei Bedarf `.claude/metrics/` anlegen (falls nicht vorhanden). Schreiben **ausschließlich append-only** (`>>` / `jq -c . >> datei`). Historische Zeilen werden nie gelöscht oder umgeschrieben (Ausnahme: späterer `tok`-Patch durch `metrics-token-collect`).
 
-### Vor jedem Agent-Dispatch (coder / reviewer / dba / tester / cicd)
+### Vor jedem Agent-Dispatch (coder / reviewer / dba / tester / cicd / estimator)
 ```bash
 T0=$(date -u +%s)
 ```
@@ -91,7 +121,7 @@ Aus dem Klartext-Handoff deterministisch zählen (**kein** zweiter LLM-Lauf):
 | `ts` | `date -u +%Y-%m-%dT%H:%M:%SZ` |
 | `item` | Story-ID (`S-###`) |
 | `seq` | laufende Dispatch-Nummer **innerhalb** des Items (ab 1 hochzählen) |
-| `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` |
+| `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` \| `estimator` |
 | `iter` | N aus `Review-Handoff … (Iteration N)`; bei nicht-Loop-Rollen die zugehörige Iteration |
 | `gate` | `PASS` \| `CHANGES-REQUIRED` \| `FAIL` \| `SKIPPED-*` \| `null` (rollen-abhängig) |
 | `crit` | #Einträge unter `## Critical` (nur reviewer/dba; sonst 0) |
@@ -153,8 +183,8 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 |---|---|
 | `ts` | Done-Zeitstempel (ISO-8601 UTC) |
 | `item` | Story-ID (`S-###`) |
-| `size_est` | aus §1a (Heuristik + ggf. L/XL-Korrektur); Default `"M"` |
-| `ep_est` | aus §1a-Mapping über `baseline.json`; `null` wenn keine Baseline |
+| `size_est` | aus §1a-Heuristik (Schritt A); Default `"M"` |
+| `ep_est` | S/M: aus §1a-Lookup über `baseline.json`; L/XL: `dispo_est` vom estimator; `null` wenn kein Wert |
 | `ep_act` | EP nach obiger Formel |
 | `iters` | max `iter` der Dispatches |
 | `crit` | Σ `crit` |
