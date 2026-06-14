@@ -454,6 +454,65 @@ if window_ep_total > 0:
             "window_items": sorted(rule_items_set.get(rule_id, [])),
         }
 
+# ─── Estimator-Bias je <lang>|<cost_mode>|<size> (AC8 estimator-Spec) ────────
+# Vorzeichenbehafteter mittlerer Schätzfehler (Bias) je Schnitt:
+#   bias = ø( (ep_est − ep_act) / ep_act )   über alle Items im Schnitt
+#
+# Positives Ergebnis → Schätzung war höher als Ist-Wert → Überschätzung.
+# Negatives Ergebnis → Schätzung war unter dem Ist-Wert → Unterschätzung.
+# (coder/L16: Vorzeichen-Kommentar immer gegen Beispiel gegenprüfen:
+#  est=5, act=3 → (5−3)/3 = +0.67 → Überschätzung ✓)
+#
+# Nur Items MIT ep_est (nicht null) und positiven ep_act berücksichtigen.
+# Schnitte mit < MIN_MEDIAN solcher Items → kein Bias-Eintrag (keine Schein-Präzision).
+# Fenster: alle Items (keine --since-item-Filterung; Bias-Berechnung nutzt globale Basis).
+# Datenmangel (keine ep_est-Daten) → estimator_bias = {} (kein Abbruch, K3).
+#
+# Single-Writer: metrics-aggregate.sh schreibt estimator_bias (Modus C/AC8).
+# Die Werte werden von retro (Modus E) in estimator_calibration nachverfolgt.
+
+estimator_bias_groups = {}  # schnitt → list of relative errors
+for it in valid_items:
+    if it['ep_est'] is None:
+        continue
+    if it['ep_act'] <= 0:
+        continue
+    key = f"{it['lang']}|{it['cost_mode']}|{it['size_est']}"
+    rel_err = (it['ep_est'] - it['ep_act']) / it['ep_act']
+    if key not in estimator_bias_groups:
+        estimator_bias_groups[key] = []
+    estimator_bias_groups[key].append(rel_err)
+
+estimator_bias = {}
+for key, errors in sorted(estimator_bias_groups.items()):
+    if len(errors) < min_median:
+        continue  # Zu wenig Daten für diesen Schnitt → kein Eintrag
+    bias_val = sum(errors) / len(errors)
+    estimator_bias[key] = round(bias_val, 4)
+
+# ─── Persistente Felder aus bestehender baseline.json lesen ──────────────────
+# Beide Felder — learnings_rules (Modus D) und estimator_calibration (Modus E) —
+# werden von retro geschrieben und von diesem Script nur als Pass-through
+# weitergeführt (Single-Writer-Disziplin K2). Einmaliges Lesen der Datei.
+_persistent_baseline = {}
+if Path(baseline_file).is_file():
+    try:
+        with open(baseline_file, encoding='utf-8') as f:
+            _persistent_baseline = json.load(f)
+    except Exception:
+        pass
+
+# estimator_calibration (AC10 estimator-Spec): persistent aus baseline.json
+# Format je Eintrag:
+#   { target: str, kind: "bias"|"anchor"|"prompt",
+#     status: "pending"|"validated"|"reverted",
+#     baseline_mae: float|null, measured_mae: float|null,
+#     n: int, decided_after_item: int|null }
+estimator_calibration = []
+ec = _persistent_baseline.get('estimator_calibration')
+if isinstance(ec, list):
+    estimator_calibration = ec
+
 # ─── Gesamt-Retro-Effektivitäts-Kennzahl (AC4) ───────────────────────────────
 # Berechnet aus baseline.json.learnings_rules (wird von retro beim Promoten
 # befüllt — siehe retro.md Modus D). Format der Einträge:
@@ -474,15 +533,9 @@ retro_effectiveness = None
 learnings_rules = []
 
 # Bestehende learnings_rules aus baseline.json lesen (persistent über Läufe)
-if Path(baseline_file).is_file():
-    try:
-        with open(baseline_file, encoding='utf-8') as f:
-            existing_baseline = json.load(f)
-        lr = existing_baseline.get('learnings_rules')
-        if isinstance(lr, list):
-            learnings_rules = lr
-    except Exception:
-        pass
+lr = _persistent_baseline.get('learnings_rules')
+if isinstance(lr, list):
+    learnings_rules = lr
 
 validated = [r for r in learnings_rules if r.get('status') == 'Validated'
              and r.get('baseline_rate') is not None and r.get('measured_rate') is not None
@@ -515,6 +568,8 @@ output = {
     "defect_rates": defect_rates,
     "retro_effectiveness": retro_effectiveness,
     "learnings_rules": learnings_rules,
+    "estimator_bias": estimator_bias,
+    "estimator_calibration": estimator_calibration,
 }
 
 if calibration_note:
@@ -526,12 +581,16 @@ with open(work_out, 'w', encoding='utf-8') as f:
 
 # Status-Ausgabe — auf stderr (stdout bleibt sauber; konsistent mit metrics-collect.sh)
 n_rules = len(defect_rates)
+n_bias_schnitte = len(estimator_bias)
+n_calibration = len(estimator_calibration)
 print(f"[metrics-aggregate] OK: {n_items} Items, "
       f"{len(medians)} Median-Schnitte, "
       f"ep_per_token={'%.6f' % ep_per_token if ep_per_token is not None else 'null'}, "
       f"forecast_mae={forecast_mae}, "
       f"defect_rates={n_rules} Regeln, "
-      f"retro_effectiveness={retro_effectiveness}", file=sys.stderr)
+      f"retro_effectiveness={retro_effectiveness}, "
+      f"estimator_bias={n_bias_schnitte} Schnitte, "
+      f"estimator_calibration={n_calibration} Eintraege", file=sys.stderr)
 PYEOF
 
 EXIT_CODE=$?
