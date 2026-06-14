@@ -19,9 +19,9 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 - **Security-Frische (einmaliger Nudge):** `last_trained:` aus `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` lesen; ist es **> 90 Tage** her → einmal ausgeben: „🔒 security-Pack ist <N> Tage alt — `/train security` erwägen." (nur Hinweis, blockiert nicht).
 
 ## 1. Nächstes Item wählen
-- `gh project item-list …` → das **To-Do**-Item mit höchster Priority, dessen **Depends-on** alle `Done` sind.
-- Aus dem Item-Body die **Spec-Referenz** lesen: `Spec: docs/specs/<feature>.md` + `implements: AC<…>` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Item-Titel).
-- Keins → weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
+- `board next` → die nächste bereite Story als JSON (`id`, `spec`, `implements`, `parent`, `labels`, `priority`); Queue-Logik (Priority, Depends-Gate) lebt in der CLI.
+- Aus dem JSON die **Spec-Referenz** lesen: `spec: docs/specs/<feature>.md` + `implements: [AC…]` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Story-Titel).
+- Leere Ausgabe → nichts zu tun; weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
 
 ### 1a. A-priori-Grössenklasse + `ep_est` (Spec `metrics-estimation` AC1–AC3, §2b)
 
@@ -63,7 +63,7 @@ Lese `.claude/metrics/baseline.json` (falls vorhanden). Lookup-Reihenfolge:
 Wenn `medians[key].n` < 3: Schnitt vorhanden aber dünn — trotzdem verwenden (kein spezieller Fallback), aber intern notieren (kein User-Output nötig).
 
 ## 2. In Progress
-- Board-Item-Status → **In Progress**.
+- `board set <story-id> status "In Progress"` — setzt die Story auf In Progress.
 
 ## 2a. Secret-Sync-Gate (Spec [`docs/architecture/secrets-subsystem.md`](../../docs/architecture/secrets-subsystem.md) §9)
 
@@ -88,7 +88,7 @@ Aus dem Klartext-Handoff deterministisch zählen (**kein** zweiter LLM-Lauf):
 | Feld | Quelle |
 |---|---|
 | `ts` | `date -u +%Y-%m-%dT%H:%M:%SZ` |
-| `item` | Board-Item-Nummer |
+| `item` | Story-ID (`S-###`) |
 | `seq` | laufende Dispatch-Nummer **innerhalb** des Items (ab 1 hochzählen) |
 | `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` |
 | `iter` | N aus `Review-Handoff … (Iteration N)`; bei nicht-Loop-Rollen die zugehörige Iteration |
@@ -106,7 +106,7 @@ Beispiel-Append (jq):
 ```bash
 jq -nc \
   --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --argjson item 42 --argjson seq 1 \
+  --arg item "S-014" --argjson seq 1 \
   --arg agent "coder" --argjson iter 1 \
   --argjson gate 'null' --argjson crit 0 --argjson imp 0 \
   --argjson rule_hits '[]' \
@@ -151,7 +151,7 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 | Feld | Wert |
 |---|---|
 | `ts` | Done-Zeitstempel (ISO-8601 UTC) |
-| `item` | Board-Item-Nummer |
+| `item` | Story-ID (`S-###`) |
 | `size_est` | aus §1a (Heuristik + ggf. L/XL-Korrektur); Default `"M"` |
 | `ep_est` | aus §1a-Mapping über `baseline.json`; `null` wenn keine Baseline |
 | `ep_act` | EP nach obiger Formel |
@@ -205,14 +205,14 @@ das Item bleibt `Done` (K3/K4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis,
     Dann zusätzlich **dba** (Task, Review-Modus): `git diff` + Spec + Item-Label. *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies sein `Review-Gate`:
     - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` an coder zurück, N++ → 3.1.
     - `PASS` → **beide Gates PASS** → weiter zu 4 (Tester). Pflicht: **beide** Reviews müssen PASS sagen, bevor `tester` läuft.
-- **SPEC-LÜCKE:** meldet der coder eine strukturelle/Scope-Lücke (oder der reviewer/dba verweist auf `requirement`) → Item → **Blocked** (+ Kommentar „Spec unvollständig — `/requirement` nötig"), dem User melden. Nicht im Loop raten.
-- **Schleifenschutz:** überlebt derselbe Befund N=3 → Item → **Blocked** (+ Kommentar), melde es dem User, frage ob mit den restlichen Items weiter. Dann 1.
+- **SPEC-LÜCKE:** meldet der coder eine strukturelle/Scope-Lücke (oder der reviewer/dba verweist auf `requirement`) → `board set <id> status Blocked --reason "Spec unvollständig — /requirement nötig"`, dem User melden. Nicht im Loop raten.
+- **Schleifenschutz:** überlebt derselbe Befund N=3 → `board set <id> status Blocked --reason "Loop-Schutz N=3 — gleicher Befund überlebt 3 Iterationen"`, melde es dem User, frage ob mit den restlichen Items weiter. Dann 1.
 
 ## 4. Test-Gate
 - **tester** (Task): Working-Tree + die **Spec** (AC<…>). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies `Test-Gate`:
   - `FAIL` → als Befund zurück an coder (zählt zum Schleifenschutz) → 3.1.
   - `PASS` → weiter zu 5.
-  - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): Item → **Blocked** (Kommentar „DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"), dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert.
+  - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): `board set <id> status Blocked --reason "DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"`, dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert.
   - `SKIPPED-DOC-ONLY` → äquivalent zu PASS für den Gate-Zweck (Diff ist reine Doku in `tests/db-subsystem/`, kein mechanischer Effekt) → weiter zu 5. Im Normalfall greift der Pfad-Filter in §4 unten schon und der `tester` wird gar nicht dispatcht; dieser Branch ist Defense-in-Depth, falls der `tester` doch lief.
 
 **Template-Diff = hartes Test-Gate.** Wenn `git diff --name-only` (gegen `main`) im `agent-flow`-Repo Pfade unter `templates/_shared/db-*/**`, `templates/_shared/companion-*/**` oder `tests/db-subsystem/*.sh` (nur die Smoke-Skripte selbst, **nicht** README/Docs in dem Ordner) berührt, ist `Test-Gate: PASS` **Pflicht-Vorbedingung** für Schritt 5 — kein Bypass, auch nicht im `direct`-merge-Modus. Reine Doku-Edits (z.B. `tests/db-subsystem/README.md`) triggern das Gate **nicht** — der `tester` hat keinen Smoke für sowas und würde nur einen No-Op zurückgeben (siehe Pfad-Tabelle in `agents/tester.md`). Der `tester`-Agent dispatcht die zugehörigen Smoke-Skripte selbst (Auswahl-Regel siehe `agents/tester.md` → „DB-Subsystem-Smoke (bei Template-Diffs)"). Die früher angedachte CI-Variante (`.github/workflows/smoke-db.yml`) entfällt damit — lokaler Tester-Run ist schneller, kostet keine Actions-Minuten und scheitert nicht an leeren Org-Budgets.
@@ -244,11 +244,11 @@ IMAGE: <profile.image>:latest
 - Commit-Message endet mit der `Co-Authored-By`-Zeile (von cicd ausgeführt).
 
 **Orchestrator nach cicd-Rückgabe:**
-- `Rollout-Gate: PASS` → Item → **Done** (+ PR/Commit verlinkt) + Test-URL melden. *(Metrik: §2b „Beim Done"-Schritt ausführen — `items.jsonl`-Rollup-Zeile appenden.)*
-- `Rollout-Gate: FAIL` → melden + Item → **Blocked** (Kommentar: CI rot oder Smoke fehlgeschlagen), User fragen.
-- `Rollout-Gate: NEEDS-HUMAN` → Item → **Blocked**, User vorlegen.
+- `Rollout-Gate: PASS` → `board set <id> status Done` (+ PR/Commit verlinkt) + Test-URL melden. *(Metrik: §2b „Beim Done"-Schritt ausführen — `items.jsonl`-Rollup-Zeile appenden.)*
+- `Rollout-Gate: FAIL` → melden + `board set <id> status Blocked --reason "CI rot oder Smoke fehlgeschlagen"`, User fragen.
+- `Rollout-Gate: NEEDS-HUMAN` → `board set <id> status Blocked --reason "Manueller Eingriff nötig"`, User vorlegen.
 
-Bei `pr`-Policy und ausstehemdem Merge: Item → **In Review** (Orchestrator wartet auf Merge-Signal, dann Done).
+Bei `pr`-Policy und ausstehemdem Merge: `board set <id> status "In Review"` (Orchestrator wartet auf Merge-Signal, dann Done).
 
 ## 5a. Validate-Flag-Invalidierung (Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §18)
 **Nach erfolgreichem Landen** prüfen, ob der gerade gelandete Diff den Validate-Cache invalidiert:
