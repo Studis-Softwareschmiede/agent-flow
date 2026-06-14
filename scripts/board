@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# scripts/board — Board-Abstraktion (board-cli-Spec, AC1–AC6, AC10)
+# scripts/board — Board-Abstraktion (board-cli-Spec, AC1–AC11)
 #
-# Verben (implementiert): feature add, story add, set, show, list, next
-# Stubs/Delegationen:     rollup (AC7, #118), lint (AC8, board-lint.sh),
-#                         Single-Writer-Erzwingung (AC9), export-github (AC11)
+# Verben (implementiert): feature add, story add, set, show, list, next,
+#                         rollup (AC7), lint (AC8, delegiert an board-lint.sh),
+#                         export-github (AC11, Stub/Registrierung — #129)
+# Single-Writer-Erzwingung: AC9
 #
 # Requires: bash >= 4.0, python3 mit PyYAML
 #
@@ -886,10 +887,172 @@ PYEOF
 }
 
 # ---------------------------------------------------------------------------
-# Verb: rollup — Stub (implementiert in #118)
+# Verb: rollup — AC7
+#
+# `board rollup <F-###>` oder `board rollup --all`
+#
+# Berechnet für das/die Feature(s) die abgeleiteten Felder:
+#   stories[]  — sortierte Liste der Kind-Story-IDs
+#   progress   — z.B. "2/3 done · 1 in progress"
+# Schreibt NUR diese abgeleiteten Felder + updated_at atomar zurück.
 # ---------------------------------------------------------------------------
 cmd_rollup() {
-  die "board rollup: noch nicht implementiert (Item #118)"
+  [[ $# -ge 1 ]] || die "rollup: Verwendung: board rollup <F-###> | --all"
+
+  local target="$1"
+
+  require_board
+
+  if [[ "$target" == "--all" ]]; then
+    # Alle Features rollup'en
+    local had_error=0
+    local feat_file
+    while IFS= read -r feat_file; do
+      [[ -n "$feat_file" ]] || continue
+      _rollup_one "$feat_file" || had_error=1
+    done < <(all_features)
+    return $had_error
+  else
+    # Einzelnes Feature
+    [[ "$target" =~ ^F-[0-9]{3,}$ ]] || \
+      die "rollup: ID muss F-### sein oder --all, war '${target}'"
+    local feat_file
+    feat_file="$(find_item_file "$target")"
+    [[ -n "$feat_file" ]] || die "rollup: Feature '${target}' nicht gefunden"
+    _rollup_one "$feat_file"
+  fi
+}
+
+# Interne Hilfsfunktion: berechnet + schreibt Rollup für eine Feature-Datei.
+_rollup_one() {
+  local feat_file="$1"
+
+  # Feature-ID ermitteln
+  local feat_id
+  feat_id="$(yaml_field "$feat_file" id)"
+  [[ -n "$feat_id" ]] || die "rollup: Feature-Datei '${feat_file}' hat keine id"
+
+  local ts
+  ts="$(now_ts)"
+
+  # Alle Kind-Stories einsammeln
+  local story_files=()
+  if [[ -d "$STORIES_DIR" ]]; then
+    while IFS= read -r -d '' f; do
+      story_files+=("$f")
+    done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null | sort -z)
+  fi
+
+  # Atomar: temp-Datei in gleichem Verzeichnis wie Feature-Datei
+  local dir_abs
+  dir_abs="$(cd "$(dirname "$feat_file")" && pwd)"
+  local tmp_file
+  tmp_file="$(mktemp "${dir_abs}/$(basename "$feat_file").XXXXXX")"
+
+  trap "rm -f \"$tmp_file\"" EXIT
+
+  # Python: berechnet stories[] + progress, schreibt nur abgeleitete Felder
+  python3 - "$feat_file" "$tmp_file" "$feat_id" "$ts" \
+            "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" <<'PYEOF'
+import sys, yaml, json, datetime, re
+
+feat_file   = sys.argv[1]
+tmp_out     = sys.argv[2]
+feat_id     = sys.argv[3]
+ts          = sys.argv[4]
+n_stories   = int(sys.argv[5])
+story_files = sys.argv[6 : 6 + n_stories]
+
+ID_NUM = re.compile(r'^S-(\d+)$')
+
+def id_num(sid):
+    m = ID_NUM.match(str(sid or ""))
+    return int(m.group(1)) if m else 999999
+
+def normalize_ts(val):
+    """YAML datetime → ISO-8601-UTC-String."""
+    if isinstance(val, datetime.datetime):
+        if val.tzinfo is not None:
+            import datetime as dt
+            utc = val.astimezone(dt.timezone.utc)
+        else:
+            utc = val
+        return utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if isinstance(val, datetime.date):
+        return val.isoformat() + "T00:00:00Z"
+    return val
+
+def normalize_all(val):
+    """Rekursive Normalisierung (YAML-Typen → JSON-serialisierbar)."""
+    if isinstance(val, datetime.datetime) or isinstance(val, datetime.date):
+        return normalize_ts(val)
+    if isinstance(val, dict):
+        return {k: normalize_all(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [normalize_all(i) for i in val]
+    return val
+
+# --- Feature-YAML laden ---
+with open(feat_file) as f:
+    feat_data = yaml.safe_load(f) or {}
+
+# --- Kind-Stories finden + Status einlesen ---
+status_counter = {}  # status -> count
+child_ids = []
+
+for spath in story_files:
+    try:
+        with open(spath) as f:
+            sdata = yaml.safe_load(f) or {}
+    except Exception:
+        continue
+    parent = str(sdata.get("parent", "")).strip()
+    if parent != feat_id:
+        continue
+    sid = str(sdata.get("id", "")).strip()
+    if not sid:
+        continue
+    sstatus = str(sdata.get("status", "")).strip()
+    child_ids.append(sid)
+    status_counter[sstatus] = status_counter.get(sstatus, 0) + 1
+
+# Sortiert nach ID-Nummer
+child_ids.sort(key=id_num)
+
+# --- progress berechnen ---
+total       = len(child_ids)
+done_count  = status_counter.get("Done", 0)
+ip_count    = status_counter.get("In Progress", 0)
+review_count = status_counter.get("In Review", 0)
+blocked_count = status_counter.get("Blocked", 0)
+todo_count  = status_counter.get("To Do", 0)
+
+# Format: "<done>/<total> done [· <n> in progress] [· <n> in review] [· <n> blocked]"
+parts = [f"{done_count}/{total} done"]
+if ip_count > 0:
+    parts.append(f"{ip_count} in progress")
+if review_count > 0:
+    parts.append(f"{review_count} in review")
+if blocked_count > 0:
+    parts.append(f"{blocked_count} blocked")
+
+progress_str = " · ".join(parts) if total > 0 else "0/0 done"
+
+# --- Nur abgeleitete Felder + updated_at überschreiben ---
+feat_data = normalize_all(feat_data)
+feat_data["stories"]    = child_ids if child_ids else None
+feat_data["progress"]   = progress_str
+feat_data["updated_at"] = ts
+
+with open(tmp_out, "w") as f:
+    yaml.dump(feat_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+PYEOF
+
+  mv "$tmp_file" "$feat_file"
+
+  trap - EXIT
+
+  echo "$feat_id"
 }
 
 # ---------------------------------------------------------------------------
@@ -905,15 +1068,34 @@ cmd_lint() {
 }
 
 # ---------------------------------------------------------------------------
-# Verb: export-github — Stub (AC11, implementiert in [[board-github-export]])
+# Verb: export-github — Stub/Registrierung (AC11)
+#
+# Delegiert an board-github-export (spezifiziert in [[board-github-export]]).
+# Das Tool selbst wird in #129 implementiert.
+# Bis dahin: Hilfetext ausgeben, Exit 2 (Abhängigkeit fehlt).
 # ---------------------------------------------------------------------------
 cmd_export_github() {
-  cat >&2 <<'EOF'
-board export-github: Verb registriert.
-Das eigentliche Migrationsverhalten ist in [[board-github-export]] spezifiziert
-und noch nicht implementiert.
+  cat <<'EOF'
+board export-github — GitHub-Board nach board/-Dateien exportieren
+
+Verwendung:
+  board export-github [<optionen>]
+
+Beschreibung:
+  Liest das aktuelle GitHub Project v2 (Issues, Status, Priority, depends,
+  Spec-Refs) und schreibt board/features/ + board/stories/ im Board-Format.
+  Das Verhalten ist in [[board-github-export]] spezifiziert.
+
+Status:
+  Noch nicht implementiert — wird in Item #129 bereitgestellt.
+  Delegationsziel: scripts/board-github-export
+
+Exit-Codes:
+  0   Erfolg (nach Implementierung)
+  1   Fehler beim Export
+  2   Abhängigkeit fehlt (board-github-export nicht installiert)
 EOF
-  exit 1
+  exit 2
 }
 
 # ---------------------------------------------------------------------------
