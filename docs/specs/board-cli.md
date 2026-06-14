@@ -44,7 +44,7 @@ Eine dünne, deterministische CLI (`scripts/board`), die das Board-Dateiformat k
 `board list [--type feature|story] [--status …] [--parent F-###]` gibt die gefilterte Liste als JSON-Array aus, sortiert nach `priority` dann `id`. Ohne Filter: alle Items.
 
 ### V6 — `board next` (Queue-Logik)
-`board next` liefert die **erste Story mit `status=To Do`, deren `depends` alle `status=Done` sind**, sortiert nach: Story-`priority` (P0 zuerst), Tie-Break Parent-Feature-`priority`, dann `id` aufsteigend (board-subsystem §7). Ausgabe als JSON: mindestens `id`, `spec`, `implements`, `parent`, `priority`, `labels`. Keine bereite Story → leere/`null`-Ausgabe, Exit 0 (kein Fehler). Stories mit ungelösten `depends` werden übersprungen, nicht zurückgegeben.
+`board next` liefert die **erste Story mit `status=To Do`, deren `depends` alle `status=Done` sind**, sortiert nach: Story-`priority` (P0 zuerst), Tie-Break Parent-Feature-`priority`, dann `id` aufsteigend (board-subsystem §7). Ausgabe als JSON: mindestens `id`, `spec`, `implements`, `parent`, `priority`, `labels`; zusätzlich die Kontext-Felder `title`, `status` und `depends` für `/flow`. Keine bereite Story → leere/`null`-Ausgabe, Exit 0 (kein Fehler). Stories mit ungelösten `depends` werden übersprungen, nicht zurückgegeben. Fehlt `board.yaml` oder das Stories-Verzeichnis → leere Ausgabe, Exit 0 (kein Fehler; `/flow` interpretiert das als „nichts zu tun").
 
 ### V7 — `board rollup`
 `board rollup <F-###>` berechnet `stories[]` und `progress` des Features aus den Kind-Stories neu und schreibt sie ([[board-schema]] V10). Optional `board rollup --all` über alle Features. Es ist die einzige Quelle für `progress`/`Active`/`Done`-Vorschlag (§11).
@@ -68,7 +68,7 @@ Alle lesenden Verben sind ohne LLM und deterministisch. Schreibende Verben (`add
 - **AC3** — `board set <id> <feld> <wert>` setzt das Feld + `updated_at`; `status=Blocked` erfordert `--reason`→`blocked_reason`, `status=Done` setzt `done_at`. *(V3)*
 - **AC4** — `board show <id>` gibt das Item als JSON inkl. abgeleiteter Felder aus; unbekannte ID → Exit ≠ 0. *(V4)*
 - **AC5** — `board list` filtert nach `--type`/`--status`/`--parent` und gibt ein nach `priority,id` sortiertes JSON-Array aus. *(V5)*
-- **AC6** — `board next` liefert die erste `To Do`-Story mit vollständig erfüllten `depends`, sortiert Story-priority → Feature-priority → id; Stories mit offenen `depends` werden übersprungen; keine bereite Story → leere Ausgabe, Exit 0. *(V6)*
+- **AC6** — `board next` liefert die erste `To Do`-Story mit vollständig erfüllten `depends`, sortiert Story-priority → Feature-priority → id; Stories mit offenen `depends` werden übersprungen; keine bereite Story oder fehlendes Board → leere Ausgabe, Exit 0. JSON-Ausgabe enthält mindestens `id`, `spec`, `implements`, `parent`, `priority`, `labels` sowie die Kontext-Felder `title`, `status`, `depends` für `/flow`. *(V6)*
 - **AC7** — `board rollup <F-###>` berechnet `stories[]`/`progress` aus den Kind-Stories neu und schreibt sie; `--all` über alle Features. *(V7)*
 - **AC8** — `board lint` führt die Schema-Regeln aus und endet Exit ≠ 0 nur bei ≥1 Fehler (Warnungen allein → Exit 0). *(V8, [[board-schema]] V11)*
 - **AC9** — `board set <story> status …` ist nur aus dem `/flow`-Kontext erlaubt; ein anderer Aufrufer → kein Schreiben, Fehlermeldung, Exit ≠ 0; nicht-Status-Felder bleiben für `requirement` erlaubt. *(V9)*
@@ -79,7 +79,7 @@ Alle lesenden Verben sind ohne LLM und deterministisch. Schreibende Verben (`add
 
 ### Verb-Übersicht (board-subsystem §7)
 ```
-board next                                          → JSON (id, spec, implements, parent, priority, labels) | null
+board next                                          → JSON (id, spec, implements, parent, priority, labels, title, status, depends) | null
 board show <id>                                     → JSON (Feature|Story, alle Felder)
 board feature add --title --goal --priority [...]   → F-###
 board story   add --parent --title --spec --implements [...] → S-###
@@ -99,7 +99,7 @@ board export-github                                 → siehe [[board-github-exp
 
 ## Edge-Cases & Fehlerverhalten
 
-- **`board.yaml` fehlt** (Board nicht initialisiert) → schreibende Verben Fehler „Board nicht initialisiert"; `board lint` meldet es.
+- **`board.yaml` fehlt** (Board nicht initialisiert) → schreibende Verben Fehler „Board nicht initialisiert"; `board lint` meldet es. Lesende Verben (`next`, `list`, `show`) liefern leere Ausgabe/Exit 0 bzw. „nicht gefunden"-Fehler; insbesondere `board next` ohne Board → leere Ausgabe, Exit 0.
 - **`board next` ohne bereite Story** → `null`/leer, Exit 0 (kein Fehler; `/flow` interpretiert das als „nichts zu tun").
 - **Zyklische `depends`** → `board next` kann eine Story nie liefern (alle blockieren sich); `board lint` deckt den Zyklus als Fehler auf ([[board-schema]] V7).
 - **`set status` auf nicht-existente ID** → Exit ≠ 0, kein Schreiben.

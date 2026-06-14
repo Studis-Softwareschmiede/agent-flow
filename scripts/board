@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# scripts/board — Board-Abstraktion (board-cli-Spec, AC1–AC5, AC10)
+# scripts/board — Board-Abstraktion (board-cli-Spec, AC1–AC6, AC10)
 #
-# Verben (dieses Item): feature add, story add, set, show, list
-# Nicht in diesem Item: next (AC6), rollup (AC7), lint (AC8),
-#                       Single-Writer-Erzwingung (AC9), export-github (AC11)
+# Verben (implementiert): feature add, story add, set, show, list, next
+# Stubs/Delegationen:     rollup (AC7, #118), lint (AC8, board-lint.sh),
+#                         Single-Writer-Erzwingung (AC9), export-github (AC11)
 #
 # Requires: bash >= 4.0, python3 mit PyYAML
 #
@@ -13,6 +13,7 @@
 #   set          → <id> (stdout)
 #   show         → JSON (stdout)
 #   list         → JSON-Array (stdout)
+#   next         → JSON (id, spec, implements, parent, priority, labels, …) | leer (Exit 0)
 #   Fehler       → Meldung (stderr), Exit ≠ 0
 
 set -euo pipefail
@@ -735,10 +736,153 @@ PYEOF
 }
 
 # ---------------------------------------------------------------------------
-# Verb: next — Stub (implementiert in #117)
+# Verb: next — Queue-Logik (AC6, board-cli-Spec V6 + board-subsystem §7)
+#
+# Algorithmus:
+#   1. Kandidaten = alle Stories mit status == "To Do"
+#   2. Filter: alle depends-Stories haben status == "Done" (offene → überspringen)
+#   3. Sortierung: Story-priority (P0<P1<P2<P3) → Parent-Feature-priority → id (aufsteigend)
+#   4. Ergebnis = erstes Element als JSON (id, spec, implements, parent, priority, labels)
+#      Keine bereite Story → leere Ausgabe, Exit 0
 # ---------------------------------------------------------------------------
 cmd_next() {
-  die "board next: noch nicht implementiert (Item #117)"
+  # KEIN require_board — next ist ein lesendes Verb; fehlendes Board/Verzeichnis → leere
+  # Ausgabe + Exit 0 (board-cli-Spec AC6 Edge-Case; coder/L15).
+
+  # Alle Dateien einsammeln
+  local story_files=()
+  if [[ -d "$STORIES_DIR" ]]; then
+    while IFS= read -r -d '' f; do
+      story_files+=("$f")
+    done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null | sort -z)
+  fi
+
+  local feature_files=()
+  if [[ -d "$FEATURES_DIR" ]]; then
+    while IFS= read -r -d '' f; do
+      feature_files+=("$f")
+    done < <(find "$FEATURES_DIR" -name "F-*.yaml" -print0 2>/dev/null | sort -z)
+  fi
+
+  # Queue-Logik via Python (deterministisch, kein LLM)
+  python3 - "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" \
+             "${#feature_files[@]}" "${feature_files[@]+"${feature_files[@]}"}" <<'PYEOF'
+import sys, yaml, json, datetime, re
+
+# Argumente: <n_stories> <story_file...> <n_features> <feature_file...>
+args = sys.argv[1:]
+n_stories  = int(args[0])
+story_files  = args[1 : 1 + n_stories]
+rest         = args[1 + n_stories:]
+n_features   = int(rest[0])
+feature_files = rest[1 : 1 + n_features]
+
+PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+ID_NUM = re.compile(r'^[FS]-(\d+)$')
+
+def load_yaml(path):
+    try:
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+def normalize(val):
+    """YAML-Typen → JSON-serialisierbar."""
+    if isinstance(val, datetime.datetime):
+        if val.tzinfo is not None:
+            import datetime as dt
+            val = val.astimezone(dt.timezone.utc)
+        return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if isinstance(val, datetime.date):
+        return val.isoformat()
+    if isinstance(val, dict):
+        return {k: normalize(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [normalize(i) for i in val]
+    return val
+
+def id_num(id_str):
+    m = ID_NUM.match(str(id_str or ""))
+    return int(m.group(1)) if m else 999999
+
+# --- Alle Stories laden ---
+stories = {}  # id -> data
+for path in story_files:
+    data = load_yaml(path)
+    sid = str(data.get("id", "")).strip()
+    if sid:
+        stories[sid] = data
+
+# --- Alle Features laden (für Tie-Break-Priority) ---
+features = {}  # id -> data
+for path in feature_files:
+    data = load_yaml(path)
+    fid = str(data.get("id", "")).strip()
+    if fid:
+        features[fid] = data
+
+# --- Schritt 1: Kandidaten = To-Do-Stories ---
+candidates = [
+    (sid, data)
+    for sid, data in stories.items()
+    if str(data.get("status", "")).strip() == "To Do"
+]
+
+# --- Schritt 2: Filter — alle depends Done ---
+ready = []
+for sid, data in candidates:
+    deps = data.get("depends")
+    if deps is None:
+        deps = []
+    elif not isinstance(deps, list):
+        deps = [deps]
+    deps = [str(d).strip() for d in deps if str(d).strip()]
+
+    all_done = True
+    for dep_id in deps:
+        dep_data = stories.get(dep_id, {})
+        if str(dep_data.get("status", "")).strip() != "Done":
+            all_done = False
+            break
+
+    if all_done:
+        ready.append((sid, data))
+
+if not ready:
+    # Keine bereite Story — leere Ausgabe, Exit 0
+    sys.exit(0)
+
+# --- Schritt 3: Sortierung ---
+def sort_key(item):
+    sid, data = item
+    story_prio   = PRIORITY_ORDER.get(str(data.get("priority", "P3")), 9)
+    parent_id    = str(data.get("parent", "")).strip()
+    parent_data  = features.get(parent_id, {})
+    feature_prio = PRIORITY_ORDER.get(str(parent_data.get("priority", "P3")), 9)
+    return (story_prio, feature_prio, id_num(sid))
+
+ready.sort(key=sort_key)
+
+# --- Schritt 4: Erste Story als JSON ausgeben ---
+best_id, best_data = ready[0]
+best_data = normalize(best_data)
+
+output = {
+    "id":         best_data.get("id"),
+    "spec":       best_data.get("spec"),
+    "implements": best_data.get("implements"),
+    "parent":     best_data.get("parent"),
+    "priority":   best_data.get("priority"),
+    "labels":     best_data.get("labels"),
+    # Zusatzfelder für /flow (title, status als Kontext)
+    "title":      best_data.get("title"),
+    "status":     best_data.get("status"),
+    "depends":    best_data.get("depends"),
+}
+
+print(json.dumps(output, ensure_ascii=False))
+PYEOF
 }
 
 # ---------------------------------------------------------------------------
