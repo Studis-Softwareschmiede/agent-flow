@@ -9,7 +9,7 @@ smoke: "curl -fsS -o /dev/null -w '%{http_code}' http://localhost:8080/"
 merge_policy: pr
 cost_mode: balanced     # Token-Hebel je Lauf überschreibbar (/flow --cost …): low-cost | balanced | max-quality — siehe knowledge/model-tiers.md
 default_branch: main    # Base für PR/direct-Push/CI-Watch. /adopt überschreibt ihn beim Fork-Import mit dem echten Default (oft master); flow leitet ihn sonst zur Laufzeit via `gh repo view` ab.
-board: <PROJECT_NUMMER>
+board: file
 deploy: docker
 image: ghcr.io/studis-softwareschmiede/<name>
 registry: ghcr

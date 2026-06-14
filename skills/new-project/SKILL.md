@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + GitHub-Board an, erkennt/erfragt den Stack + DB-Dialekt + optionale Companions (Cache/Queue/Sessions) + Build-Tool + optionale Frameworks, scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI + optionales DB-Compose-Fragment + optionale Companion-Fragmente aus ${CLAUDE_PLUGIN_ROOT}/templates/. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
+description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + board/-Skelett (File-Board) an, erkennt/erfragt den Stack + DB-Dialekt + optionale Companions (Cache/Queue/Sessions) + Build-Tool + optionale Frameworks, scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI + optionales DB-Compose-Fragment + optionale Companion-Fragmente aus ${CLAUDE_PLUGIN_ROOT}/templates/. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
 ---
 
 # /new-project <name> [--lang <x>] [--db <dialect>] [--companions <list>] [--build <build>] [--framework <id>@<major>]… [--migration-tool <tool>]   ·   /init
@@ -57,9 +57,19 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
    - `init`: Detection wie in `/adopt` Schritt 2f — dort dokumentiert; hier nur Verweis, doppelt-pflegen vermeiden.
    - **Erlaubte Werte (Spec §2 Enum):** siehe oben. Bei ungültigem Wert: Frage wiederholen (kein Silent-Fallback).
    - **Bei `db_dialect: none`:** Frage entfällt komplett — `db_migration_tool` wird nicht gesetzt (Loader interpretiert fehlend = `skeleton`, no-op, weil bei `db_dialect: none` kein Migration-Pfad geladen wird; Spec §5 Sonderfall + §11).
-3. **Board**: `gh project create` (Org-Ebene), Status-Werte `To Do / In Progress / Blocked / In Review / Done` → Nummer notieren.
+3. **Board-Skelett anlegen** (board-subsystem §8; Spec `docs/specs/new-project-board.md`):
+   - Prüfen ob `board/` bereits existiert — falls ja: Meldung „Board existiert bereits" + keine Änderung (idempotent, Spec Edge-Case).
+   - Falls kein Init-Verb in der `board`-CLI vorhanden: minimales `board/board.yaml` direkt schreiben (strikt nach [[board-schema]] V1):
+     ```yaml
+     schema_version: 1
+     project_slug: <projektname-kebab-case>   # aus <name> normalisiert: Kleinbuchstaben, Sonderzeichen→Bindestrich
+     next_feature_id: 1
+     next_story_id: 1
+     ```
+   - `board/features/.gitkeep` + `board/stories/.gitkeep` anlegen (damit leere Ordner committet werden).
+   - Kein `gh project create`, keine Netzwerkabhängigkeit, keine PAT-Anforderung.
 4. **`.claude/` scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
-   - `profile.md`: `language`, `domains`, `db_dialect: <wert aus Schritt 2a>` (Pflicht, Enum `postgres|mysql|sqlite|mongodb|none`; Spec §2), `companions: [<liste aus Schritt 2b>]` (Liste, default `[]`; Spec §17 — heute nur `redis` gültig), `build: <wert aus Schritt 2c>` (Pflicht ab Sprachen mit Build-Tool, Enum `maven|gradle|npm|pnpm|uv|cargo|none`; Spec framework-build-subsystem §2 + §10), `frameworks: [<liste aus Schritt 2d>]` (Liste, default `[]`, Form `<id>@<major>`; Spec §2), `db_migration_tool: <wert aus Schritt 2e>` (optional, Enum aus migration-tool-subsystem §2 — `skeleton|flyway@9|flyway@10|liquibase@4|prisma|alembic|knex|typeorm|sequelize|django-migrations|supabase|golang-migrate|sqlx-cli|refinery|sqflite`; **bei `db_dialect: none` weggelassen**; Loader interpretiert fehlend = `skeleton`, Spec §11 Backwards-Compat), `test`/`lint`/`smoke`, `merge_policy: pr`, `cost_mode: balanced` (Token-Hebel, Default `balanced`; je Lauf via `/flow --cost …` überschreibbar — Enum `low-cost|balanced|max-quality`, Matrix `knowledge/model-tiers.md`), `board: <nr>`, `deploy: docker`, `image: ghcr.io/studis-softwareschmiede/<name-lowercase>` (Docker/ghcr-Repo-Namen sind IMMER kleingeschrieben — Repo `Foo-Bar` → Image `foo-bar`), `registry: ghcr`, `container_port: <EXPOSE aus dem Template-Dockerfile, z.B. 80|8080>` (für `/preview`; `preview_port` wird erst beim ersten `/preview up` vergeben).
+   - `profile.md`: `language`, `domains`, `db_dialect: <wert aus Schritt 2a>` (Pflicht, Enum `postgres|mysql|sqlite|mongodb|none`; Spec §2), `companions: [<liste aus Schritt 2b>]` (Liste, default `[]`; Spec §17 — heute nur `redis` gültig), `build: <wert aus Schritt 2c>` (Pflicht ab Sprachen mit Build-Tool, Enum `maven|gradle|npm|pnpm|uv|cargo|none`; Spec framework-build-subsystem §2 + §10), `frameworks: [<liste aus Schritt 2d>]` (Liste, default `[]`, Form `<id>@<major>`; Spec §2), `db_migration_tool: <wert aus Schritt 2e>` (optional, Enum aus migration-tool-subsystem §2 — `skeleton|flyway@9|flyway@10|liquibase@4|prisma|alembic|knex|typeorm|sequelize|django-migrations|supabase|golang-migrate|sqlx-cli|refinery|sqflite`; **bei `db_dialect: none` weggelassen**; Loader interpretiert fehlend = `skeleton`, Spec §11 Backwards-Compat), `test`/`lint`/`smoke`, `merge_policy: pr`, `cost_mode: balanced` (Token-Hebel, Default `balanced`; je Lauf via `/flow --cost …` überschreibbar — Enum `low-cost|balanced|max-quality`, Matrix `knowledge/model-tiers.md`), `board: file`, `deploy: docker`, `image: ghcr.io/studis-softwareschmiede/<name-lowercase>` (Docker/ghcr-Repo-Namen sind IMMER kleingeschrieben — Repo `Foo-Bar` → Image `foo-bar`), `registry: ghcr`, `container_port: <EXPOSE aus dem Template-Dockerfile, z.B. 80|8080>` (für `/preview`; `preview_port` wird erst beim ersten `/preview up` vergeben).
    - **Pack-Vorhandensein-Check** (nach Profile-Schreiben, vor Step 5): für jedes gewählte Framework + Build-Tool prüfen, ob der Pack unter `${CLAUDE_PLUGIN_ROOT}/knowledge/frameworks/<id>-<major>.md` bzw. `${CLAUDE_PLUGIN_ROOT}/knowledge/build/<build>.md` existiert. Fehlt: **⚠ Konsolen-Warnung** ausgeben + **Backlog-Item** anlegen („Pack `<id>` anlegen (via `/train <id>`)"). Kein Hard-Fail — Loader verhält sich graceful (Spec §11 + §12 Graceful-Degradation). **Migration-Pack analog:** wenn `db_migration_tool != skeleton`, prüfen ob `${CLAUDE_PLUGIN_ROOT}/knowledge/migration/<tool>[-<major>].md` existiert. Fehlt: Backlog-Item „Pack `migration/<tool>` anlegen (via `/train migration/<tool>` oder manuelle Spec)" (Spec migration-tool-subsystem §6 + §12 Graceful-Degradation).
    - `CLAUDE.md`: minimaler Kontext (Template + 1–2 Fragen).
    - `lessons/{coder,reviewer,tester}.md`: leer.
@@ -120,7 +130,7 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
    - **Wenn `db_dialect: none` UND `companions: []`:** Validate skip + Output „nichts zu validieren — kein DB-/Companion-Skeleton angelegt" (statische App). Konsistent mit `/adopt` §6.
 
 ## Output
-Repo-URL · Board-URL · Profil · Image-Ziel · (sofern Schritt 8 lief) Validate-Status → „bereit für `/requirement`".
+Repo-URL · Board-Pfad (`board/`) · Profil · Image-Ziel · (sofern Schritt 8 lief) Validate-Status → „bereit für `/requirement`".
 
 ## Grenzen
 - Kein App-Code.
