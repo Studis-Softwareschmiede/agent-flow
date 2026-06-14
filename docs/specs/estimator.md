@@ -44,14 +44,24 @@ Der estimator schätzt `dispo_est` (EP) **relativ** gegen die Beispiel-Menge (V2
 - **`estimate_note`:** 1–2 Sätze Begründung (Anker-Bezug, Haupttreiber, Risiko).
 
 ### V4 — Bias-Korrektur anwenden
-Existiert in `baseline.json` ein `estimator_bias`-Faktor für den passenden Schnitt `<lang>|<cost_mode>|<size>`, wendet der estimator ihn auf die Roh-Schätzung an (`dispo_est = roh × (1 + bias)`). Fehlt der Schnitt → gröberer Schnitt → kein Faktor (Faktor 0). Der angewandte Faktor wird in `estimate_note` vermerkt.
+Der estimator sucht in `baseline.json.estimator_bias` nach einem passenden Faktor in dieser Reihenfolge:
+1. exakter Schnitt `<lang>|<cost_mode>|<size>` → Faktor gefunden
+2. gröberer Schnitt `<lang>|<cost_mode>` (ohne `size`) → Faktor gefunden
+3. gröbster Schnitt `<lang>` (nur Sprache) → Faktor gefunden
+4. kein Schnitt passt → Faktor 0, keine Korrektur
+
+Dann: `dispo_est = roh × (1 + factor)`. Der Betrag des Faktors wird auf das **Cap** begrenzt (Default **±0.50**; optionales Feld `baseline.json.estimator_bias_cap` überschreibt den Default). Wurde gekappt, vermerkt der estimator das in `estimate_note`. Den angewandten Faktor (nach Kappung, sofern ≠ 0) nennt er immer in `estimate_note`.
 
 ### V5 — Cold-Start / Fallback
-- **Keine passende Historie** (Retrieval liefert < 1 reale Story im Schnitt): Schätzung allein über die kuratierten Anker; Konfidenz höchstens `medium`.
-- **Weder Anker noch Historie nutzbar:** `dispo_est = null`, Konfidenz `low`, `estimate_note` nennt den Grund. Die Heuristik-`size_est` bleibt erhalten.
+- **Keine passende Historie** (Retrieval liefert weniger als 1 reale Story mit `ep_act ≠ null`): Schätzung allein über die kuratierten Anker; Konfidenz höchstens `medium`.
+- **Weder Anker noch Historie nutzbar** (`reference-stories.md` fehlt oder leer **und** Retrieval liefert 0 reale Stories): `dispo_est = null`, Konfidenz `low`, `estimate_note` nennt den Grund. Die Heuristik-`size_est` bleibt erhalten.
 
 ### V6 — Split-Empfehlung
-Stuft der estimator eine Story als `XL` mit hoher Unsicherheit ein (grosse Streuung der Beispiele oder Token-Erwartung über einem konfigurierten Schwellwert), gibt er eine **Split-Empfehlung** in `estimate_note` aus (Vorschlag, in n kleinere Stories zu zerlegen). Die Empfehlung ist beratend — sie ändert das Board nicht selbst.
+Stuft der estimator eine Story als `XL` mit hoher Unsicherheit ein, gibt er eine **Split-Empfehlung** in `estimate_note` aus (Vorschlag, in n kleinere Stories zu zerlegen). Die Empfehlung ist beratend — sie ändert das Board nicht selbst.
+
+**Hohe Unsicherheit** liegt vor, wenn **mindestens eine** der folgenden Bedingungen gilt:
+- grosse Streuung der Beispiele: Standardabweichung der EP-Werte der verwendeten Beispiele > 50 % des Median-EP derselben Beispiele, **oder**
+- Token-Erwartung übersteigt den konfigurierten Schwellwert: Default **100 000 Tokens**; optionales Feld `baseline.json.estimator_split_tok_threshold` überschreibt den Default.
 
 ### V7 — Output & Persistenz
 Der estimator gibt `dispo_est` (EP), `tok_est`, `confidence` und `estimate_note` zurück. `/flow` schreibt `dispo_est` + `estimate_note` (+ `confidence`) in die Story (`board/stories/<id>.yaml`, vgl. board-subsystem §4.2) und führt `ep_est` wie gehabt in der `items.jsonl`-Zeile (Soll-Ist). Die Schätzung blockiert nie den Loop (V5-Fallback).
@@ -71,7 +81,7 @@ Jede Anpassung (V8-Faktor, V9-Anker, V9-Anweisung) wird markiert und über die n
 - **AC1** — `/flow` dispatcht den estimator genau bei `size_est ∈ {L,XL}` oder bei `--estimate`; `S`/`M` laufen ohne Agent; der estimator ersetzt die L/XL-1-Satz-Korrektur aus [[metrics-estimation]]. *(V1)*
 - **AC2** — Die Few-shot-Menge enthält (a) scale-aware Anker aus `knowledge/reference-stories.md` (≥1 je `S/M/L/XL`) und (b) bis zu K=5 reale Stories aus `items.jsonl` mit nicht-`null` `ep_act`, ausgewählt per Ähnlichkeitsfunktion S1 (lang → Label-Jaccard → Nähe n_ac/n_comp). *(V2)*
 - **AC3** — `dispo_est` wird relativ gegen die Beispiel-Menge geschätzt; zusätzlich werden `tok_est` (= `dispo_est / ep_per_token`, entfällt bei `ep_per_token=null`), `confidence ∈ {high,medium,low}` und `estimate_note` (1–2 Sätze, mit Anker-Bezug) erzeugt. *(V3)*
-- **AC4** — Ein vorhandener `estimator_bias[<lang>|cost_mode|size>]` wird auf die Roh-Schätzung angewandt und in `estimate_note` vermerkt; fehlender Schnitt → kein Faktor. *(V4)*
+- **AC4** — Ein vorhandener `estimator_bias`-Faktor wird auf die Roh-Schätzung angewandt (`dispo_est = roh × (1 + factor)`) und in `estimate_note` vermerkt; Schnitt-Suche in Reihenfolge exakt → `<lang>|<cost_mode>` → `<lang>` → kein Faktor; |factor| wird auf Cap (Default ±0.50) begrenzt. *(V4)*
 - **AC5** — Cold-Start: ohne passende Historie schätzt der Agent allein über Anker (Konfidenz ≤ medium); ohne Anker und ohne Historie → `dispo_est = null`, `confidence=low`, Grund in `estimate_note`; `size_est` bleibt erhalten. *(V5)*
 - **AC6** — Bei `XL` mit hoher Unsicherheit gibt der estimator eine beratende Split-Empfehlung in `estimate_note`; das Board wird dadurch nicht automatisch verändert. *(V6)*
 - **AC7** — `/flow` persistiert `dispo_est`/`estimate_note`/`confidence` in die Story-YAML und `ep_est` neben `ep_act` in `items.jsonl`; die Schätzung blockiert nie den Loop. *(V7)*
@@ -96,9 +106,13 @@ Pro Anker (Markdown-Tabelle oder YAML-Frontmatter-Liste):
 
 ### `baseline.json` — Erweiterungen (von `retro` gepflegt)
 ```
-estimator_bias:        { "<lang>|<cost_mode>|<size>": <factor: float> }   // V8, auto
-estimator_calibration: [ { target, kind: bias|anchor|prompt, status: pending|validated|reverted,
-                           baseline_mae, measured_mae, n, decided_after_item } ]   // V10
+estimator_bias:                 { "<lang>|<cost_mode>|<size>": <factor: float> }   // V8, auto
+estimator_calibration:          [ { target, kind: bias|anchor|prompt, status: pending|validated|reverted,
+                                    baseline_mae, measured_mae, n, decided_after_item } ]   // V10
+
+// Optional — überschreiben die im Agent dokumentierten Defaults (V4/V6):
+estimator_bias_cap:             <float>   // Default ±0.50; |factor| wird auf diesen Betrag begrenzt
+estimator_split_tok_threshold:  <int>     // Default 100000; Split-Empfehlung bei tok_est > Schwelle
 ```
 (`ep_per_token`, `forecast_mae`, `medians` stammen aus [[metrics-retro-aggregation]].)
 
@@ -117,7 +131,7 @@ estimator_calibration: [ { target, kind: bias|anchor|prompt, status: pending|val
 - **`items.jsonl` fehlt/leer** → reiner Cold-Start (V5), nur Anker.
 - **`reference-stories.md` fehlt** → nur Retrieval; fehlt beides → `dispo_est = null` (V5).
 - **Widersprüchliche/leere Spec** → Konfidenz `low`, Hinweis in `estimate_note`; kein Abbruch.
-- **Bias-Faktor implausibel** (|factor| über konfiguriertem Cap) → auf Cap begrenzt, in `estimate_note` vermerkt.
+- **Bias-Faktor implausibel** (|factor| > Cap) → auf Cap begrenzt und Kappung in `estimate_note` vermerkt. Default-Cap = ±0.50; `baseline.json.estimator_bias_cap` überschreibt diesen Default.
 - **Retrieval findet nur andere `lang`** → niedriger gewichtet, Konfidenz sinkt.
 
 ## NFRs

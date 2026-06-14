@@ -23,10 +23,19 @@ Nur wenn `/flow` `size_est ∈ {L, XL}` ermittelt hat (oder bei explizitem `--es
    - **Anker** aus `reference-stories.md` — mindestens je einer für S/M/L/XL (Stack-spezifische bevorzugt, sonst generische).
    - **Retrieval** der Top-K (Default **K=5**) abgeschlossenen Stories aus `items.jsonl` mit nicht-`null` `ep_act`, sortiert nach **Ähnlichkeitsfunktion S1**: gleiche `lang` (harte Vorbedingung, sonst nachrangig) → Label-Überlappung (Jaccard) → Nähe von `n_ac`/`n_comp`. Per `jq` filtern/sortieren.
 3. **Relativ schätzen** (Spec V3): bestimme `dispo_est` (EP) durch Vergleich der Story gegen die Beispiele („mehr/weniger Aufwand als Anker X, weil …"). Treiber nach oben: unklare/widersprüchliche AC, `db`/`security`-Labels, Migration, offene `depends`, neue Tech. Treiber nach unten: enge, klare AC.
-4. **Bias-Korrektur anwenden** (Spec V4): gibt es `baseline.json.estimator_bias["<lang>|<cost_mode>|<size>"]`, dann `dispo_est = roh × (1 + factor)`; auf konfiguriertes Cap begrenzen; angewandten Faktor in `estimate_note` vermerken. Fehlender Schnitt → kein Faktor.
+4. **Bias-Korrektur anwenden** (Spec V4): Suche `baseline.json.estimator_bias` nach dem passenden Schnitt in dieser Reihenfolge:
+   1. exakter Schnitt `<lang>|<cost_mode>|<size>` → Faktor gefunden → weiter
+   2. gröberer Schnitt `<lang>|<cost_mode>` (ohne `size`) → Faktor gefunden → weiter
+   3. gröbster Schnitt `<lang>` (nur Sprache) → Faktor gefunden → weiter
+   4. kein Schnitt passt → Faktor = 0 (keine Korrektur)
+
+   Dann: `dispo_est = roh × (1 + factor)`. Den Betrag des Faktors auf das Cap begrenzen: Default-Cap = **±0.50** (d.h. |factor| ≤ 0.50); ein optionales `baseline.json.estimator_bias_cap`-Feld überschreibt diesen Default, falls vorhanden. Wurde der Faktor gekappt, vermerke das explizit in `estimate_note`. Den angewandten Faktor (nach Kappung) immer in `estimate_note` nennen, sofern er ≠ 0.
 5. **Ableiten:** `tok_est = round(dispo_est / ep_per_token)` (entfällt bei `ep_per_token = null`); `confidence ∈ {high, medium, low}` aus Anzahl/Streuung der ähnlichen Beispiele + `forecast_mae`; `estimate_note` (1–2 Sätze, mit Anker-Bezug + Haupttreiber + ggf. angewandtem Bias).
-6. **Split-Empfehlung** (Spec V6): bei `XL` mit hoher Unsicherheit (grosse Streuung oder `tok_est` über Schwelle) → beratende Empfehlung in `split_suggestion` (n Teile + Begründung). Du änderst das Board NICHT.
-7. **Cold-Start / Fallback** (Spec V5): keine passende Historie → nur Anker, Konfidenz ≤ `medium`. Weder Anker noch Historie → `dispo_est = null`, `confidence = low`, Grund in `estimate_note`. Blockiere nie den Loop.
+6. **Cold-Start / Fallback** (Spec V5): Liefert das Retrieval (Schritt 2) **weniger als 1 reale Story mit `ep_act ≠ null`** im passenden Schnitt → nur Anker als Schätzbasis; Konfidenz höchstens `medium`. Sind **weder Anker noch** eine reale Story verfügbar → `dispo_est = null`, `confidence = low`, Grund in `estimate_note` (z.B. "kein Anker-Katalog und keine abgeschlossene Story vorhanden"); `size_est` aus Heuristik bleibt erhalten. Blockiere nie den Loop.
+7. **Split-Empfehlung** (Spec V6): bei `XL` mit hoher Unsicherheit → beratende Empfehlung in `split_suggestion` (n Teile + Begründung). Hohe Unsicherheit liegt vor, wenn **mindestens eine** der folgenden Bedingungen gilt:
+   - grosse Streuung der Beispiele (Standardabweichung der Beispiel-EP > 50 % des Median-EP der Beispiele), **oder**
+   - `tok_est` übersteigt den Split-Schwellwert: Default = **100 000 Tokens**; ein optionales `baseline.json.estimator_split_tok_threshold`-Feld überschreibt diesen Default, falls vorhanden.
+   Du änderst das Board NICHT — die Empfehlung ist rein beratend.
 
 # Wie
 `jq` über `items.jsonl` (Retrieval/Sortierung S1) und `baseline.json` (`ep_per_token`, `estimator_bias`). Die Few-shot-Auswahl selbst ist deterministisch — **ein** LLM-Durchgang für die eigentliche relative Schätzung, sonst nichts.
