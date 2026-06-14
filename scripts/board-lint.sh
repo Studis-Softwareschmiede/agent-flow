@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 # board-lint.sh — Validiert das board/-Verzeichnis gegen das Board-Schema.
 #
-# Scope: AC1 (board.yaml Pflichtfelder) +
-#        AC4 (ID-Muster, Enums, AC-Tokens, ISO-8601-Zeitstempel) +
-#        AC9 (Pflichtfelder und Enum-Verletzungen mit Datei + Feldname).
+# Scope: AC1  (board.yaml Pflichtfelder)
+#        AC4  (ID-Muster, Enums, AC-Tokens, ISO-8601-Zeitstempel)
+#        AC5  (ID-DUP: doppelte IDs; Dateiname-Praefix passt nicht zur id)
+#        AC6  (PARENT-MISSING: Story-parent existiert nicht)
+#        AC7  (DEPENDS-UNRESOLVED: nicht aufloesbar / falscher Typ;
+#              DEPENDS-CYCLE: Zyklus in depends)
+#        AC8  (SPEC-MISSING: Spec-Datei fehlt;
+#              AC-MISSING: AC-Nummer nicht in Spec)
+#        AC9  (Pflichtfelder und Enum-Verletzungen mit Datei + Feldname)
+#        AC10 (ROLLUP-STALE: abgeleitete Felder veraltet — WARN, kein FEHLER)
+#        AC11 (deterministisch, FEHLER|WARN-Format, Exit-Code-Semantik)
 #
 # Ausgabe je Verstoss: FEHLER|WARN <regel-id> <datei> <feld/detail>
 # Exit-Code: 1 bei mindestens einem FEHLER, 0 bei nur Warnungen oder gruen.
@@ -11,12 +19,16 @@
 # Requires: bash >= 4.0, python3 (fuer YAML-Parsing via PyYAML)
 #
 # Lint-Regel-IDs (stabil, aus Spec docs/specs/board-schema.md):
-#   FIELD-REQUIRED  — Pflichtfeld fehlt oder leer; board.yaml fehlt (V1, V9)
-#   ENUM-INVALID    — Enum-Wert nicht erlaubt, ID-Muster falsch,
-#                     implements[]-Eintrag kein AC<n>, Zeitstempel kein ISO-8601-UTC (V4, V9)
-#
-# Weitergehende Regeln (ID-DUP, PARENT-MISSING, DEPENDS-UNRESOLVED, etc.)
-# sind Teil von [[board-cli]] (Folge-Item).
+#   FIELD-REQUIRED       — Pflichtfeld fehlt oder leer; board.yaml fehlt (V1, V9)
+#   ENUM-INVALID         — Enum-Wert nicht erlaubt, ID-Muster falsch,
+#                          implements[]-Eintrag kein AC<n>, Zeitstempel kein ISO-8601-UTC (V4, V9)
+#   ID-DUP               — doppelte Feature- oder Story-ID; Dateiname-Praefix != Body-id (V5)
+#   PARENT-MISSING       — Story-parent existiert nicht als Datei (V6)
+#   DEPENDS-UNRESOLVED   — depends-Referenz nicht aufloesbar oder falscher Typ (V7)
+#   DEPENDS-CYCLE        — Zyklus in depends-Graph (V7)
+#   SPEC-MISSING         — spec-Datei existiert nicht (V8)
+#   AC-MISSING           — implements[]-AC-Nummer nicht in der Spec gefunden (V8)
+#   ROLLUP-STALE         — stories[]/progress eines Features veraltet (V10, WARN)
 
 set -euo pipefail
 
@@ -262,6 +274,373 @@ for e in errors:
 PYEOF
 }
 
+# Integritaetspruefung: AC5, AC6, AC7, AC8, AC10
+# Argument: BOARD_DIR
+# Gibt FEHLER/WARN-Zeilen aus (gleiche Formatierung wie lint_feature/lint_story).
+lint_integrity() {
+  local board_dir="$1"
+  local repo_root="$2"
+  python3 - "$board_dir" "$repo_root" <<'PYEOF'
+import sys, os, re, yaml
+
+board_dir = sys.argv[1]
+repo_root = sys.argv[2]
+
+features_dir = os.path.join(board_dir, "features")
+stories_dir  = os.path.join(board_dir, "stories")
+
+ID_F = re.compile(r"^F-\d{3,}$")
+ID_S = re.compile(r"^S-\d{3,}$")
+AC_TOK = re.compile(r"^AC\d+$")
+# Dateiname-Praefix-Muster: erster Token (F-### oder S-###) aus Basename
+PREFIX_F = re.compile(r"^(F-\d{3,})-")
+PREFIX_S = re.compile(r"^(S-\d{3,})-")
+
+messages = []  # (sort_key, line)
+
+def rel(path):
+    """Relativer Pfad ab repo_root (fuer Ausgabe)."""
+    try:
+        return os.path.relpath(path, repo_root)
+    except Exception:
+        return path
+
+def load_yaml_safe(path):
+    """Laedt eine YAML-Datei; gibt None zurueck bei Fehler."""
+    try:
+        with open(path) as f:
+            return yaml.safe_load(f)
+    except Exception:
+        return None
+
+# -----------------------------------------------------------------------
+# Alle Feature- und Story-Dateien einsammeln (deterministisch sortiert)
+# -----------------------------------------------------------------------
+feature_files = []
+story_files   = []
+
+if os.path.isdir(features_dir):
+    feature_files = sorted(
+        os.path.join(features_dir, fn)
+        for fn in os.listdir(features_dir)
+        if fn.startswith("F-") and fn.endswith(".yaml")
+    )
+if os.path.isdir(stories_dir):
+    story_files = sorted(
+        os.path.join(stories_dir, fn)
+        for fn in os.listdir(stories_dir)
+        if fn.startswith("S-") and fn.endswith(".yaml")
+    )
+
+# -----------------------------------------------------------------------
+# Daten laden
+# -----------------------------------------------------------------------
+features = {}  # id -> {data, path}
+stories  = {}  # id -> {data, path}
+
+for path in feature_files:
+    data = load_yaml_safe(path)
+    if not isinstance(data, dict):
+        continue
+    fid = str(data.get("id", "")).strip()
+    if fid:
+        features[fid] = {"data": data, "path": path}
+
+for path in story_files:
+    data = load_yaml_safe(path)
+    if not isinstance(data, dict):
+        continue
+    sid = str(data.get("id", "")).strip()
+    if sid:
+        stories[sid] = {"data": data, "path": path}
+
+# -----------------------------------------------------------------------
+# AC5 — ID-DUP: doppelte IDs + Dateiname-Praefix != Body-id
+# -----------------------------------------------------------------------
+
+# Doppelte Feature-IDs (zwei Dateien mit gleicher id)
+seen_fids = {}  # id -> first path
+for path in feature_files:
+    data = load_yaml_safe(path)
+    if not isinstance(data, dict):
+        continue
+    fid = str(data.get("id", "")).strip()
+    if not fid:
+        continue
+    if fid in seen_fids:
+        messages.append((rel(path), f"FEHLER ID-DUP {rel(path)} id={fid!r} bereits in {rel(seen_fids[fid])}"))
+    else:
+        seen_fids[fid] = path
+
+# Doppelte Story-IDs
+seen_sids = {}
+for path in story_files:
+    data = load_yaml_safe(path)
+    if not isinstance(data, dict):
+        continue
+    sid = str(data.get("id", "")).strip()
+    if not sid:
+        continue
+    if sid in seen_sids:
+        messages.append((rel(path), f"FEHLER ID-DUP {rel(path)} id={sid!r} bereits in {rel(seen_sids[sid])}"))
+    else:
+        seen_sids[sid] = path
+
+# Dateiname-Praefix passt nicht zur Body-id
+for path in feature_files:
+    data = load_yaml_safe(path)
+    if not isinstance(data, dict):
+        continue
+    body_id = str(data.get("id", "")).strip()
+    if not body_id:
+        continue
+    basename = os.path.basename(path)
+    m = PREFIX_F.match(basename)
+    if m:
+        prefix = m.group(1)
+        if prefix != body_id:
+            messages.append((rel(path), f"FEHLER ID-DUP {rel(path)} Dateiname-Praefix={prefix!r} != id={body_id!r}"))
+    else:
+        # Dateiname beginnt zwar mit F-, hat aber kein gueltiges Praefix-Format
+        messages.append((rel(path), f"FEHLER ID-DUP {rel(path)} Dateiname-Praefix nicht erkennbar (muss F-###-)"))
+
+for path in story_files:
+    data = load_yaml_safe(path)
+    if not isinstance(data, dict):
+        continue
+    body_id = str(data.get("id", "")).strip()
+    if not body_id:
+        continue
+    basename = os.path.basename(path)
+    m = PREFIX_S.match(basename)
+    if m:
+        prefix = m.group(1)
+        if prefix != body_id:
+            messages.append((rel(path), f"FEHLER ID-DUP {rel(path)} Dateiname-Praefix={prefix!r} != id={body_id!r}"))
+    else:
+        messages.append((rel(path), f"FEHLER ID-DUP {rel(path)} Dateiname-Praefix nicht erkennbar (muss S-###-)"))
+
+# -----------------------------------------------------------------------
+# AC6 — PARENT-MISSING: Story-parent existiert nicht
+# -----------------------------------------------------------------------
+for sid, entry in stories.items():
+    data = entry["data"]
+    path = entry["path"]
+    parent = data.get("parent")
+    if parent is None or str(parent).strip() == "":
+        # Bereits von FIELD-REQUIRED abgedeckt; hier nur Existenzpruefung
+        continue
+    parent_str = str(parent).strip()
+    if parent_str not in features:
+        messages.append((rel(path), f"FEHLER PARENT-MISSING {rel(path)} parent={parent_str!r} nicht gefunden"))
+
+# -----------------------------------------------------------------------
+# AC7 — DEPENDS-UNRESOLVED / DEPENDS-CYCLE
+# -----------------------------------------------------------------------
+
+def get_depends_list(data):
+    """Gibt normalisierte depends-Liste zurueck (dedupliziert, Strings)."""
+    deps = data.get("depends")
+    if deps is None:
+        return []
+    if not isinstance(deps, list):
+        deps = [deps]
+    seen = set()
+    result = []
+    for d in deps:
+        ds = str(d).strip()
+        if ds and ds not in seen:
+            seen.add(ds)
+            result.append(ds)
+    return result
+
+# Features
+for fid, entry in features.items():
+    data = entry["data"]
+    path = entry["path"]
+    deps = get_depends_list(data)
+    for dep in deps:
+        # Selbstreferenz
+        if dep == fid:
+            messages.append((rel(path), f"FEHLER DEPENDS-CYCLE {rel(path)} depends[]={dep!r} (Selbstreferenz)"))
+            continue
+        # Falscher Typ: muss F-### sein
+        if not ID_F.match(dep):
+            messages.append((rel(path), f"FEHLER DEPENDS-UNRESOLVED {rel(path)} depends[]={dep!r} (kein F-###, muss Feature-ID sein)"))
+            continue
+        # Nicht vorhanden
+        if dep not in features:
+            messages.append((rel(path), f"FEHLER DEPENDS-UNRESOLVED {rel(path)} depends[]={dep!r} nicht gefunden"))
+
+# Stories
+for sid, entry in stories.items():
+    data = entry["data"]
+    path = entry["path"]
+    deps = get_depends_list(data)
+    for dep in deps:
+        # Selbstreferenz
+        if dep == sid:
+            messages.append((rel(path), f"FEHLER DEPENDS-CYCLE {rel(path)} depends[]={dep!r} (Selbstreferenz)"))
+            continue
+        # Falscher Typ: darf nicht auf Feature zeigen
+        if ID_F.match(dep):
+            messages.append((rel(path), f"FEHLER DEPENDS-UNRESOLVED {rel(path)} depends[]={dep!r} (Feature-ID in Story-depends nicht erlaubt)"))
+            continue
+        if not ID_S.match(dep):
+            messages.append((rel(path), f"FEHLER DEPENDS-UNRESOLVED {rel(path)} depends[]={dep!r} (kein S-###, muss Story-ID sein)"))
+            continue
+        if dep not in stories:
+            messages.append((rel(path), f"FEHLER DEPENDS-UNRESOLVED {rel(path)} depends[]={dep!r} nicht gefunden"))
+
+# Zyklus-Erkennung via DFS (getrennt fuer Features und Stories)
+def detect_cycles(graph, all_ids):
+    """
+    graph: dict id -> [dep_id, ...] (nur guelige IDs im selben Graph)
+    Gibt Liste von (node, cycle_path_str) zurueck.
+    """
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {i: WHITE for i in all_ids}
+    found = []
+
+    def dfs(node, stack):
+        color[node] = GRAY
+        stack.append(node)
+        for nb in graph.get(node, []):
+            if nb not in color:
+                continue
+            if color[nb] == GRAY:
+                # Zyklus gefunden — Pfad ab nb
+                idx = stack.index(nb)
+                cycle = stack[idx:] + [nb]
+                found.append((node, " -> ".join(cycle)))
+            elif color[nb] == WHITE:
+                dfs(nb, stack)
+        stack.pop()
+        color[node] = BLACK
+
+    for node in sorted(all_ids):
+        if color[node] == WHITE:
+            dfs(node, [])
+    return found
+
+# Feature-Zyklus-Graph (nur guelige F-IDs, keine Selbstrefs, keine missing)
+f_graph = {}
+for fid, entry in features.items():
+    deps = get_depends_list(entry["data"])
+    f_graph[fid] = [d for d in deps if d in features and d != fid]
+
+for node, cycle_str in detect_cycles(f_graph, set(features.keys())):
+    path = features[node]["path"]
+    messages.append((rel(path), f"FEHLER DEPENDS-CYCLE {rel(path)} Zyklus: {cycle_str}"))
+
+# Story-Zyklus-Graph
+s_graph = {}
+for sid, entry in stories.items():
+    deps = get_depends_list(entry["data"])
+    s_graph[sid] = [d for d in deps if d in stories and d != sid]
+
+for node, cycle_str in detect_cycles(s_graph, set(stories.keys())):
+    path = stories[node]["path"]
+    messages.append((rel(path), f"FEHLER DEPENDS-CYCLE {rel(path)} Zyklus: {cycle_str}"))
+
+# -----------------------------------------------------------------------
+# AC8 — SPEC-MISSING / AC-MISSING
+# -----------------------------------------------------------------------
+# Alle Spec-Dateien cachen (AC-Tokens je Spec)
+spec_ac_cache = {}  # spec_path -> set of "ACn" strings (or None if missing)
+AC_IN_SPEC = re.compile(r"\bAC(\d+)\b")
+
+def get_spec_acs(spec_rel_path):
+    """Gibt Set der AC-Tokens in der Spec zurueck, oder None wenn Datei fehlt."""
+    if spec_rel_path in spec_ac_cache:
+        return spec_ac_cache[spec_rel_path]
+    abs_path = os.path.join(repo_root, spec_rel_path)
+    if not os.path.isfile(abs_path):
+        spec_ac_cache[spec_rel_path] = None
+        return None
+    try:
+        with open(abs_path, encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        acs = {"AC" + m.group(1) for m in AC_IN_SPEC.finditer(content)}
+        spec_ac_cache[spec_rel_path] = acs
+        return acs
+    except Exception:
+        spec_ac_cache[spec_rel_path] = None
+        return None
+
+for sid, entry in stories.items():
+    data = entry["data"]
+    path = entry["path"]
+    spec_val = data.get("spec")
+    if spec_val is None or str(spec_val).strip() == "":
+        # Bereits FIELD-REQUIRED; hier ueberspringen
+        continue
+    spec_rel = str(spec_val).strip()
+    acs = get_spec_acs(spec_rel)
+    if acs is None:
+        messages.append((rel(path), f"FEHLER SPEC-MISSING {rel(path)} spec={spec_rel!r}"))
+        continue
+    # Jede implements[]-AC muss in der Spec vorkommen
+    impls = data.get("implements")
+    if not isinstance(impls, list):
+        continue
+    for ac in impls:
+        ac_str = str(ac).strip()
+        if not AC_TOK.match(ac_str):
+            continue  # Format-Fehler wird von ENUM-INVALID abgedeckt
+        if ac_str not in acs:
+            messages.append((rel(path), f"FEHLER AC-MISSING {rel(path)} implements[]={ac_str!r} nicht in {spec_rel!r}"))
+
+# -----------------------------------------------------------------------
+# AC10 — ROLLUP-STALE: abgeleitete Felder stories[]/progress veraltet (WARN)
+# -----------------------------------------------------------------------
+# Tatsaechliche Kind-Stories je Feature berechnen
+children_of = {fid: [] for fid in features}
+for sid, entry in stories.items():
+    data = entry["data"]
+    parent = data.get("parent")
+    if parent and str(parent).strip() in children_of:
+        children_of[str(parent).strip()].append(sid)
+
+for fid, entry in features.items():
+    data = entry["data"]
+    path = entry["path"]
+    expected_children = sorted(children_of[fid])
+
+    # stories[]
+    stored_stories = data.get("stories")
+    if stored_stories is not None:
+        if isinstance(stored_stories, list):
+            stored_sorted = sorted(str(s).strip() for s in stored_stories if str(s).strip())
+        else:
+            stored_sorted = [str(stored_stories).strip()]
+        if stored_sorted != expected_children:
+            messages.append((rel(path), f"WARN ROLLUP-STALE {rel(path)} stories[] veraltet (gespeichert={stored_sorted!r}, erwartet={expected_children!r})"))
+
+    # progress — Konsistenz-Check: einfache Heuristik
+    # progress korrekt = "<done>/<total> done ..." basierend auf Kind-Status
+    progress_val = data.get("progress")
+    if progress_val is not None and str(progress_val).strip() != "":
+        # Berechne erwarteten Zaehler
+        total = len(expected_children)
+        done_count = sum(
+            1 for sid in expected_children
+            if stories.get(sid, {}).get("data", {}).get("status") == "Done"
+        )
+        # Erwartetes Muster: "<done>/<total> done"
+        expected_prefix = f"{done_count}/{total} done"
+        prog_str = str(progress_val).strip()
+        if not prog_str.startswith(expected_prefix):
+            messages.append((rel(path), f"WARN ROLLUP-STALE {rel(path)} progress veraltet (gespeichert={prog_str!r}, erwartet beginnt mit {expected_prefix!r})"))
+
+# -----------------------------------------------------------------------
+# Ausgabe (deterministisch: sortiert nach Dateipfad, dann Zeileninhalt)
+# -----------------------------------------------------------------------
+for _, line in sorted(messages):
+    print(line)
+PYEOF
+}
+
 # ---------------------------------------------------------------------------
 # Hauptlogik
 # ---------------------------------------------------------------------------
@@ -307,6 +686,20 @@ if [[ -d "$STORIES_DIR" ]]; then
       fi
     done
   done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 | sort -z)
+fi
+
+# 4. Integritaetspruefung: AC5, AC6, AC7, AC8, AC10
+# Nur ausfuehren wenn board.yaml vorhanden (sonst fehlt der Board-Kontext)
+if [[ -f "$BOARD_YAML" ]]; then
+  # Repo-Wurzel: Verzeichnis eine Ebene ueber BOARD_DIR (fuer Spec-Pfade)
+  REPO_ROOT="$(cd "${BOARD_DIR}/.." 2>/dev/null && pwd)"
+  mapfile -t integrity_errors < <(lint_integrity "${BOARD_DIR}" "${REPO_ROOT}" 2>/dev/null || true)
+  for line in "${integrity_errors[@]}"; do
+    echo "$line"
+    if [[ "$line" == FEHLER* ]]; then
+      ERRORS=$(( ERRORS + 1 ))
+    fi
+  done
 fi
 
 # Exit-Code
