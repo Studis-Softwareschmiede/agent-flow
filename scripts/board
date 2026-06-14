@@ -501,6 +501,16 @@ cmd_set() {
     stories|progress) die "set: Feld '$feld' ist abgeleitet und nur über 'board rollup' pflegbar" ;;
   esac
 
+  # AC9 / V9 — Single-Writer-Erzwingung für Story-Status
+  # Nur der /flow-Kontext darf `board set <story-id> status …` aufrufen.
+  # Marker: Umgebungsvariable BOARD_WRITER=flow (muss von /flow gesetzt werden).
+  # Nicht-Status-Felder und Feature-Status sind für alle Aufrufer erlaubt.
+  if [[ "$id" =~ ^S-[0-9]{3,}$ && "$feld" == "status" ]]; then
+    if [[ "${BOARD_WRITER:-}" != "flow" ]]; then
+      die "set: nur /flow darf Story-Status setzen (BOARD_WRITER=flow fehlt)"
+    fi
+  fi
+
   # S1 — Enum-Guard für bekannte Enum-Felder (CLI-Layer-Abweisung)
   case "$feld" in
     status)
