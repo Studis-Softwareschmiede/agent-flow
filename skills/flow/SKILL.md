@@ -64,6 +64,7 @@ Wenn `medians[key].n` < 3: Schnitt vorhanden aber dünn — trotzdem verwenden (
 
 ## 2. In Progress
 - `board set <story-id> status "In Progress"` — setzt die Story auf In Progress.
+- `board set <story-id> branch "feat/<story-id>-<slug>"` — setzt den Branch-Namen in der Story-YAML (AC7). Branch-Konvention: `feat/` + Story-ID + kurzer Slug aus dem Titel.
 
 ## 2a. Secret-Sync-Gate (Spec [`docs/architecture/secrets-subsystem.md`](../../docs/architecture/secrets-subsystem.md) §9)
 
@@ -126,7 +127,7 @@ Das `|| true` stellt sicher, dass ein jq-/IO-Fehler den Loop nicht abbricht (K3)
 ### Beim Done (Item → `Done`, nach Rollout-Gate: PASS) — eine Zeile nach `items.jsonl`
 
 1. **`loc`/`files`** aus `git diff --shortstat` des Item-Diffs gegen `$default_branch`-Stand bei Item-Eintritt: `loc` = insertions + deletions, `files` = #geänderte Dateien.
-2. **Aggregation** über alle `dispatches.jsonl`-Zeilen des Items (filter `item == <n>`):
+2. **Aggregation** über alle `dispatches.jsonl`-Zeilen des Items (filter `item == "<story-id>"`, z.B. `"S-014"`):
    - `iters` = max der `iter`-Werte
    - `crit` = Σ `crit`
    - `imp` = Σ `imp`
@@ -169,6 +170,26 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 | `cost_mode` | aktiver Cost-Mode |
 
 Append analog zu `dispatches.jsonl` mit `|| true` (kein Loop-Abbruch bei Fehler, K3).
+
+### Dispo-Spiegel in Story-YAML (AC6 — nach items.jsonl-Rollup)
+
+Nach dem Append der `items.jsonl`-Zeile spiegelt `/flow` die Dispo-Ist-Werte per ID-Join in die Story-YAML zurück. Die Ledger bleiben Source of Truth; die Story-Felder sind die lesbare Sicht (board-subsystem §4.4).
+
+**Join:** Lies `ep_act` + `tok_total` + `ep_est` aus der soeben geschriebenen `items.jsonl`-Zeile (Story-ID = `item`-Feld).
+
+**Setze via `board set`** (drei Aufrufe, alle mit `|| true` — fehlender Join blockiert nie):
+```bash
+board set <story-id> dispo_act "$ep_act" || true
+board set <story-id> tok "$tok_total" || true   # null → Feld bleibt null in Story-YAML
+```
+`dispo_forecast` nur setzen, wenn `ep_est` **nicht** `null` ist:
+```bash
+# dispo_forecast = (ep_est - ep_act) / ep_act  (positiv = Überschätzung, negativ = Unterschätzung)
+[[ -n "$ep_est" && "$ep_est" != "null" && "$ep_act" != "0" ]] && \
+  board set <story-id> dispo_forecast "$(echo "scale=4; ($ep_est - $ep_act) / $ep_act" | bc)" || true
+```
+
+Schlägt ein `board set`-Aufruf fehl → Story-Feld bleibt `null`, kein Abbruch (K3). **Kein erneuter LLM-Aufruf.**
 
 ### Token-Nachtrag (out-of-band, Spec `metrics-token-collect` V4 / subsystem §4 Schritt 4)
 
@@ -248,7 +269,7 @@ IMAGE: <profile.image>:latest
 - `Rollout-Gate: FAIL` → melden + `board set <id> status Blocked --reason "CI rot oder Smoke fehlgeschlagen"`, User fragen.
 - `Rollout-Gate: NEEDS-HUMAN` → `board set <id> status Blocked --reason "Manueller Eingriff nötig"`, User vorlegen.
 
-Bei `pr`-Policy und ausstehemdem Merge: `board set <id> status "In Review"` (Orchestrator wartet auf Merge-Signal, dann Done).
+Bei `pr`-Policy und ausstehemdem Merge: `board set <id> status "In Review"` (Orchestrator wartet auf Merge-Signal, dann Done). Zusätzlich: `board set <id> pr "<pr-url>"` — setzt die PR-URL in der Story-YAML (AC7); cicd liefert die URL in seiner Rückgabe.
 
 ## 5a. Validate-Flag-Invalidierung (Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §18)
 **Nach erfolgreichem Landen** prüfen, ob der gerade gelandete Diff den Validate-Cache invalidiert:
