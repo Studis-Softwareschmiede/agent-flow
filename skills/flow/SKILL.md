@@ -215,8 +215,8 @@ das Item bleibt `Done` (K3/K4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis,
 
 > **Parallele Worktrees — Frische + Hot-Spot-Warnung (flow/P1).** Beim Dispatch von mehreren coder-Tasks parallel oder in schneller Folge: (a) **Worktree-Frische:** weise jeden coder an, `git fetch origin && git reset --hard origin/<default_branch>` auszuführen und das Vorhandensein erwarteter Vorgänger-Artefakte zu verifizieren, bevor er implementiert (`coder/R03`). (b) **Hot-Spot-Files:** wenn mehrere parallele Items dieselben zentralen Wiring-Dateien berühren (z. B. `server.js`-Router-Registrierung, `App.jsx`-Route-Map, `index.ts`-Re-Exporte), serialisiere die betreffenden Items ODER vereinbare ein append-only/Block-Konvention für diese Dateien und plane frühe Rebase-Punkte ein. Unkontrollierte parallele Edits an Hot-Spot-Files erzeugen wiederkehrende Merge-Konflikte. *[seen-in: dev-gui-cloudflare Items #107–#111 (server.js-Router-Overlap, DeployOrchestrator-Duplikat); promoted: 2026-06-09]*
 
-1. **coder** (Task): `TASK #<n>` · `SPEC: docs/specs/<feature>.md (AC<…>)` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Er editiert nur den Working-Tree (Code + ggf. kleine Spec-Präzisierung). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)*
-2. **reviewer** (Task): `git diff` + die **Spec** (`docs/specs/<feature>.md`, AC<…>). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies sein `Review-Gate`:
+1. **coder** (Task): `TASK #<n>` · `SPEC: docs/specs/<feature>.md (AC<…>)` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Story-Kontext: der coder liest via `board show <story-id>` (statt Issue-Body). Er editiert nur den Working-Tree (Code + ggf. kleine Spec-Präzisierung). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)*
+2. **reviewer** (Task): `git diff` + die **Spec** (`docs/specs/<feature>.md`, AC<…>). Story-Kontext: der reviewer liest via `board show <story-id>` (statt Issue-Body). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies sein `Review-Gate`:
    - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` merken, N++ → zurück zu 3.1.
    - `PASS` → **DB-Trigger prüfen** (siehe 3.2a). Triggert er → weiter zu 3.2a; sonst → weiter zu 4.
 2a. **DBA-Zweit-Review (nur bei DB-Trigger)** — Trigger gilt, wenn **eines** zutrifft (Architektur-Spec §11):
@@ -230,7 +230,7 @@ das Item bleibt `Done` (K3/K4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis,
 - **Schleifenschutz:** überlebt derselbe Befund N=3 → `board set <id> status Blocked --reason "Loop-Schutz N=3 — gleicher Befund überlebt 3 Iterationen"`, melde es dem User, frage ob mit den restlichen Items weiter. Dann 1.
 
 ## 4. Test-Gate
-- **tester** (Task): Working-Tree + die **Spec** (AC<…>). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies `Test-Gate`:
+- **tester** (Task): Working-Tree + die **Spec** (AC<…>). Story-Kontext: der tester liest via `board show <story-id>` (statt Issue-Body). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies `Test-Gate`:
   - `FAIL` → als Befund zurück an coder (zählt zum Schleifenschutz) → 3.1.
   - `PASS` → weiter zu 5.
   - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): `board set <id> status Blocked --reason "DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"`, dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert.
