@@ -1,7 +1,7 @@
 ---
 id: board-schema
 title: Board-Dateiformat — Feature/Story-YAML + board.yaml + Integritätsregeln
-status: draft
+status: active
 version: 1
 ---
 

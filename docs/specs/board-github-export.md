@@ -1,7 +1,7 @@
 ---
 id: board-github-export
 title: GitHub-Board-Export + Cut-Runbook — einmalige Big-Bang-Migration nach board/
-status: draft
+status: active
 version: 1
 ---
 

@@ -1,7 +1,7 @@
 ---
 id: estimator
 title: Schätz-Agent — Referenz-Story-basierte Dispo-Schätzung (Few-shot) + Selbstverbesserung via retro
-status: draft
+status: active
 version: 1
 ---
 

@@ -1,7 +1,7 @@
 ---
 id: dev-gui-board-aggregator
 title: dev-gui Board-Aggregator — read-only Multi-Repo-Scan, Index/Cache, Projekt→Feature→Story-Übersicht
-status: draft
+status: active
 version: 1
 ---
 
