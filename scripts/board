@@ -1,0 +1,821 @@
+#!/usr/bin/env bash
+# scripts/board — Board-Abstraktion (board-cli-Spec, AC1–AC5, AC10)
+#
+# Verben (dieses Item): feature add, story add, set, show, list
+# Nicht in diesem Item: next (AC6), rollup (AC7), lint (AC8),
+#                       Single-Writer-Erzwingung (AC9), export-github (AC11)
+#
+# Requires: bash >= 4.0, python3 mit PyYAML
+#
+# Ausgabe:
+#   feature add  → F-### (stdout)
+#   story   add  → S-### (stdout)
+#   set          → <id> (stdout)
+#   show         → JSON (stdout)
+#   list         → JSON-Array (stdout)
+#   Fehler       → Meldung (stderr), Exit ≠ 0
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Hilfsfunktionen
+# ---------------------------------------------------------------------------
+
+die() {
+  echo "FEHLER: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat >&2 <<'EOF'
+Verwendung:
+  board feature add --title <t> --goal <g> --priority <P0-P3> [--spec <f>] [--labels <l1,l2>] [--depends <F-###,…>]
+  board story   add --parent <F-###> --title <t> --spec <f> --implements <AC1,AC2> [--priority <P0-P3>] [--depends <S-###,…>] [--labels <l1,l2>]
+  board set <id> <feld> <wert> [--reason <text>]
+  board show <id>
+  board list [--type feature|story] [--status <status>] [--parent <F-###>]
+  board next
+  board rollup <F-###|--all>
+  board lint [<board-dir>]
+  board export-github
+EOF
+  exit 1
+}
+
+# ISO-8601-UTC-Zeitstempel (jetzt)
+now_ts() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+# Slug aus Titel: Kleinbuchstaben, Leerzeichen/Sonderzeichen → Bindestrich,
+# mehrfache/führende/abschließende Bindestriche kollabieren.
+slugify() {
+  local title="$1"
+  # Python für robuste Unicode-Behandlung
+  python3 -c "
+import re, sys
+t = sys.argv[1].lower()
+t = re.sub(r'[^a-z0-9]+', '-', t)
+t = t.strip('-')
+print(t[:60] if t else 'item')
+" "$title"
+}
+
+# Nullsicheres YAML-Feld lesen: gibt leeren String für null zurück
+yaml_field() {
+  local file="$1" field="$2"
+  python3 - "$file" "$field" <<'PYEOF'
+import sys, yaml
+file, field = sys.argv[1], sys.argv[2]
+with open(file) as f:
+    data = yaml.safe_load(f) or {}
+val = data.get(field)
+print("" if val is None else str(val))
+PYEOF
+}
+
+# Board-Verzeichnis bestimmen (Standard: board/ relativ zum Repo-Root)
+# Das Skript wird typischerweise aus dem Repo-Root aufgerufen.
+BOARD_DIR="${BOARD_DIR:-board}"
+BOARD_YAML="${BOARD_DIR}/board.yaml"
+FEATURES_DIR="${BOARD_DIR}/features"
+STORIES_DIR="${BOARD_DIR}/stories"
+
+# board.yaml existieren-Prüfung (für schreibende Verben)
+require_board() {
+  if [[ ! -f "$BOARD_YAML" ]]; then
+    die "Board nicht initialisiert — ${BOARD_YAML} fehlt"
+  fi
+}
+
+# Alle Feature-Dateien einsammeln (sortiert)
+all_features() {
+  find "$FEATURES_DIR" -name "F-*.yaml" -print 2>/dev/null | sort
+}
+
+# Alle Story-Dateien einsammeln (sortiert)
+all_stories() {
+  find "$STORIES_DIR" -name "S-*.yaml" -print 2>/dev/null | sort
+}
+
+# YAML-Datei als JSON ausgeben (alle Felder, null-sicher)
+yaml_to_json() {
+  local file="$1"
+  python3 - "$file" <<'PYEOF'
+import sys, yaml, json, datetime
+
+def normalize(val):
+    """YAML-Typen → JSON-serialisierbar."""
+    if isinstance(val, datetime.datetime):
+        if val.tzinfo is not None:
+            import datetime as dt
+            val = val.astimezone(dt.timezone.utc)
+        return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if isinstance(val, datetime.date):
+        return val.isoformat()
+    if isinstance(val, dict):
+        return {k: normalize(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [normalize(i) for i in val]
+    return val
+
+file = sys.argv[1]
+with open(file) as f:
+    data = yaml.safe_load(f) or {}
+print(json.dumps(normalize(data), ensure_ascii=False))
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
+# Verb: feature add
+#
+# Atomarität (AC10 / coder/L14):
+#   1. Python liest board.yaml, berechnet neue ID, schreibt BEIDE tmp-Dateien
+#      (item-tmp + board-tmp) in einem einzigen Python-Lauf.
+#   2. trap registriert sofort nach dem mktemp-Paar — räumt BEIDE tmp-Dateien
+#      auf, falls ein späterer Schritt (python, mv) fehlschlägt.
+#   3. Erst nach erfolgreichem mv item-tmp→outfile wird board-tmp→board.yaml
+#      ge-mv't; danach wird der Trap aufgehoben.
+#   → Kein Halbzustand: board.yaml-Zähler ist nie erhöht ohne zugehörige Datei.
+# ---------------------------------------------------------------------------
+cmd_feature_add() {
+  local title="" goal="" priority="" spec="" labels="" depends=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)     shift; title="$1"    ;;
+      --goal)      shift; goal="$1"     ;;
+      --priority)  shift; priority="$1" ;;
+      --spec)      shift; spec="$1"     ;;
+      --labels)    shift; labels="$1"   ;;
+      --depends)   shift; depends="$1"  ;;
+      *) die "feature add: unbekannte Option '$1'" ;;
+    esac
+    shift
+  done
+
+  [[ -n "$title" ]]    || die "feature add: --title ist Pflicht"
+  [[ -n "$goal" ]]     || die "feature add: --goal ist Pflicht"
+  [[ -n "$priority" ]] || die "feature add: --priority ist Pflicht"
+
+  # Enum-Prüfung
+  case "$priority" in
+    P0|P1|P2|P3) ;;
+    *) die "feature add: --priority muss P0|P1|P2|P3 sein, war '$priority'" ;;
+  esac
+
+  require_board
+
+  # Slug + Dateiname
+  local slug
+  slug="$(slugify "$title")"
+
+  local ts
+  ts="$(now_ts)"
+
+  # Verzeichnis sicherstellen
+  mkdir -p "$FEATURES_DIR"
+
+  local features_abs board_abs
+  features_abs="$(cd "$FEATURES_DIR" && pwd)"
+  board_abs="$(cd "$(dirname "$BOARD_YAML")" && pwd)"
+
+  # Temp-Dateien anlegen (I2: sofort trap registrieren)
+  local tmp_item tmp_board
+  tmp_item="$(mktemp "${features_abs}/feature.XXXXXX")"
+  tmp_board="$(mktemp "${board_abs}/board.yaml.XXXXXX")"
+
+  # Trap: beide tmp-Dateien aufräumen bei Fehler (I2)
+  # Doppelte Anführungszeichen → Variablen expandieren bei trap-Definition
+  # → korrekte Werte auch nach Funktionsrückkehr (verhindert "unbound var")
+  trap "rm -f \"$tmp_item\" \"$tmp_board\"" EXIT
+
+  # Python: liest board.yaml, inkrementiert Zähler, schreibt BEIDE tmp-Dateien
+  # (I1: board.yaml wird erst am Ende ge-mv't → kein Halbzustand)
+  local new_id
+  new_id=$(python3 - "$BOARD_YAML" "next_feature_id" "F" \
+              "$tmp_board" "$tmp_item" "$title" "$goal" "$priority" \
+              "$spec" "$labels" "$depends" "$ts" <<'PYEOF'
+import sys, yaml
+
+board_yaml   = sys.argv[1]
+counter_key  = sys.argv[2]
+prefix       = sys.argv[3]
+tmp_board    = sys.argv[4]
+tmp_item     = sys.argv[5]
+title        = sys.argv[6]
+goal         = sys.argv[7]
+priority     = sys.argv[8]
+spec         = sys.argv[9] or None
+labels_s     = sys.argv[10]
+depends_s    = sys.argv[11]
+ts           = sys.argv[12]
+
+# --- board.yaml lesen und Zähler erhöhen ---
+with open(board_yaml) as f:
+    board_data = yaml.safe_load(f) or {}
+
+current = board_data.get(counter_key)
+if not isinstance(current, int) or current < 1:
+    sys.exit(f"FEHLER: {counter_key} in {board_yaml} kein gültiger int >= 1")
+
+new_id_num = current
+new_id     = f"{prefix}-{new_id_num:03d}"
+board_data[counter_key] = current + 1
+
+# --- Item-YAML zusammenbauen ---
+labels  = [l.strip() for l in labels_s.split(",") if l.strip()] if labels_s else None
+depends = [d.strip() for d in depends_s.split(",") if d.strip()] if depends_s else None
+
+item_data = {
+    "id":       new_id,
+    "title":    title,
+    "goal":     goal,
+    "status":   "Backlog",
+    "priority": priority,
+    "spec":     spec,
+    "definition_of_done": None,
+    "labels":   labels,
+    "depends":  depends,
+    "owner":    None,
+    "stories":  None,
+    "progress": None,
+    "created_at":  ts,
+    "updated_at":  ts,
+}
+
+# --- Beide tmp-Dateien schreiben ---
+with open(tmp_board, "w") as f:
+    yaml.dump(board_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+with open(tmp_item, "w") as f:
+    yaml.dump(item_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+print(new_id)
+PYEOF
+)
+
+  # Zieldatei-Pfad (jetzt bekannt, da new_id ermittelt)
+  local outfile="${FEATURES_DIR}/${new_id}-${slug}.yaml"
+
+  # mv item-tmp → Zieldatei (atomar: rename(2))
+  mv "$tmp_item" "$outfile"
+  # mv board-tmp → board.yaml (Zähler erst jetzt sichtbar — I1 erfüllt)
+  mv "$tmp_board" "$BOARD_YAML"
+
+  # Trap aufheben (Erfolg — keine tmp-Dateien mehr vorhanden)
+  trap - EXIT
+
+  echo "$new_id"
+}
+
+# ---------------------------------------------------------------------------
+# Verb: story add
+#
+# Atomarität: analog zu cmd_feature_add (siehe dort).
+# ---------------------------------------------------------------------------
+cmd_story_add() {
+  local parent="" title="" spec="" implements="" priority="P2" depends="" labels=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --parent)     shift; parent="$1"     ;;
+      --title)      shift; title="$1"      ;;
+      --spec)       shift; spec="$1"       ;;
+      --implements) shift; implements="$1" ;;
+      --priority)   shift; priority="$1"   ;;
+      --depends)    shift; depends="$1"    ;;
+      --labels)     shift; labels="$1"     ;;
+      *) die "story add: unbekannte Option '$1'" ;;
+    esac
+    shift
+  done
+
+  [[ -n "$parent" ]]     || die "story add: --parent ist Pflicht"
+  [[ -n "$title" ]]      || die "story add: --title ist Pflicht"
+  [[ -n "$spec" ]]       || die "story add: --spec ist Pflicht"
+  [[ -n "$implements" ]] || die "story add: --implements ist Pflicht"
+
+  # Enum-Prüfung priority
+  case "$priority" in
+    P0|P1|P2|P3) ;;
+    *) die "story add: --priority muss P0|P1|P2|P3 sein, war '$priority'" ;;
+  esac
+
+  # Parent-Format
+  [[ "$parent" =~ ^F-[0-9]{3,}$ ]] || die "story add: --parent muss F-### sein, war '$parent'"
+
+  require_board
+
+  # Parent-Existenzprüfung (AC2: unbekanntes Parent → kein Schreiben, Exit ≠ 0)
+  local parent_file_found=0
+  if [[ -d "$FEATURES_DIR" ]]; then
+    while IFS= read -r -d '' f; do
+      local fid_in_file
+      fid_in_file="$(yaml_field "$f" id)"
+      if [[ "$fid_in_file" == "$parent" ]]; then
+        parent_file_found=1
+        break
+      fi
+    done < <(find "$FEATURES_DIR" -name "F-*.yaml" -print0 2>/dev/null)
+  fi
+  if [[ $parent_file_found -eq 0 ]]; then
+    die "story add: Parent '${parent}' existiert nicht — kein Schreiben"
+  fi
+
+  # Slug
+  local slug
+  slug="$(slugify "$title")"
+
+  local ts
+  ts="$(now_ts)"
+
+  mkdir -p "$STORIES_DIR"
+
+  local stories_abs board_abs
+  stories_abs="$(cd "$STORIES_DIR" && pwd)"
+  board_abs="$(cd "$(dirname "$BOARD_YAML")" && pwd)"
+
+  # Temp-Dateien anlegen (I2: sofort trap registrieren)
+  local tmp_item tmp_board
+  tmp_item="$(mktemp "${stories_abs}/story.XXXXXX")"
+  tmp_board="$(mktemp "${board_abs}/board.yaml.XXXXXX")"
+
+  # Trap: beide tmp-Dateien aufräumen bei Fehler (I2)
+  trap "rm -f \"$tmp_item\" \"$tmp_board\"" EXIT
+
+  # Python: liest board.yaml, inkrementiert Zähler, schreibt BEIDE tmp-Dateien
+  local new_id
+  new_id=$(python3 - "$BOARD_YAML" "next_story_id" "S" \
+              "$tmp_board" "$tmp_item" "$parent" "$title" "$priority" \
+              "$spec" "$implements" "$depends" "$labels" "$ts" <<'PYEOF'
+import sys, yaml
+
+board_yaml   = sys.argv[1]
+counter_key  = sys.argv[2]
+prefix       = sys.argv[3]
+tmp_board    = sys.argv[4]
+tmp_item     = sys.argv[5]
+parent       = sys.argv[6]
+title        = sys.argv[7]
+priority     = sys.argv[8]
+spec         = sys.argv[9]
+impl_s       = sys.argv[10]
+depends_s    = sys.argv[11]
+labels_s     = sys.argv[12]
+ts           = sys.argv[13]
+
+# --- board.yaml lesen und Zähler erhöhen ---
+with open(board_yaml) as f:
+    board_data = yaml.safe_load(f) or {}
+
+current = board_data.get(counter_key)
+if not isinstance(current, int) or current < 1:
+    sys.exit(f"FEHLER: {counter_key} in {board_yaml} kein gültiger int >= 1")
+
+new_id_num = current
+new_id     = f"{prefix}-{new_id_num:03d}"
+board_data[counter_key] = current + 1
+
+# --- Item-YAML zusammenbauen ---
+implements = [a.strip() for a in impl_s.split(",") if a.strip()]
+depends    = [d.strip() for d in depends_s.split(",") if d.strip()] if depends_s else None
+labels     = [l.strip() for l in labels_s.split(",") if l.strip()] if labels_s else None
+
+item_data = {
+    "id":            new_id,
+    "parent":        parent,
+    "title":         title,
+    "status":        "To Do",
+    "priority":      priority,
+    "spec":          spec,
+    "implements":    implements,
+    "depends":       depends,
+    "labels":        labels,
+    "size_est":      None,
+    "dispo_est":     None,
+    "dispo_act":     None,
+    "dispo_forecast": None,
+    "estimate_note": None,
+    "confidence":    None,
+    "branch":        None,
+    "pr":            None,
+    "blocked_reason": None,
+    "created_at":    ts,
+    "updated_at":    ts,
+    "done_at":       None,
+}
+
+# --- Beide tmp-Dateien schreiben ---
+with open(tmp_board, "w") as f:
+    yaml.dump(board_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+with open(tmp_item, "w") as f:
+    yaml.dump(item_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+print(new_id)
+PYEOF
+)
+
+  # Zieldatei-Pfad
+  local outfile="${STORIES_DIR}/${new_id}-${slug}.yaml"
+
+  # mv item-tmp → Zieldatei (atomar)
+  mv "$tmp_item" "$outfile"
+  # mv board-tmp → board.yaml (Zähler erst jetzt sichtbar — I1 erfüllt)
+  mv "$tmp_board" "$BOARD_YAML"
+
+  # Trap aufheben (Erfolg)
+  trap - EXIT
+
+  echo "$new_id"
+}
+
+# ---------------------------------------------------------------------------
+# Hilfsfunktion: Datei eines Items finden (Feature oder Story)
+# Gibt Pfad aus, leerer String wenn nicht gefunden.
+# ---------------------------------------------------------------------------
+find_item_file() {
+  local id="$1"
+  local file=""
+
+  if [[ "$id" =~ ^F-[0-9]{3,}$ ]]; then
+    if [[ -d "$FEATURES_DIR" ]]; then
+      while IFS= read -r -d '' f; do
+        local fid
+        fid="$(yaml_field "$f" id)"
+        if [[ "$fid" == "$id" ]]; then
+          file="$f"
+          break
+        fi
+      done < <(find "$FEATURES_DIR" -name "F-*.yaml" -print0 2>/dev/null)
+    fi
+  elif [[ "$id" =~ ^S-[0-9]{3,}$ ]]; then
+    if [[ -d "$STORIES_DIR" ]]; then
+      while IFS= read -r -d '' f; do
+        local sid
+        sid="$(yaml_field "$f" id)"
+        if [[ "$sid" == "$id" ]]; then
+          file="$f"
+          break
+        fi
+      done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null)
+    fi
+  fi
+
+  echo "$file"
+}
+
+# ---------------------------------------------------------------------------
+# Verb: set
+# ---------------------------------------------------------------------------
+cmd_set() {
+  local id="" feld="" wert="" reason=""
+
+  [[ $# -ge 3 ]] || die "set: Verwendung: board set <id> <feld> <wert> [--reason <text>]"
+
+  id="$1"; shift
+  feld="$1"; shift
+  wert="$1"; shift
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reason) shift; reason="$1" ;;
+      *) die "set: unbekannte Option '$1'" ;;
+    esac
+    shift
+  done
+
+  [[ -n "$id" ]]   || die "set: ID fehlt"
+  [[ -n "$feld" ]] || die "set: Feld fehlt"
+
+  # S4 — leerer Wert abweisen (außer "null" ist für null-bare Felder erlaubt)
+  if [[ -z "$wert" ]]; then
+    die "set: leerer Wert nicht erlaubt (nutze 'null' um ein Feld zu leeren)"
+  fi
+
+  # Abgeleitete Felder dürfen nicht via set gesetzt werden
+  case "$feld" in
+    stories|progress) die "set: Feld '$feld' ist abgeleitet und nur über 'board rollup' pflegbar" ;;
+  esac
+
+  # S1 — Enum-Guard für bekannte Enum-Felder (CLI-Layer-Abweisung)
+  case "$feld" in
+    status)
+      if [[ "$id" =~ ^F-[0-9]{3,}$ ]]; then
+        case "$wert" in
+          Backlog|Planned|Active|Done|Archived) ;;
+          *) die "set: status muss Backlog|Planned|Active|Done|Archived sein für Features, war '$wert'" ;;
+        esac
+      elif [[ "$id" =~ ^S-[0-9]{3,}$ ]]; then
+        case "$wert" in
+          "To Do"|"In Progress"|Blocked|"In Review"|Done) ;;
+          *) die "set: status muss 'To Do'|'In Progress'|Blocked|'In Review'|Done sein für Stories, war '$wert'" ;;
+        esac
+      fi
+      ;;
+    priority)
+      case "$wert" in
+        P0|P1|P2|P3) ;;
+        *) die "set: priority muss P0|P1|P2|P3 sein, war '$wert'" ;;
+      esac
+      ;;
+  esac
+
+  require_board
+
+  local item_file
+  item_file="$(find_item_file "$id")"
+  [[ -n "$item_file" ]] || die "set: ID '${id}' nicht gefunden"
+
+  # Sonderfall: status=Blocked erfordert --reason
+  if [[ "$feld" == "status" && "$wert" == "Blocked" ]]; then
+    [[ -n "$reason" ]] || die "set: status=Blocked erfordert --reason"
+  fi
+
+  local ts
+  ts="$(now_ts)"
+
+  # Atomar: temp in gleichem Verzeichnis
+  local dir_abs
+  dir_abs="$(cd "$(dirname "$item_file")" && pwd)"
+  local tmp_file
+  tmp_file="$(mktemp "${dir_abs}/$(basename "$item_file").XXXXXX")"
+
+  # Cleanup-Trap: bei Fehler temp aufräumen (I2)
+  # Doppelte Anführungszeichen expandieren $tmp_file sofort → sicher bei Funktionsende
+  trap "rm -f \"$tmp_file\"" EXIT
+
+  python3 - "$item_file" "$tmp_file" "$feld" "$wert" "$reason" "$ts" <<'PYEOF'
+import sys, yaml, datetime
+
+item_file = sys.argv[1]
+tmp_out   = sys.argv[2]
+feld      = sys.argv[3]
+wert      = sys.argv[4]
+reason    = sys.argv[5]
+ts        = sys.argv[6]
+
+def normalize(val):
+    """YAML datetime → ISO-8601-String."""
+    if isinstance(val, datetime.datetime):
+        if val.tzinfo is not None:
+            import datetime as dt
+            val = val.astimezone(dt.timezone.utc)
+        return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if isinstance(val, datetime.date):
+        return val.isoformat() + "T00:00:00Z"
+    if isinstance(val, dict):
+        return {k: normalize(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [normalize(i) for i in val]
+    return val
+
+with open(item_file) as f:
+    data = yaml.safe_load(f) or {}
+
+# Wert normalisieren (Strings wie "null" → Python-None)
+parsed_wert = wert if wert.lower() != "null" else None
+
+# Feld setzen
+data[feld] = parsed_wert
+
+# Sonderfall: blocked_reason bei status=Blocked
+if feld == "status" and wert == "Blocked" and reason:
+    data["blocked_reason"] = reason
+
+# Sonderfall: done_at bei status=Done
+if feld == "status" and wert == "Done":
+    data["done_at"] = ts
+
+# S2 — done_at löschen wenn status von Done weg wechselt
+if feld == "status" and wert != "Done":
+    data["done_at"] = None
+
+# blocked_reason löschen wenn status != Blocked
+if feld == "status" and wert != "Blocked":
+    if "blocked_reason" in data:
+        data["blocked_reason"] = None
+
+# updated_at nachziehen
+data["updated_at"] = ts
+
+# Normalisieren (datetime-Objekte aus YAML → Strings)
+data = normalize(data)
+
+with open(tmp_out, "w") as f:
+    yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+PYEOF
+
+  mv "$tmp_file" "$item_file"
+
+  # Trap aufheben (Erfolg)
+  trap - EXIT
+
+  echo "$id"
+}
+
+# ---------------------------------------------------------------------------
+# Verb: show
+# ---------------------------------------------------------------------------
+cmd_show() {
+  local id="$1"
+  [[ -n "$id" ]] || die "show: ID fehlt"
+
+  require_board
+
+  local item_file
+  item_file="$(find_item_file "$id")"
+  [[ -n "$item_file" ]] || die "show: ID '${id}' nicht gefunden"
+
+  yaml_to_json "$item_file"
+}
+
+# ---------------------------------------------------------------------------
+# Verb: list
+# ---------------------------------------------------------------------------
+cmd_list() {
+  local filter_type="" filter_status="" filter_parent=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --type)   shift; filter_type="$1"   ;;
+      --status) shift; filter_status="$1" ;;
+      --parent) shift; filter_parent="$1" ;;
+      *) die "list: unbekannte Option '$1'" ;;
+    esac
+    shift
+  done
+
+  require_board
+
+  # Alle Dateien einsammeln
+  local all_files=()
+  if [[ -z "$filter_type" || "$filter_type" == "feature" ]]; then
+    if [[ -d "$FEATURES_DIR" ]]; then
+      while IFS= read -r -d '' f; do
+        all_files+=("$f")
+      done < <(find "$FEATURES_DIR" -name "F-*.yaml" -print0 2>/dev/null | sort -z)
+    fi
+  fi
+  if [[ -z "$filter_type" || "$filter_type" == "story" ]]; then
+    if [[ -d "$STORIES_DIR" ]]; then
+      while IFS= read -r -d '' f; do
+        all_files+=("$f")
+      done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null | sort -z)
+    fi
+  fi
+
+  # JSON-Liste aufbauen + filtern + sortieren via Python
+  python3 - "$filter_type" "$filter_status" "$filter_parent" "${all_files[@]+"${all_files[@]}"}" <<'PYEOF'
+import sys, yaml, json, datetime, re
+
+filter_type   = sys.argv[1]
+filter_status = sys.argv[2]
+filter_parent = sys.argv[3]
+files         = sys.argv[4:]
+
+PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+
+def normalize(val):
+    if isinstance(val, datetime.datetime):
+        if val.tzinfo is not None:
+            import datetime as dt
+            val = val.astimezone(dt.timezone.utc)
+        return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if isinstance(val, datetime.date):
+        return val.isoformat() + "T00:00:00Z"
+    if isinstance(val, dict):
+        return {k: normalize(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [normalize(i) for i in val]
+    return val
+
+def id_sort_key(id_str):
+    """Numerischer Sort für F-### und S-### IDs."""
+    m = re.match(r'^[FS]-(\d+)$', str(id_str or ""))
+    return int(m.group(1)) if m else 9999999
+
+items = []
+for f in files:
+    try:
+        with open(f) as fh:
+            data = yaml.safe_load(fh) or {}
+    except Exception:
+        continue
+
+    item_id  = str(data.get("id", "")).strip()
+    item_type = "feature" if item_id.startswith("F-") else "story"
+
+    # Filter: type
+    if filter_type and item_type != filter_type:
+        continue
+
+    # Filter: status
+    if filter_status:
+        if data.get("status") != filter_status:
+            continue
+
+    # Filter: parent (nur sinnvoll für Stories)
+    if filter_parent:
+        if data.get("parent") != filter_parent:
+            continue
+
+    data = normalize(data)
+    items.append(data)
+
+# Sortierung: priority (P0 < P1 < P2 < P3), dann id aufsteigend
+items.sort(key=lambda d: (
+    PRIORITY_ORDER.get(str(d.get("priority", "P3")), 9),
+    id_sort_key(d.get("id"))
+))
+
+print(json.dumps(items, ensure_ascii=False))
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
+# Verb: next — Stub (implementiert in #117)
+# ---------------------------------------------------------------------------
+cmd_next() {
+  die "board next: noch nicht implementiert (Item #117)"
+}
+
+# ---------------------------------------------------------------------------
+# Verb: rollup — Stub (implementiert in #118)
+# ---------------------------------------------------------------------------
+cmd_rollup() {
+  die "board rollup: noch nicht implementiert (Item #118)"
+}
+
+# ---------------------------------------------------------------------------
+# Verb: lint — delegiert an scripts/board-lint.sh
+# ---------------------------------------------------------------------------
+cmd_lint() {
+  local lint_script
+  lint_script="$(cd "$(dirname "$0")" && pwd)/board-lint.sh"
+  if [[ ! -x "$lint_script" ]]; then
+    die "lint: ${lint_script} nicht gefunden oder nicht ausführbar"
+  fi
+  exec "$lint_script" "${1:-${BOARD_DIR}}"
+}
+
+# ---------------------------------------------------------------------------
+# Verb: export-github — Stub (AC11, implementiert in [[board-github-export]])
+# ---------------------------------------------------------------------------
+cmd_export_github() {
+  cat >&2 <<'EOF'
+board export-github: Verb registriert.
+Das eigentliche Migrationsverhalten ist in [[board-github-export]] spezifiziert
+und noch nicht implementiert.
+EOF
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+[[ $# -ge 1 ]] || usage
+
+VERB="$1"; shift
+
+case "$VERB" in
+  feature)
+    [[ $# -ge 1 && "$1" == "add" ]] || die "feature: Unterbefehl 'add' erwartet"
+    shift
+    cmd_feature_add "$@"
+    ;;
+  story)
+    [[ $# -ge 1 && "$1" == "add" ]] || die "story: Unterbefehl 'add' erwartet"
+    shift
+    cmd_story_add "$@"
+    ;;
+  set)
+    cmd_set "$@"
+    ;;
+  show)
+    [[ $# -ge 1 ]] || die "show: ID fehlt"
+    cmd_show "$1"
+    ;;
+  list)
+    cmd_list "$@"
+    ;;
+  next)
+    cmd_next "$@"
+    ;;
+  rollup)
+    cmd_rollup "$@"
+    ;;
+  lint)
+    cmd_lint "$@"
+    ;;
+  export-github)
+    cmd_export_github "$@"
+    ;;
+  --help|-h|help)
+    usage
+    ;;
+  *)
+    die "Unbekanntes Verb '${VERB}'. Nutze 'board --help' für Hilfe."
+    ;;
+esac
