@@ -47,18 +47,18 @@ sonar:
   edition: none            # none | sonarqube-cloud | sonarqube-ce
   organization: ""         # SonarQube-Cloud-Org (nur sonarqube-cloud)
   project_key: ""          # z.B. <Org>_<repo>
-  host_url: ""             # sonarqube-cloud: https://sonarqube.io · ce: https://<deine-instanz>
+  host_url: ""             # sonarqube-cloud: https://sonarcloud.io (SonarQube Cloud — Service-URL bleibt sonarcloud.io trotz Rebrand) · ce: https://<deine-instanz>
 ```
 Token kommt NIE ins Profil/Repo → **GitHub-Org-Secret `SONAR_TOKEN`** (org-weit, ein Token für alle Repos). Workflow-Guard überspringt sauber, wenn das Secret fehlt (Forks/Contributor brechen nicht).
 
 ## 3. Scanner-Runtime ≠ App-Runtime (häufige Falle!)
 
-> **sonar/R02** — **sonar-maven-plugin 5.x ersetzt 3.11.x** (neueste Version: 5.7.0.6970, 2026-05-27). Ab v5.0 enthält das Plugin **JRE Auto-Provisioning**: bei Verbindung zu SonarQube Server ≥ 10.6 oder SonarQube Cloud lädt der Scanner automatisch ein JDK 17 herunter — `setup-java 17` als separater Step entfällt. Kein Breaking Change für bestehende Setups (auto-provisioning default-aktiv, abschaltbar via `-Dsonar.scanner.skipJreProvisioning=true`). Quellen: [SonarSource Maven Scanner Releases](https://github.com/SonarSource/sonar-scanner-maven/releases) · [JRE Auto-Provisioning Announcement](https://community.sonarsource.com/t/sonarscanner-for-maven-5-0-automatic-jre-provisioning/130002)
+> **sonar/R02** — **sonar-maven-plugin ≥ 5.0 ersetzt 3.11.x** (JRE-Auto-Provisioning ab 5.0). Ab v5.0 enthält das Plugin **JRE Auto-Provisioning**: bei Verbindung zu SonarQube Server ≥ 10.6 oder SonarQube Cloud lädt der Scanner automatisch ein JDK 17 herunter — `setup-java 17` als separater Step entfällt. Kein Breaking Change für bestehende Setups (auto-provisioning default-aktiv, abschaltbar via `-Dsonar.scanner.skipJreProvisioning=true`). Quellen: [SonarSource Maven Scanner Releases](https://github.com/SonarSource/sonar-scanner-maven/releases) · [JRE Auto-Provisioning Announcement](https://community.sonarsource.com/t/sonarscanner-for-maven-5-0-automatic-jre-provisioning/130002)
 
 > **sonar/R03** — **Scanner-Java-Anforderung: Java 17 deprecated, Java 21 wird Pflicht.** Java 17 als Scanner-Runtime ist ab SonarQube Server 2026.1 LTA deprecated; Support endet mit 2026.3. Ab 2026.4 (Juli 2026) ist **Java 21** Pflicht, wenn Auto-Provisioning deaktiviert ist. Mit Auto-Provisioning (sonar-maven-plugin ≥ 5.0, §R02) wird der JDK automatisch verwaltet — kein manuelles Upgrade nötig. Quelle: [General Requirements — SonarQube Server](https://docs.sonarsource.com/sonarqube-server/analyzing-source-code/scanners/scanner-environment/general-requirements)
 
 **SonarQube Cloud / SonarQube Server erwartet einen Java-Scanner** — auch wenn die App auf Java 11/8 läuft. Der Scanner-Schritt muss daher ggf. auf einem ANDEREN JDK laufen als Build/Test:
-- **Java-Projekt (Maven):** Build+Test auf `profile.java.version` (z.B. 11), dann `sonar-maven-plugin:5.7.0.6970:sonar` (NICHT 3.9.x/3.11.x; v5.0+ mit JRE-Auto-Provisioning benötigt keinen separaten `setup-java 17`-Step mehr). Reuse von `target/` aus dem verify-Step.
+- **Java-Projekt (Maven):** Build+Test auf `profile.java.version` (z.B. 11), dann `sonar-maven-plugin` ≥ 5.0 Goal `sonar:sonar` (NICHT 3.9.x/3.11.x; v5.0+ mit JRE-Auto-Provisioning benötigt keinen separaten `setup-java 17`-Step mehr). Reuse von `target/` aus dem verify-Step.
 - **JS/Angular/Flutter/HTML:** kein Maven-Plugin → **`sonar-scanner` CLI** (offizielle `SonarSource/sonarqube-scan-action`) + `sonar-project.properties` mit `sonar.sources`, `sonar.projectKey`, `sonar.organization`. Coverage via lcov (`sonar.javascript.lcov.reportPaths`).
 Die `EnvironmentInformation class file version 61.0`-Meldung = Scanner braucht Java 17 (mit Auto-Provisioning automatisch bereitgestellt).
 
@@ -78,7 +78,7 @@ Beim Fabrik-Default (monatlich + manuell, §1a) gibt es **keinen** per-PR-`sonar
 - [ ] `profile.sonar.edition` gesetzt + passend zur Repo-Sichtbarkeit (public→`sonarqube-cloud`, private→`sonarqube-ce`/`none`)? (`sonarcloud` = alter Name, Ablösung durch `sonarqube-cloud` — sonar/R01)
 - [ ] Token NUR als Org-Secret `SONAR_TOKEN`, nirgends im Repo/Profil?
 - [ ] `sonar.yml` hat Non-blocking-Token-Guard?
-- [ ] Java-Projekt: `sonar-maven-plugin` ≥ 5.0.x (mit JRE-Auto-Provisioning, kein separater `setup-java 17`-Step nötig)? Veraltete 3.9.x/3.11.x-Koordinaten aktualisieren. (sonar/R02)
+- [ ] Java-Projekt: `sonar-maven-plugin` ≥ 5.0 (mit JRE-Auto-Provisioning, kein separater `setup-java 17`-Step nötig)? Veraltete 3.9.x/3.11.x-Koordinaten aktualisieren. (sonar/R02)
 - [ ] Keine Massen-Issue-Generierung aus Smells (nur Blocker/Critical Bug+Vuln, gedeckelt)?
 - [ ] Trigger = `schedule` (monatlich) + `workflow_dispatch`, KEIN roher `push`/`pull_request` (§1a)? `concurrency: cancel-in-progress` gesetzt?
 - [ ] `/flow` blockiert NICHT auf Sonar (kein per-PR-Gate by default); Pre-Merge-Qualität via reviewer-Pack-Regeln?
