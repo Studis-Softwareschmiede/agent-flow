@@ -38,6 +38,12 @@ Items mit Deployment-Pattern Multi-Replica (Compose `scale:`, Kubernetes `replic
   - **Kein Compose-DB-Service** (Spec §5): DB-File liegt in Container-Volume (`/data/app.sqlite`), Migrations werden via separatem schlanken `sqlite3`-Image als one-shot-Container appliziert (Spec §16-R4), der das Volume teilt.
   - `PRAGMA foreign_keys = ON;` und `PRAGMA journal_mode = WAL;` gehören in `001_init.sql` (erste Migration) — werden einmalig gesetzt und sind dann persistent.
 
+- `sqlite/R07` — **`RETURNING`-Klausel für INSERT/UPDATE/DELETE (stabil seit SQLite 3.35.0, März 2021).** Gibt die Werte geänderter Zeilen zurück, ohne einen separaten `SELECT` zu benötigen — besonders nützlich für auto-generierte `id`- oder `created_at`-Werte nach einem INSERT. Wichtige Einschränkungen: (1) nur auf Top-Level-Statements, **nicht** in Triggern; (2) die Reihenfolge der zurückgegebenen Zeilen ist nicht garantiert; (3) AFTER-Trigger-Änderungen sind im RETURNING-Output nicht sichtbar; (4) funktioniert nicht auf Virtual Tables (bei DELETE/UPDATE). Beispiel: `INSERT INTO posts(title) VALUES('Hi') RETURNING id, created_at;` Quelle: [sqlite.org/lang_returning.html](https://www.sqlite.org/lang_returning.html)
+
+- `sqlite/R08` — **JSON-Operatoren `->` und `->>` (stabil seit SQLite 3.38.0, Februar 2022).** Kurzform für JSON-Extraktion, kompatibel mit MySQL/PostgreSQL. Unterschied: `->` liefert die **JSON-Darstellung** des Werts (z.B. `'"xyz"'` mit Anführungszeichen), `->>` liefert den **SQL-Wert** (z.B. `'xyz'` ohne Anführungszeichen, entspricht `json_extract()`). Rechts-Operand: JSON-Path-String (z.B. `'$.field'`), Objekt-Label (`'field'` → `'$.field'`), oder Array-Index (Integer, seit 3.47.0 auch negativ). Falle: `col -> '$.key'` gibt `NULL` zurück, wenn `col` NULL ist oder `key` nicht existiert — kein Fehler. Quelle: [sqlite.org/json1.html#jptr](https://www.sqlite.org/json1.html#jptr)
+
+- `sqlite/R09` — **ALTER TABLE: NOT NULL-Constraint ohne Table-Rebuild seit SQLite 3.53.0 (April 2026) änderbar.** Neuer Syntax: `ALTER TABLE t ALTER col SET NOT NULL` / `ALTER TABLE t ALTER col DROP NOT NULL`. Ergänzt R05: der Table-Rebuild ist **nur noch nötig** für Typ-Änderungen, DEFAULT-Änderungen, CHECK-Constraints, Umbenennung von Constraints und alle anderen Schema-Änderungen. `SET NOT NULL` ist idempotent (no-op falls bereits gesetzt). Quelle: [sqlite.org/lang_altertable.html#alter_table_alter_column](https://www.sqlite.org/lang_altertable.html#alter_table_alter_column) · [sqlite.org/releaselog/3_53_0.html](https://www.sqlite.org/releaselog/3_53_0.html)
+
 ---
 
 ## Beispiel-Migration (`db_scripts/001_init.sql`)
@@ -81,11 +87,13 @@ CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 - `profile.db_dialect: sqlite` + Deployment-Pattern mit `scale:`, `replicas:` oder mehreren App-Backends → **Critical** (`sqlite/R01` — Multi-Replica-Hard-Stop).
 - Verbindungsaufbau ohne `PRAGMA foreign_keys = ON;` → **Critical** (FK-Constraints werden ignoriert, `sqlite/R02`).
 - Neue Tabellen ohne `STRICT` in neuem Code (SQLite ≥ 3.37.0) → **Important** (unerwartete Typ-Koersion, `sqlite/R04`).
-- Schema-Änderung via nicht-unterstütztem ALTER (z.B. `ALTER COLUMN`) → **Critical** (wird ohne Fehlermeldung ignoriert oder bricht ab, `sqlite/R05`).
+- Schema-Änderung via nicht-unterstütztem ALTER (z.B. `ALTER COLUMN` für Typ-/DEFAULT-Änderung) → **Critical** (`sqlite/R05`). Ausnahme ab SQLite ≥ 3.53.0: `ALTER COLUMN SET/DROP NOT NULL` ist unterstützt (`sqlite/R09`).
 - Bereits angewandte Migration editiert / umnummeriert → **Critical** (Spec §4, `sqlite/R06`).
 - `PRAGMA journal_mode = WAL;` fehlt und die App hat mehr als einen gleichzeitigen Reader → **Important** (`sqlite/R03`).
 - Index auf FK-Spalte fehlt → **Important** (kein Auto-Index auf FKs in SQLite).
 - Backup via `cp` auf laufende DB (statt `sqlite3 .backup` oder WAL-Checkpoint) → **Important** (Datenverlust bei gleichzeitigem Write möglich).
+- `->` / `->>` verwechselt: `->` liefert JSON-Darstellung (mit Anführungszeichen bei Strings), `->>` liefert SQL-Wert → **Important** (Typ-Fehler in Verarbeitung, `sqlite/R08`).
+- `ALTER COLUMN SET NOT NULL` auf SQLite < 3.53.0 → `sqlite/R05` Table-Rebuild-Pattern verwenden; auf ≥ 3.53.0 neue Syntax nutzbar (`sqlite/R09`).
 
 ---
 
