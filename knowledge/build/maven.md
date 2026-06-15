@@ -1,6 +1,6 @@
 ---
 pack: build/maven
-pack_version: 1.0
+pack_version: 1.1
 pack_date: 2026-06-15
 primary_sources:
   - https://maven.apache.org/guides/
@@ -24,7 +24,7 @@ Apache Maven (Build-Tool, primär Java/Kotlin/Scala). Geladen bei `profile.build
 - `maven/A01` — **`-ntp` (`--no-transfer-progress`, since 3.6.1)** unterdrückt das Download-Progress-Spam in CI/Logs. Standardflag im Smoke-Befehl `mvn -B -ntp verify`. [src: https://maven.apache.org/docs/3.6.1/release-notes.html, since: 3.6.1]
 - `maven/A02` — **`-B` (`--batch-mode`)** unterdrückt interaktive Prompts und ANSI-Farben — Pflicht für CI/Smoke. Kombination `-B -ntp` ist die kanonische CI-Form.
 - `maven/A03` — **Reproducible-Builds via `project.build.outputTimestamp` (since 3.6.3).** Setzt deterministischen Timestamp in JAR-Manifest und ZIP-Entries — Voraussetzung für SOURCE_DATE_EPOCH-konforme Reproducible-Builds. [src: https://maven.apache.org/guides/mini/guide-reproducible-builds.html, since: 3.6.3]
-- `maven/A04` — **`<maven.compiler.release>` (statt `source`+`target`-Paar) seit `maven-compiler-plugin` 3.6.** `release` aktiviert `--release N` (JDK 9+), was auch Cross-Compile-API-Checks erzwingt — accidental API-Usage jenseits des Targets wird Compile-Fehler. Ab `maven-compiler-plugin` 3.13.0 ist `release` auch auf JDK 8 nutzbar (Plugin wandelt automatisch auf `source`/`target`-Äquivalent um, kein bedingtes Profil nötig). `source`/`target` allein bietet diesen Schutz nicht. [src: https://maven.apache.org/plugins/maven-compiler-plugin/examples/set-compiler-release.html, since: maven-compiler-plugin 3.13.0 (Uniform-JDK8-Support)]
+- `maven/A04` — **`<maven.compiler.release>` (statt `source`+`target`-Paar) seit `maven-compiler-plugin` 3.6.** `release` aktiviert `--release N` (JDK 9+), was auch Cross-Compile-API-Checks erzwingt — accidental API-Usage jenseits des Targets wird Compile-Fehler. Ab `maven-compiler-plugin` 3.13.0 ist `release` auch auf JDK 8 nutzbar (Plugin wandelt automatisch auf `source`/`target`-Äquivalent um, kein bedingtes Profil nötig). `source`/`target` allein bietet diesen Schutz nicht. [src: https://maven.apache.org/plugins/maven-compiler-plugin/examples/set-compiler-release.html, since: maven-compiler-plugin 3.6 (JDK 9+); 3.13.0 (Uniform-JDK8-Support)]
 - `maven/A05` — **CI-friendly Versions (`${revision}`) seit Maven 3.5.0: in Maven 3.x `flatten-maven-plugin` mit `resolveCiFriendliesOnly` Pflicht bei `install`/`deploy`.** Ohne das Plugin enthält das ins Repository geschriebene POM wörtlich `${revision}` statt der aufgelösten Version — Konsumenten können das Artefakt nicht auflösen. Maven 4 (POM-Modell 4.1.0) eliminiert diesen Bedarf nativ. [src: https://maven.apache.org/guides/mini/guide-maven-ci-friendly.html, since: 3.5.0]
 - `maven/A06` — **`requirePluginVersions`-Regel im Maven Enforcer Plugin** (`maven-enforcer-plugin` ≥ 1.0) fängt unpinnte Plugins (`LATEST`, `RELEASE`, Snapshots, Default-Super-POM-Versionen) im Build ab — Reviewer-Checklist-Befund „Plugin-Version ungepinnt" kann damit automatisiert werden. Standard-Konfiguration prüft `clean`-, `deploy`- und `site`-Phasen. [src: https://maven.apache.org/enforcer/enforcer-rules/requirePluginVersions.html]
 
