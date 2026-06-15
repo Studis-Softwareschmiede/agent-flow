@@ -18,6 +18,33 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 - **Auth herstellen:** `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"` (mintet App-Token aus `.env.gpg`, loggt `gh` ein). **NICHT `gh auth login --web`.**
 - **Security-Frische (einmaliger Nudge):** `last_trained:` aus `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` lesen; ist es **> 90 Tage** her → einmal ausgeben: „🔒 security-Pack ist <N> Tage alt — `/train security` erwägen." (nur Hinweis, blockiert nicht).
 
+## 0a. Vorab-Plan (vor dem ersten Item)
+
+Bevor `/flow` mit der Item-Abarbeitung beginnt, liest es alle **bereiten** Stories des Backlogs (`board next --all` oder äquivalent) und erstellt einmalig einen **Abarbeitungsplan**. Der Plan ist eine kurzgefasste Ausgabe (kein Agent-Dispatch, kein LLM-Overhead), die folgende drei Punkte abdeckt:
+
+### (a) Hot-Spot-Datei-Analyse
+Für jede Story: welche zentralen Dateien berührt sie (aus Spec-Lektüre + `implements`-ACs)? Taucht eine Datei bei ≥ 2 Stories auf → **Hot-Spot**. Hot-Spot-Stories werden **serialisiert** (nicht parallel dispatcht). Typische Hot-Spots: `AppShell`, Router-Registrierung, `server.js`, `index.ts`-Re-Exporte, `viewRegistry`. (Nachhaltige Kur: Auto-Discovery statt manuelles Wiring — s. `flow/P1` in §3.)
+
+### (b) Konflikt-/„heben-sich-auf"-Check
+Widersprechen sich Stories? (Eine baut um, was die andere voraussetzt; eine legt Felder an, die eine andere löscht.) → Reihenfolge nach `depends` + logischer Schichtung (Backend vor Frontend, Datenschicht vor UI).
+
+### (c) depends-Reihenfolge (topologisch)
+`board next` respektiert `depends` bereits; `/flow` visualisiert trotzdem die Reihenfolge explizit, damit Parallelisierungs-Gruppen sichtbar sind. Eine Story startet erst, wenn ihre `depends` `Done` sind.
+
+**Ergebnis des Plans:** Eine kurze Ausgabe im Format:
+
+```
+Abarbeitungsplan:
+  Gruppe 1 (seriell — Hot-Spot: <Datei>): S-### → S-###
+  Gruppe 2 (parallel): S-###  ‖  S-###
+  Gruppe 3 (seriell — depends): S-###
+  Landen: immer seriell (main = eine Senke; Rebase zwischen PRs)
+```
+
+Dieser Plan wird dem User ausgegeben und steuert die Dispatch-Reihenfolge in §3.
+
+---
+
 ## 1. Nächstes Item wählen
 - `board next` → die nächste bereite Story als JSON (`id`, `spec`, `implements`, `parent`, `labels`, `priority`); Queue-Logik (Priority, Depends-Gate) lebt in der CLI.
 - Aus dem JSON die **Spec-Referenz** lesen: `spec: docs/specs/<feature>.md` + `implements: [AC…]` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Story-Titel).
@@ -350,6 +377,27 @@ Nur wenn diesem Lauf mindestens ein Item gelandet ist **und** `profile.deploy ==
 3. **Best-effort:** CI rot/Timeout oder Pull `denied` → melden + überspringen, Flow NICHT scheitern lassen (Hinweis auf `/cicd ship` bzw. `/preview up`).
 
 Dann stoppen mit Zusammenfassung (gelandete Items + Test-URL + Version).
+
+## Strategie-Regeln
+
+### SR1 — Parallel-Abarbeitung (AC2)
+- Stories mit **disjunkten** Dateien (kein gemeinsamer Hot-Spot aus §0a) laufen **parallel** in isolierten git-Worktrees (ein coder je Worktree, `coder/R03`).
+- Stories mit **geteilten Hot-Spot-Dateien** laufen **seriell** — Reihenfolge aus §0a-Plan.
+- **Landen ist immer seriell:** `main` ist die eine Senke; zwischen zwei PRs wird jeweils ein Rebase auf den aktuellen `main`-Stand durchgeführt (Post-Rebase-Verifikation: s. `flow/P2` in §5).
+- **Test-Isolation:** parallele Worktrees müssen aus Test-Auswahl UND Modul-Auflösung ausgeschlossen sein (jest: `testPathIgnorePatterns` + `modulePathIgnorePatterns` für `.claude/worktrees/`) — sonst Cache-Vergiftung oder rote Tests auf `main`. Details: §3 `flow/P1`.
+
+### SR2 — Feature-Branch-Strategie (AC3)
+- **Schwelle ≥ 3 Stories pro Feature:** einen Feature-Branch `feature/<F-###>` anlegen. Alle Stories des Features landen dort (je Story ein PR in den Feature-Branch); am Ende **ein** Merge des Feature-Branches in `main`. Vorteil: zusammenhängendes Review/CI je Feature, weniger `main`-Churn.
+- **< 3 Stories:** je Story ein PR direkt in `main` (einfacher, heute Standardpraxis).
+- Die Schwelle gilt pro Feature (nicht über Features hinweg); gemischte Features auf demselben Board können unterschiedliche Strategien fahren.
+
+### SR3 — Abarbeitungs-Hygiene (AC4)
+- **board-Status persistent:** `board set … Done` muss via PR in `main` landen — **gebündelt** mit dem Story-Code-PR (gleicher Commit/PR). Lose `board set`-Aufrufe ohne Landing gehen bei `reset` verloren.
+- **Image-Build/Deploy gebündelt am Feature-Ende:** CI-Run + `docker recreate` sind teuer; nicht pro Story auslösen, sondern einmalig am Feature-Ende (oder bei `deploy: docker` via §5 `cicd`-Ship nach dem letzten Story-PR des Features).
+- **Cross-Repo-Markierung:** Stories, deren Code in einem anderen Repo lebt (z. B. agent-flow-Logik vs. dev-gui-Anzeige), klar im Board markieren (Label oder `spec`-Verweis auf das Subsystem-Repo). Spec liegt beim Subsystem; Tracking auf dem Board.
+- **Review-Gate bei Parallelität nicht überspringen:** parallele coder übersehen eher sicherheitsrelevante Details (Erfahrung: Path-Traversal-Befund in parallelem Lauf). Gerade bei Parallel-Dispatches adversarial reviewen — kein PASS ohne vollständigen Reviewer-Durchlauf (§3).
+
+---
 
 ## Grenzen
 - NUR der Orchestrator schreibt Board-Status; cicd führt die git-Abschluss-Operationen (merge+push) und den Rollout im Auftrag des Orchestrators aus (Delegation via SHIP-TRIGGER).
