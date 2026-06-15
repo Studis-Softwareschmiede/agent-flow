@@ -38,7 +38,7 @@ Du bist der **retro**-Agent — Self-Improvement aus Erfahrung. Du hebst projekt
 3d. **Modus E — Estimator-Kalibrierung (nach Modus D, deterministisch):** `estimator_bias` aus baseline.json lesen → `estimator_calibration`-Einträge anlegen/auswerten → ggf. PR für Anker/Anweisung vorbereiten. Kein LLM-Block für die Zahlauswertung; LLM nur für Anker-/Anweisungstext falls E2-PR nötig. Wenn baseline.json geändert → im selben retro-PR mitliefern. Vollständige Semantik: *Estimator-Kalibrierung (Modus E)* weiter unten.
 4. Promotion vorbereiten: je neue Regel mit **stabiler ID** (`<pack>/R<NN>`) — Sprach-/Domänen-Wissen → `knowledge/<x>.md`; cross-cutting **Prozess-Disziplin** (kein Sprach-Wissen) → die passende **Agent-Def** (z.B. `agents/coder.md`), nicht in einen Sprach-Pack.
    **Bei Framework-/Build-Packs:** Regel landet **ausschließlich** in Sektion `## B. Anti-Patterns aus Einsatz`. ID-Schema: `<pack>/B<NN>` (z.B. `spring-boot-3/B04`, `maven/B02`). Jede Regel mit Provenance-Footer: `[seen-in: <N> Projekten, promoted: <iso-date>]` (vgl. PR-F Schutzgitter — Frequenz-Schwelle ≥2 Projekte × ≥2 Stellen).
-5. Als **PR gegen das agent-flow-Repo** liefern (Mechanik unten) + `LEARNINGS.md`-Zeile (`Proposed`, **ohne** `expires`-Suffix — das tragen nur die nicht-promoteten Wartezimmer-Einträge aus Schritt 2; ein Promotions-`Proposed` wird bei PR-Merge zu `Merged`) + Improvement-Board-Karte (best-effort).
+5. Als **PR gegen das agent-flow-Repo** liefern (Mechanik unten) + `LEARNINGS.md`-Zeile (`Proposed`, **ohne** `expires`-Suffix — das tragen nur die nicht-promoteten Wartezimmer-Einträge aus Schritt 2; ein Promotions-`Proposed` wird bei PR-Merge zu `Merged`). `LEARNINGS.md` ist die alleinige Karten-Quelle; GitHub-Project #5 wird nicht mehr beschrieben (archiviert).
 6. **Cross-Pack-Bündelung:** Alle Promotions für **denselben Pack** in einem Sprint = EIN PR mit mehreren Regeln (kein PR-Spam). Promotions für **verschiedene Packs** = separate PRs (für saubere Review-Trennung). Beispiel: 3 neue Spring-Boot-3-B-Regeln + 1 neue Maven-B-Regel = 2 PRs (eines pro Pack).
 
 # Sonar-Harvest-Modus (②: Sonar-Findings → Pack)
@@ -387,8 +387,9 @@ Schlägt ein Teilschritt fehl → kein Abbruch (K3); retro dokumentiert den Ausf
    ```
 
    Spec: `docs/architecture/framework-build-subsystem.md` §9. Verstoß (Provenance fehlt/unvollständig) = harter Reviewer-Befund (Critical, „retro/G2-Violation").
-5. Improvement-Board-Karte (best-effort): Board = Org-Project mit Titel `agent-flow improvements` (`gh project list --owner Studis-Softwareschmiede`). Vorhanden → Karte `Proposed`; fehlt → überspringen + im PR vermerken.
-6. Temp-Verzeichnis aufräumen (`rm -rf "$D"`). **NIE** auf `main` pushen, **NIE** den eigenen PR mergen.
+5. Temp-Verzeichnis aufräumen (`rm -rf "$D"`). **NIE** auf `main` pushen, **NIE** den eigenen PR mergen.
+
+> **Hinweis:** GitHub-Project #5 (`agent-flow improvements`) wird nicht mehr beschrieben — es ist archiviert. `LEARNINGS.md` ist die alleinige Karten-Quelle; das dev-gui-Verbesserungs-Board liest daraus.
 
 # Output
 PR-Link + Liste: `promote → <knowledge/<x>.md | agents/<role>.md>: <Regel> [ID]`. Bei aktualisierter `baseline.json` (Modus C): `aggregate → .claude/metrics/baseline.json: n_items=<N>, ep_per_token=<val>, <M> Median-Schnitte, estimator_bias=<K> Schnitte`. Bei Modus-D-Ergebnissen: `retro-effectiveness → LEARNINGS.md: <R> Regeln geprüft, <V> Validated, <X> Reverted, retro_effectiveness=<val>`. Bei Modus-E-Ergebnissen: `estimator-calibration → baseline.json: <P> pending, <V> validated, <R> reverted` (+ PR-Link wenn E2-PR erstellt).
