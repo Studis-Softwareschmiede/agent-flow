@@ -61,6 +61,31 @@ Alle lesenden Verben sind ohne LLM und deterministisch. Schreibende Verben (`add
 ### V11 — `board export-github` (Verb-Registrierung)
 `board export-github` ist als Verb registriert und delegiert an das Migrations-Verhalten aus [[board-github-export]]. Diese Spec garantiert nur die Existenz/Hilfe des Verbs; das Verhalten ist dort spezifiziert.
 
+### V12 — `board ready` (Readiness-Gate)
+`board ready [--quiet]` prüft je To-Do-Story, ob sie für autonome Abarbeitung bereit ist. Alle folgenden Regeln müssen erfüllt sein:
+
+- **R1:** `status == "To Do"` — nur To-Do-Items werden bewertet; alle anderen Status werden als `(n/a)` übersprungen.
+- **R2:** `spec` ist gesetzt **und** die referenzierte Datei existiert **und** ihr YAML-Frontmatter enthält `status: active`.
+- **R3:** `implements` ist nicht leer **und** jede gelistete AC-Nummer kommt in der Spec-Datei vor.
+- **R4:** `depends` ist leer/null **oder** alle referenzierten Stories haben `status == "Done"`.
+- **R5:** `blocked_reason` ist leer/null.
+
+Nicht maschinell prüfbar (kein Fehlkriterium): „AC testbar formuliert", „keine offene Owner-Frage".
+
+**Ausgabe** je Story:
+```
+READY     S-xxx
+NOT-READY S-xxx — <konkreter Grund je verletzter Regel>
+(n/a)     S-xxx      (status != "To Do"; nur ohne --quiet)
+```
+Plus eine Summary-Zeile am Ende: `Summary: <n>/<total> To-Do-Stories ready`.
+
+**`--quiet`:** unterdrückt `(n/a)`-Zeilen; gibt weiterhin `READY`/`NOT-READY` und die Summary aus.
+
+**Exit-Code:** 0 wenn alle To-Do-Items ready sind (oder keine To-Do-Items vorhanden sind); 1 wenn mindestens eine To-Do-Story `NOT-READY` ist. Damit verwendbar als Gate vor einem autonomen `/flow`-Lauf.
+
+**Robustheit:** fehlende/kaputte Felder → Story gilt als `NOT-READY` mit konkretem Grund; kein Abbruch des Gesamtlaufs. Fehlt `board.yaml` oder das Stories-Verzeichnis → Exit 0 (keine To-Do-Items).
+
 ## Acceptance-Kriterien
 
 - **AC1** — `board feature add` legt eine Feature-YAML an, zieht die nächste `F-`-Nummer aus `board.yaml`, erhöht `next_feature_id`, setzt `status=Backlog`+Zeitstempel und gibt die neue `F-###` aus. *(V1)*
@@ -74,6 +99,7 @@ Alle lesenden Verben sind ohne LLM und deterministisch. Schreibende Verben (`add
 - **AC9** — `board set <story> status …` ist nur aus dem `/flow`-Kontext erlaubt; ein anderer Aufrufer → kein Schreiben, Fehlermeldung, Exit ≠ 0; nicht-Status-Felder bleiben für `requirement` erlaubt. *(V9)*
 - **AC10** — Lesende Verben sind deterministisch ohne LLM; schreibende Verben sind atomar (kein halber Zustand) und schreiben bei ungültiger Eingabe nichts (Exit ≠ 0). *(V10)*
 - **AC11** — `board export-github` ist als Verb registriert und delegiert an [[board-github-export]]; das Verb existiert und liefert Hilfe. *(V11)*
+- **AC12** — `board ready` listet je To-Do-Story `READY S-xxx` oder `NOT-READY S-xxx — <Grund>` (Regeln R1–R5), gibt eine Summary aus und endet mit Exit 0 wenn alle To-Do-Items ready (oder keine vorhanden), Exit 1 wenn ≥1 NOT-READY. `--quiet` unterdrückt n/a-Zeilen. Fehlende/kaputte Felder → NOT-READY mit Grund, kein Crash. *(V12)*
 
 ## Verträge
 
@@ -88,6 +114,7 @@ board set <id> <feld> <wert>
 board list [--type feature|story] [--status …] [--parent F-###]   → JSON-Array
 board rollup <F-###> | --all
 board lint                                          → FEHLER|WARN-Zeilen, Exit-Code
+board ready [--quiet]                               → READY|NOT-READY-Zeilen + Summary, Exit-Code
 board export-github                                 → siehe [[board-github-export]]
 ```
 
