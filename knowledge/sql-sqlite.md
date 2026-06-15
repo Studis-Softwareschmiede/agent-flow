@@ -42,7 +42,7 @@ Items mit Deployment-Pattern Multi-Replica (Compose `scale:`, Kubernetes `replic
 
 - `sqlite/R08` — **JSON-Operatoren `->` und `->>` (stabil seit SQLite 3.38.0, Februar 2022).** Kurzform für JSON-Extraktion, kompatibel mit MySQL/PostgreSQL. Unterschied: `->` liefert die **JSON-Darstellung** des Werts (z.B. `'"xyz"'` mit Anführungszeichen), `->>` liefert den **SQL-Wert** (z.B. `'xyz'` ohne Anführungszeichen, entspricht `json_extract()`). Rechts-Operand: JSON-Path-String (z.B. `'$.field'`), Objekt-Label (`'field'` → `'$.field'`), oder Array-Index (Integer, seit 3.47.0 auch negativ). Falle: `col -> '$.key'` gibt `NULL` zurück, wenn `col` NULL ist oder `key` nicht existiert — kein Fehler. Quelle: [sqlite.org/json1.html#jptr](https://www.sqlite.org/json1.html#jptr)
 
-- `sqlite/R09` — **ALTER TABLE: NOT NULL und CHECK-Constraints seit SQLite 3.53.0 (April 2026) ohne Table-Rebuild änderbar.** Neuer Syntax: `ALTER TABLE t ALTER col SET NOT NULL` / `ALTER TABLE t ALTER col DROP NOT NULL`. Ergänzt R05: der Table-Rebuild ist **nur noch nötig** für Typ-Änderungen, DEFAULT-Änderungen, Umbenennung von Constraints und alle anderen Schema-Änderungen. `SET NOT NULL` ist idempotent (no-op falls bereits gesetzt). Nur Spalten-Constraints; Tabellen-Constraints (z.B. CHECK auf Tabellenebene) folgen einer anderen Syntax. Quelle: [sqlite.org/releaselog/3_53_0.html](https://www.sqlite.org/releaselog/3_53_0.html) · [sqlite.org/lang_altertable.html](https://www.sqlite.org/lang_altertable.html)
+- `sqlite/R09` — **ALTER TABLE: NOT NULL-Constraint ohne Table-Rebuild seit SQLite 3.53.0 (April 2026) änderbar.** Neuer Syntax: `ALTER TABLE t ALTER col SET NOT NULL` / `ALTER TABLE t ALTER col DROP NOT NULL`. Ergänzt R05: der Table-Rebuild ist **nur noch nötig** für Typ-Änderungen, DEFAULT-Änderungen, CHECK-Constraints, Umbenennung von Constraints und alle anderen Schema-Änderungen. `SET NOT NULL` ist idempotent (no-op falls bereits gesetzt). Quelle: [sqlite.org/lang_altertable.html#alter_table_alter_column](https://www.sqlite.org/lang_altertable.html#alter_table_alter_column) · [sqlite.org/releaselog/3_53_0.html](https://www.sqlite.org/releaselog/3_53_0.html)
 
 ---
 
@@ -87,7 +87,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 - `profile.db_dialect: sqlite` + Deployment-Pattern mit `scale:`, `replicas:` oder mehreren App-Backends → **Critical** (`sqlite/R01` — Multi-Replica-Hard-Stop).
 - Verbindungsaufbau ohne `PRAGMA foreign_keys = ON;` → **Critical** (FK-Constraints werden ignoriert, `sqlite/R02`).
 - Neue Tabellen ohne `STRICT` in neuem Code (SQLite ≥ 3.37.0) → **Important** (unerwartete Typ-Koersion, `sqlite/R04`).
-- Schema-Änderung via nicht-unterstütztem ALTER (z.B. `ALTER COLUMN`) → **Critical** (wird ohne Fehlermeldung ignoriert oder bricht ab, `sqlite/R05`).
+- Schema-Änderung via nicht-unterstütztem ALTER (z.B. `ALTER COLUMN` für Typ-/DEFAULT-Änderung) → **Critical** (`sqlite/R05`). Ausnahme ab SQLite ≥ 3.53.0: `ALTER COLUMN SET/DROP NOT NULL` ist unterstützt (`sqlite/R09`).
 - Bereits angewandte Migration editiert / umnummeriert → **Critical** (Spec §4, `sqlite/R06`).
 - `PRAGMA journal_mode = WAL;` fehlt und die App hat mehr als einen gleichzeitigen Reader → **Important** (`sqlite/R03`).
 - Index auf FK-Spalte fehlt → **Important** (kein Auto-Index auf FKs in SQLite).
