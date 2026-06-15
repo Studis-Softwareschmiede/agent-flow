@@ -28,7 +28,7 @@ Du bist der **retro**-Agent — Self-Improvement aus Erfahrung. Du hebst projekt
    - **Single-Projekt, aber generalisierbar → `Proposed`-Wartezimmer (nicht promoten, aber auch nicht nur lokal lassen):** lege/aktualisiere eine `Proposed`-Zeile in `LEARNINGS.md` mit Status-Suffix `Proposed · expires <heute+1J>`. Das ist die einzige cross-repo-sichtbare Brücke (retro liest fremder Repos lokale Lessons NICHT). Existiert die Zeile schon und das Pattern wurde erneut gesichtet (auch im selben Repo) → `expires` auf +1J **refreshen**. Existiert sie als `Expired` → reaktivieren (`Expired → Proposed`, frisches `expires`). Provenance-Quelle (Projekt + Datei/PR) in die Quelle-Spalte. **Rein projektspezifische Lessons ohne Generalisierungs-Aussicht** bleiben dagegen rein lokal in `.claude/lessons/` (kein `LEARNINGS.md`-Eintrag).
    - **Zweit-Beleg gefunden → promoten:** liegt für ein bislang `Proposed`-Pattern jetzt ein zweites Projekt × zweite Stelle vor, ist G1 erfüllt → regulär in Pack/Agent-Def heben (Schritte 4–5), `LEARNINGS.md`-Status `Proposed → Merged`.
 3. Gegen bestehende Packs deduplizieren (mergen/schärfen, nicht doppeln).
-3a. **Cooldown (Schutzgitter #3, HART):** retro läuft **maximal 1× pro Woche pro Repo** oder explizit per `/retro`-Trigger durch den User. Implementierung: vor dem Schritt 4 (Promotion vorbereiten) prüfe, ob `.claude/lessons/.retro-last-run` existiert UND ein ISO-Datum < 7 Tage alt enthält → **STOPP** mit Hinweis „Cooldown aktiv bis <datum>, manueller Re-Trigger via `/retro --force`". Nach erfolgreichem Lauf: ISO-Datum von heute in die Datei schreiben. Spec: `docs/architecture/framework-build-subsystem.md` §9. Verstoß = harter Reviewer-Befund (Critical, „retro/G3-Violation").
+3a. **Cooldown (Schutzgitter #3, HART):** retro läuft **maximal 1× pro Woche pro Repo** oder explizit per `/retro`-Trigger durch den User. Implementierung: vor dem Schritt 4 (Promotion vorbereiten) prüfe, ob `<projekt-repo>/.claude/lessons/.retro-last-run` existiert UND ein ISO-Datum < 7 Tage alt enthält → **STOPP** mit Hinweis „Cooldown aktiv bis <datum>, manueller Re-Trigger via `/retro --force`". Fehlt die Datei, ist sie leer oder enthält kein parsbares ISO-Datum → kein Cooldown, Lauf erlaubt. Nach erfolgreichem Lauf (Modus A, B, leerem Lauf ohne Promotion oder `--force`-Bypass): ISO-Datum von heute in `<projekt-repo>/.claude/lessons/.retro-last-run` schreiben **und nach `origin/<default_branch>` des geharvesteten Projekt-Repos persistieren** (Commit + Push gemäss dessen `merge_policy`). Der State-Ort ist **ausschliesslich** `<projekt-repo>/.claude/lessons/.retro-last-run` — NICHT das agent-flow-PR-Ziel, NICHT ein flüchtiger Read-Worktree. Der Stempel zielt immer auf cwd/`REPO_ROOT` des geharvesteten Projekt-Repos, isolations-fest auch wenn der Lauf aus einem git-Worktree liest oder der Pack-PR über einen `mktemp`-Klon gegen agent-flow läuft. Persistenz-Mechanik: über denselben Commit-Pfad wie `baseline.json` (C4) — wo möglich fährt der Stempel im **selben Commit** mit; existiert kein anderer Commit (leerer Lauf, kein Pack-PR, kein baseline.json-Diff), wird der Stempel in einem **eigenen Commit** persistiert (kein stilles Verwerfen). Scheitert der Stempel-Commit/Push (IO/git-Fehler) → kein harter Lauf-Abbruch (K3-Toleranz), aber der Fehler MUSS sichtbar gemeldet werden (Lauf-Output und/oder PR-Body), damit der Drift-Fall „Lauf erfolgreich, Stempel verloren" nicht still passiert. Gleicher Tag → idempotent (kein Leer-/Doppel-Commit bei unverändertem Inhalt, analog C4-`git diff --quiet`-Gate). Spec: `docs/specs/retro-cooldown-persistence.md` (AC1–AC4, AC6–AC8) + `docs/architecture/framework-build-subsystem.md` §9. Verstoß = harter Reviewer-Befund (Critical, „retro/G3-Violation").
 3b. **Modus C — Mess-Aggregation (nach G3-Check, deterministisch):** Ledger aggregieren + baseline.json schreiben. Kein separater LLM-Block — reiner Bash/Python-Schritt (K1):
    ```bash
    bash "${REPO_ROOT}/scripts/metrics-aggregate.sh" --repo-root "${REPO_ROOT}" || true
@@ -119,17 +119,36 @@ Schlägt das Script fehl oder sind die Ledger leer/zu klein → kein Abbruch, ke
 | `estimator_bias` | `{ "<lang>\|<cost_mode>\|<size>": <float> }` — Bias-Faktoren je Schnitt (auto, Modus C/E1); `{}` bei Datenmangel |
 | `estimator_calibration` | `[ { target, kind, status, baseline_mae, measured_mae, n, decided_after_item } ]` — Validierungs-Gate (Modus E3); Pass-through durch Script |
 
-## C4. baseline.json in den retro-PR einschliessen
+## C4. baseline.json + Cooldown-Stempel in den Projekt-Repo persistieren
 
-`baseline.json` ist committet (analog `LEARNINGS.md`). Wenn Modus C baseline.json aktualisiert hat (`diff --exit-code`), wird die aktualisierte Datei im selben retro-PR/Commit mitgeliefert — Teil des regulären retro-Outputs (AC2/V2, AC6/V6).
+`baseline.json` ist committet (analog `LEARNINGS.md`). Wenn Modus C baseline.json aktualisiert hat (`diff --exit-code`), wird die aktualisierte Datei im selben retro-Commit mitgeliefert — Teil des regulären retro-Outputs (AC2/V2, AC6/V6).
+
+Der Cooldown-Stempel (`.claude/lessons/.retro-last-run`) fährt **im selben Commit** mit, wenn `baseline.json` oder LEARNINGS.md ohnehin committed werden. Existiert kein anderer geänderter Inhalt (leerer Lauf, kein Pack-PR, kein baseline.json-Diff), wird der Stempel in einem **eigenen Commit direkt nach `origin/<default_branch>` des Projekt-Repos** persistiert — nie still verworfen.
 
 ```bash
-# Prüfen ob baseline.json durch Modus C geändert wurde
+# Schritt 1: baseline.json auf Änderung prüfen
 if ! git -C "${REPO_ROOT}" diff --quiet .claude/metrics/baseline.json 2>/dev/null; then
-  # Geändert → beim PR-Commit miteinschliessen (git add im retro-Branch)
   git -C "${REPO_ROOT}" add .claude/metrics/baseline.json
 fi
+
+# Schritt 2: Cooldown-Stempel immer schreiben + mit-committen
+mkdir -p "${REPO_ROOT}/.claude/lessons"
+echo "$(date -u +%Y-%m-%d)" > "${REPO_ROOT}/.claude/lessons/.retro-last-run"
+git -C "${REPO_ROOT}" add .claude/lessons/.retro-last-run
+
+# Schritt 3: Commit nur wenn Änderungen vorhanden (idempotent: kein Leer-Commit)
+if ! git -C "${REPO_ROOT}" diff --cached --quiet 2>/dev/null; then
+  git -C "${REPO_ROOT}" commit -m "chore(retro): update baseline + cooldown stamp [retro-auto]" \
+    || echo "WARN: retro/G3 — Stempel-Commit fehlgeschlagen. Bitte manuell nachziehen." >&2
+fi
+
+# Schritt 4: Push nach origin/<default_branch> gemäss merge_policy des Projekt-Repos
+# Schlägt Push fehl → kein harter Abbruch, aber sichtbare Fehlermeldung (AC7)
+git -C "${REPO_ROOT}" push origin HEAD:"${DEFAULT_BRANCH}" 2>&1 \
+  || echo "WARN: retro/G3 — Stempel-Push nach origin/${DEFAULT_BRANCH} fehlgeschlagen. Stempel manuell nachziehen." >&2
 ```
+
+`REPO_ROOT` = cwd des geharvesteten Projekt-Repos (bei Dogfooding = cwd des agent-flow-Repos). `DEFAULT_BRANCH` = `profile.default_branch` des Projekt-Repos. Der Push zielt ausschliesslich auf das geharvestete Projekt-Repo — NICHT auf den agent-flow-PR-Klon/Worktree (AC2).
 
 ## C5. Vorrang kalibrierter Gewichte in /flow (AC4/V4)
 
@@ -402,7 +421,7 @@ PR-Link + Liste: `promote → <knowledge/<x>.md | agents/<role>.md>: <Regel> [ID
 - Promotet NUR Systemisches/Verallgemeinerbares.
 - **Frequenz-Schwelle (G1):** keine Promotion ohne ≥2 Projekte × ≥2 Stellen. Generalisierbare Single-Projekt-Kandidaten → `Proposed`-Wartezimmer in `LEARNINGS.md` mit `expires <heute+1J>` (cross-repo-Brücke); Refresh bei Wiedersichtung, weicher Verfall zu `Expired` via GC (Schritt 0). **Sonar-Harvest (Modus B):** stattdessen G1-Sonar (≥2 Repos ODER ≥5× in 1 Repo + generische Built-in-Rule + User-getriggert; H3). **Modus E:** kein G1 für Estimator-PRs (Datenbasis ist eigene Metrik, nicht Lessons, E2).
 - **Provenance (G2):** PR-Body muss namentliche Lesson-Quellen pro Regel listen (Projekt + Datei/Zeile oder PR-Nr). Für E2-PRs: Begründung aus `estimator_bias`-Daten (E2-Pflicht-Body).
-- **Cooldown (G3):** 1× pro Woche pro Repo (oder `/retro --force`); persistiert in `.claude/lessons/.retro-last-run`. Modus C/E laufen im selben Takt — kein zweiter State-Ort, kein zusätzlicher Bypass.
+- **Cooldown (G3):** 1× pro Woche pro Repo (oder `/retro --force`); Stempel in `<projekt-repo>/.claude/lessons/.retro-last-run` (kanonischer State-Ort, Single-Writer = retro). Stempel wird nach jedem erfolgreichen Lauf (Modus A, B, leerem Lauf oder `--force`-Bypass) nach `origin/<default_branch>` des geharvesteten Projekt-Repos committet+gepusht (C4-Persistenz-Pfad, isolations-fest — zielt auf REPO_ROOT, nie auf agent-flow-PR-Klon). Fehlender/leerer/unparsbarer Stempel → kein Cooldown. Modus C/E laufen im selben Takt — kein zweiter State-Ort, kein zusätzlicher Bypass. (Spec: `docs/specs/retro-cooldown-persistence.md`)
 - **Reviewer-Gate (G4):** retro-PR durchläuft den normalen reviewer-Loop — kein Auto-Merge, kein Bypass. Gilt auch für E2-PRs (Anker-/Anweisungs-Änderungen).
 - **Sektions-Disziplin:** retro schreibt NUR in `## B. Anti-Patterns aus Einsatz` von Framework-/Build-Packs. Sektion A (train-Hoheit) und C (Floor, User-Approval) sind tabu. (Verweis: `docs/architecture/framework-build-subsystem.md` §4 + §9.)
 - **Single-Writer (Modus C+D+E, K2):** `baseline.json` (inkl. `defect_rates`, `retro_effectiveness`, `learnings_rules`, `estimator_bias`, `estimator_calibration`) wird **ausschliesslich** von retro via `metrics-aggregate.sh` + Modus-D/E-Logik geschrieben. Kein anderer Agent berührt `.claude/metrics/baseline.json`. Die JSONL-Ledger (`dispatches.jsonl`, `items.jsonl`) liest Modus C/D/E nur.
