@@ -29,6 +29,8 @@
 #   SPEC-MISSING         — spec-Datei existiert nicht (V8)
 #   AC-MISSING           — implements[]-AC-Nummer nicht in der Spec gefunden (V8)
 #   ROLLUP-STALE         — stories[]/progress eines Features veraltet (V10, WARN)
+#   STORY-UNSPEC         — importierte Story (github_issue gesetzt) hat spec oder implements
+#                          nicht gesetzt — WARN, kein FEHLER (V3, Owner zieht nach im Cut-PR)
 
 set -euo pipefail
 
@@ -138,7 +140,14 @@ lint_story() {
   python3 - "$file" <<'PYEOF'
 import sys, yaml, re, os, datetime
 
-REQUIRED = ["id", "parent", "title", "status", "priority", "spec", "implements", "created_at", "updated_at"]
+# Pflichtfelder fuer native Stories (kein github_issue-Feld).
+# Fuer importierte Stories (github_issue gesetzt) sind spec und implements optional
+# (fehlend → WARN STORY-UNSPEC statt FEHLER FIELD-REQUIRED); sie koennen nachgezogen werden.
+REQUIRED_NATIVE   = ["id", "parent", "title", "status", "priority", "spec", "implements", "created_at", "updated_at"]
+REQUIRED_IMPORTED = ["id", "parent", "title", "status", "priority", "created_at", "updated_at"]
+# Felder, die bei importierten Stories als WARN STORY-UNSPEC gemeldet werden (nicht als FEHLER)
+IMPORTED_OPTIONAL_WARN = {"spec", "implements"}
+
 ENUM_STATUS = {"To Do", "In Progress", "Blocked", "In Review", "Done"}
 ENUM_PRIORITY = {"P0", "P1", "P2", "P3"}
 ENUM_SIZE_EST = {"S", "M", "L", "XL"}
@@ -161,6 +170,7 @@ def ts_to_str(val):
     return str(val)
 
 errors = []
+warnings = []
 file = sys.argv[1]
 rel = os.path.relpath(file)
 
@@ -175,11 +185,26 @@ if not isinstance(data, dict):
     print(f"FEHLER FIELD-REQUIRED {rel} <not a mapping>")
     sys.exit(0)
 
-# Pflichtfelder
-for field in REQUIRED:
+# Importierte Story erkennen: Feld github_issue gesetzt und nicht None
+is_imported = data.get("github_issue") is not None
+
+if is_imported:
+    required_fields = REQUIRED_IMPORTED
+else:
+    required_fields = REQUIRED_NATIVE
+
+# Pflichtfelder pruefen
+for field in required_fields:
     val = data.get(field)
     if val is None or (isinstance(val, str) and val.strip() == "") or (isinstance(val, list) and len(val) == 0):
         errors.append(f"FEHLER FIELD-REQUIRED {rel} {field}")
+
+# Fuer importierte Stories: spec/implements fehlt → WARN STORY-UNSPEC (kein FEHLER)
+if is_imported:
+    for field in IMPORTED_OPTIONAL_WARN:
+        val = data.get(field)
+        if val is None or (isinstance(val, str) and val.strip() == "") or (isinstance(val, list) and len(val) == 0):
+            warnings.append(f"WARN STORY-UNSPEC {rel} {field} (importierte Story — bitte nachziehen im Cut-PR)")
 
 # Enum-Checks
 if "status" in data and data["status"] not in ENUM_STATUS:
@@ -229,6 +254,8 @@ if "done_at" in data and data["done_at"] is not None:
 
 for e in errors:
     print(e)
+for w in warnings:
+    print(w)
 PYEOF
 }
 

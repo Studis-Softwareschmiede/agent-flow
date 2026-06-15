@@ -37,6 +37,8 @@ Festlegen, wie ein Board als git-Dateien aussieht — ein menschenlesbares, diff
 ### V3 — Story-YAML
 `board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|In Review|Done`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `branch`, `pr`, `blocked_reason`, `done_at`.
 
+**Sonderfall: importierte Stories** (Feld `github_issue` gesetzt): `spec` und `implements` dürfen bei einem GitHub-Export-Lauf fehlen/null sein, wenn kein `Spec:`/`implements:`-Marker im Issue-Body vorhanden war. `lint` meldet fehlende Werte dieser beiden Felder dann als **WARN STORY-UNSPEC** (nicht als FEHLER FIELD-REQUIRED). Der Owner zieht sie im Cut-PR nach (Drift-Gate greift zur Implementierungszeit via coder/reviewer). Native Stories (ohne `github_issue`) behalten `spec`/`implements` als harte Pflichtfelder (FIELD-REQUIRED bei Fehlen).
+
 ### V4 — Enum- & Typ-Konformität
 Jedes Enum-Feld trägt ausschliesslich einen der in V2/V3 erlaubten Werte; IDs entsprechen den Mustern `^F-\d{3,}$` / `^S-\d{3,}$`; `implements[]` sind AC-Tokens (`AC<n>`); Zeitstempel sind ISO-8601-UTC. Abweichungen sind `lint`-Fehler.
 
@@ -65,7 +67,7 @@ Fehlt ein Pflichtfeld (V2/V3) oder verletzt ein Feld die Typ-/Enum-Konformität 
 
 - **AC1** — `board/board.yaml` enthält `schema_version` (int), `project_slug` und je einen ID-Zähler `next_feature_id`/`next_story_id`; ohne `board.yaml` gilt das Board als nicht initialisiert. *(V1)*
 - **AC2** — Feature-YAML trägt alle Pflichtfelder aus board-subsystem §4.1 (`id,title,goal,status,priority,created_at,updated_at`) plus die optionalen/abgeleiteten Felder; `status`∈{Backlog,Planned,Active,Done,Archived}, `priority`∈{P0,P1,P2,P3}. *(V2)*
-- **AC3** — Story-YAML trägt alle Pflichtfelder aus board-subsystem §4.2 (`id,parent,title,status,priority,spec,implements,created_at,updated_at`) plus die optionalen Felder; `status`∈{To Do,In Progress,Blocked,In Review,Done}, `priority`∈{P0,P1,P2,P3}. *(V3)*
+- **AC3** — Story-YAML trägt alle Pflichtfelder aus board-subsystem §4.2 (`id,parent,title,status,priority,spec,implements,created_at,updated_at`) plus die optionalen Felder; `status`∈{To Do,In Progress,Blocked,In Review,Done}, `priority`∈{P0,P1,P2,P3}. Für **importierte Stories** (`github_issue` gesetzt) sind `spec`/`implements` bei Fehlen WARN STORY-UNSPEC (kein FEHLER), bis der Owner sie im Cut-PR nachzieht. *(V3)*
 - **AC4** — IDs matchen `^F-\d{3,}$`/`^S-\d{3,}$`, Enums tragen nur erlaubte Werte, `implements[]` sind `AC<n>`-Tokens, Zeitstempel ISO-8601-UTC; Abweichung → `lint`-Fehler. *(V4, V9)*
 - **AC5** — `lint` meldet doppelte Feature-/Story-IDs und einen Dateiname-Präfix, der nicht zur `id` im Body passt, als Fehler. *(V5)*
 - **AC6** — `lint` meldet eine Story mit fehlendem/leerem/unbekanntem `parent` als Fehler. *(V6)*
@@ -129,13 +131,14 @@ done_at: null
 ```
 
 ### `lint`-Regel-IDs (stabil, für CLI-Ausgabe)
-`ID-DUP` (V5) · `PARENT-MISSING` (V6) · `DEPENDS-UNRESOLVED` / `DEPENDS-CYCLE` (V7) · `AC-MISSING` / `SPEC-MISSING` (V8) · `FIELD-REQUIRED` / `ENUM-INVALID` (V9) · `ROLLUP-STALE` (V10, Warnung).
+`ID-DUP` (V5) · `PARENT-MISSING` (V6) · `DEPENDS-UNRESOLVED` / `DEPENDS-CYCLE` (V7) · `AC-MISSING` / `SPEC-MISSING` (V8) · `FIELD-REQUIRED` / `ENUM-INVALID` (V9) · `ROLLUP-STALE` (V10, Warnung) · `STORY-UNSPEC` (V3, Warnung — importierte Story ohne `spec`/`implements`).
 
 ## Edge-Cases & Fehlerverhalten
 
 - **`board.yaml` fehlt** → Board nicht initialisiert; `lint` meldet das als Fehler `FIELD-REQUIRED board.yaml`.
 - **Leeres `board/`** (kein Feature/keine Story) → `lint` grün (kein Fehler), nichts zu prüfen.
-- **Story ohne `implements`** → `FIELD-REQUIRED` (PFLICHT), denn ohne AC-Bindung darf keine Story existieren (Drift-Gate).
+- **Story ohne `implements`** → `FIELD-REQUIRED` (PFLICHT bei nativen Stories); bei importierten Stories (Feld `github_issue` gesetzt) → `WARN STORY-UNSPEC` (kein FEHLER), da der Marker im GitHub-Issue fehlte — Owner zieht nach.
+- **Story ohne `spec`** (importiert) → `WARN STORY-UNSPEC` (kein FEHLER), analog zu `implements`. Native Stories ohne `spec` → `FIELD-REQUIRED`.
 - **Verwaiste Datei** (z.B. Story-Datei, deren `parent` archiviert wurde) → `parent` existiert noch als Datei → kein Fehler; ist das Feature gelöscht → `PARENT-MISSING`.
 - **Dateiname-Slug ≠ `title`-Slug** → kein Fehler (Slug ist nur Komfort; Body-`id` zählt).
 - **Doppelte `depends`-Einträge** → dedupliziert behandelt, kein Fehler.

@@ -1,0 +1,924 @@
+#!/usr/bin/env bash
+# scripts/board-github-export — GitHub Project v2 → board/-Dateien (AC1–AC7, AC10)
+#
+# Spec: docs/specs/board-github-export.md
+# Detailkonzept: docs/architecture/board-subsystem.md §10
+#
+# Verwendung:
+#   board-github-export [<optionen>]
+#
+# Optionen:
+#   --org <org>            GitHub-Org (Standard: aus gh-Kontext)
+#   --project <num>        GitHub-Projekt-Nummer (Standard: aus .claude/profile.md board:-Feld)
+#   --board-dir <pfad>     Ziel-board/-Verzeichnis (Standard: board/)
+#   --project-slug <slug>  Slug für board.yaml (Standard: Repo-Verzeichnisname)
+#   --force                Zweiten Lauf auf gefülltem board/ erzwingen (AC10-Schutz umgehen)
+#   --dry-run              Kein Schreiben; zeigt was erzeugt würde
+#   --mock-input <datei>   JSON-Datei mit Issue-Daten statt echter gh-Aufrufe (Testmodus)
+#   --help                 Diese Hilfe anzeigen
+#
+# Exit-Codes:
+#   0   Erfolg (Export + Lint grün)
+#   1   Fehler (Lint rot, API-Fehler, Konfigurationsfehler, Abbruch wegen bestehender Daten)
+#   2   --help
+#
+# Sicherheit:
+#   - Keine hartkodierten Secrets
+#   - gh CLI verwaltet PAT-Authentifizierung
+#   - Externe Eingaben (Issue-Titel, Body) werden nie als Shell-Kommando ausgeführt;
+#     Parsing ausschließlich in Python (JSON-Dekodierung)
+#   - Atomares Schreiben: Staging-Verzeichnis auf gleichem Filesystem, dann mv per rename(2)
+#
+# Requires: bash >= 4.0, python3 mit PyYAML, gh (GitHub CLI) außer bei --mock-input
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Hilfsfunktionen
+# ---------------------------------------------------------------------------
+
+die() {
+  echo "FEHLER: $*" >&2
+  exit 1
+}
+
+info() {
+  echo "INFO: $*" >&2
+}
+
+# ISO-8601-UTC-Zeitstempel
+now_ts() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+usage() {
+  cat <<'USAGE'
+board-github-export — GitHub Project v2 → board/-Dateien exportieren
+
+Verwendung:
+  board-github-export [<optionen>]
+
+Optionen:
+  --org <org>            GitHub-Org (Standard: aus gh-Kontext)
+  --project <num>        GitHub-Projekt-Nummer (Standard: aus .claude/profile.md board:-Feld)
+  --board-dir <pfad>     Ziel-board/-Verzeichnis (Standard: board/)
+  --project-slug <slug>  Slug für board.yaml (Standard: Repo-Verzeichnisname)
+  --force                Zweiten Lauf auf gefülltem board/ erzwingen (AC10)
+  --dry-run              Kein Schreiben; zeigt nur was erzeugt würde
+  --mock-input <datei>   JSON-Datei mit Issue-Daten statt echter gh-Aufrufe (Testmodus)
+  --help                 Diese Hilfe anzeigen
+
+Issue-JSON-Format für --mock-input (Liste von Objekten):
+  [
+    {
+      "number": 42,
+      "title": "Mein Issue",
+      "body": "Spec: docs/specs/foo.md\nimplements: AC1, AC2\ndepends: #41",
+      "labels": ["backend"],
+      "status": "In Progress",
+      "priority": "P1",
+      "url": "https://github.com/org/repo/issues/42"
+    }
+  ]
+
+Spec: docs/specs/board-github-export.md
+USAGE
+  exit 2
+}
+
+# ---------------------------------------------------------------------------
+# Argument-Parsing
+# ---------------------------------------------------------------------------
+
+ORG=""
+PROJECT_NUM=""
+BOARD_DIR="board"
+PROJECT_SLUG=""
+FORCE=0
+DRY_RUN=0
+MOCK_INPUT=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --org)           shift; ORG="$1"          ;;
+    --project)       shift; PROJECT_NUM="$1"  ;;
+    --board-dir)     shift; BOARD_DIR="$1"    ;;
+    --project-slug)  shift; PROJECT_SLUG="$1" ;;
+    --force)         FORCE=1                  ;;
+    --dry-run)       DRY_RUN=1                ;;
+    --mock-input)    shift; MOCK_INPUT="$1"   ;;
+    --help|-h)       usage                    ;;
+    *) die "Unbekannte Option '$1'. Nutze --help für Hilfe." ;;
+  esac
+  shift
+done
+
+# ---------------------------------------------------------------------------
+# Konfiguration ermitteln
+# ---------------------------------------------------------------------------
+
+PROFILE_FILE=".claude/profile.md"
+
+# project_slug: explizit > Repo-Verzeichnisname > 'project'
+if [[ -z "$PROJECT_SLUG" ]]; then
+  PROJECT_SLUG="$(basename "$(pwd)")"
+fi
+
+# board-Nummer aus Profil (falls nicht via --project)
+if [[ -z "$PROJECT_NUM" ]]; then
+  if [[ -n "$MOCK_INPUT" ]]; then
+    # Im Mock-Modus: PROJECT_NUM optional
+    PROJECT_NUM="mock"
+  elif [[ -f "$PROFILE_FILE" ]]; then
+    BOARD_VALUE="$(grep -E "^board:" "$PROFILE_FILE" 2>/dev/null | head -1 | awk '{print $2}' || true)"
+    if [[ -z "$BOARD_VALUE" ]]; then
+      die "Kein 'board:'-Feld in ${PROFILE_FILE} gefunden"
+    fi
+    if [[ "$BOARD_VALUE" == "file" ]]; then
+      die "board: file — kein GitHub-Board zu exportieren (Migration bereits abgeschlossen)"
+    fi
+    PROJECT_NUM="$BOARD_VALUE"
+  else
+    die "--project <num> oder ${PROFILE_FILE} mit 'board: <num>' erforderlich"
+  fi
+fi
+
+# Zielverzeichnisse
+BOARD_YAML="${BOARD_DIR}/board.yaml"
+FEATURES_DIR="${BOARD_DIR}/features"
+STORIES_DIR="${BOARD_DIR}/stories"
+
+# ---------------------------------------------------------------------------
+# AC10 — Idempotenz-Schutz: Abbruch wenn board/ bereits Stories/Features hat
+# ---------------------------------------------------------------------------
+if [[ $FORCE -eq 0 ]]; then
+  story_count=0
+  feature_count=0
+  if [[ -d "$STORIES_DIR" ]]; then
+    story_count="$(find "$STORIES_DIR" -name "S-*.yaml" 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  if [[ -d "$FEATURES_DIR" ]]; then
+    feature_count="$(find "$FEATURES_DIR" -name "F-*.yaml" 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+
+  if [[ $story_count -gt 0 || $feature_count -gt 0 ]]; then
+    cat >&2 <<EOF
+FEHLER: board/ enthält bereits Items (${feature_count} Features, ${story_count} Stories).
+  Ein zweiter Export-Lauf würde Daten duplizieren (AC10-Schutz).
+  Optionen:
+    --force    Export trotzdem durchführen (nur auf einem leeren/neuen board/ empfohlen)
+    Oder entferne zuerst ${BOARD_DIR}/features/*.yaml und ${BOARD_DIR}/stories/*.yaml
+EOF
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Zeitstempel für diesen Lauf (einmalig)
+# ---------------------------------------------------------------------------
+EXPORT_TS="$(now_ts)"
+
+# ---------------------------------------------------------------------------
+# S1 — Daten-Staging: Temp-Verzeichnis im BOARD_DIR für JSON-Zwischendateien.
+# Verhindert ARG_MAX-Fehler ("Argument list too long") bei großen Boards.
+# ISSUES_JSON und EXPORT_PLAN werden als Dateipfade statt als Shell-Argumente
+# an python3 übergeben.
+# ---------------------------------------------------------------------------
+mkdir -p "$BOARD_DIR"
+BOARD_DIR_ABS="$(cd "$BOARD_DIR" && pwd)"
+DATA_STAGING_DIR="$(mktemp -d "${BOARD_DIR_ABS}/.export-data.XXXXXX")"
+# shellcheck disable=SC2064
+trap "rm -rf \"$DATA_STAGING_DIR\"" EXIT
+
+ISSUES_FILE="${DATA_STAGING_DIR}/issues.json"
+EXPORT_PLAN_FILE="${DATA_STAGING_DIR}/export-plan.json"
+
+# ---------------------------------------------------------------------------
+# Rohdaten laden: GitHub oder Mock
+# ---------------------------------------------------------------------------
+
+info "Lade Issue-Daten (Projekt #${PROJECT_NUM})..."
+
+if [[ -n "$MOCK_INPUT" ]]; then
+  # Testmodus: JSON-Datei direkt kopieren
+  [[ -f "$MOCK_INPUT" ]] || die "Mock-Eingabe-Datei nicht gefunden: ${MOCK_INPUT}"
+  cp "$MOCK_INPUT" "$ISSUES_FILE"
+  info "Mock-Modus: ${MOCK_INPUT} geladen"
+else
+  # Echter gh-Aufruf
+  if ! command -v gh &>/dev/null; then
+    die "gh (GitHub CLI) nicht gefunden — bitte installieren oder --mock-input verwenden"
+  fi
+
+  # gh project item-list: alle Items des Projekts
+  GH_ARGS=("project" "item-list" "$PROJECT_NUM" "--format" "json" "--limit" "500")
+  if [[ -n "$ORG" ]]; then
+    GH_ARGS+=("--owner" "$ORG")
+  fi
+
+  # set -e: bei Fehler des gh-Aufrufs bricht das Skript ab (kein halbes board/)
+  PROJECT_ITEMS_JSON_FILE="${DATA_STAGING_DIR}/project-items.json"
+  gh "${GH_ARGS[@]}" > "$PROJECT_ITEMS_JSON_FILE" 2>&1 || \
+    die "gh project item-list fehlgeschlagen (siehe ${PROJECT_ITEMS_JSON_FILE})"
+
+  # Für jeden Issue: gh issue view für Body + Labels
+  # Alle Rohdaten in Python aggregieren → sauberes JSON-Array (Datei statt Arg)
+  python3 - "$PROJECT_ITEMS_JSON_FILE" "$PROJECT_NUM" "$ORG" "$ISSUES_FILE" <<'PYEOF'
+import sys, json, subprocess
+
+project_items_file = sys.argv[1]
+project_num        = sys.argv[2]
+org                = sys.argv[3]
+output_file        = sys.argv[4]
+
+with open(project_items_file) as fh:
+    try:
+        project_data = json.load(fh)
+    except json.JSONDecodeError as e:
+        sys.stderr.write(f"FEHLER: JSON-Parse aus gh project item-list: {e}\n")
+        sys.exit(1)
+
+items = project_data.get("items", [])
+issues = []
+
+for item in items:
+    content = item.get("content", {})
+    if not content:
+        continue
+    # Nur Issues (keine Draft-Items, keine PRs)
+    if content.get("type", "") != "Issue":
+        continue
+
+    issue_number = content.get("number")
+    if not issue_number:
+        continue
+
+    # gh issue view: Body + Labels + URL
+    gh_cmd = ["gh", "issue", "view", str(issue_number),
+               "--json", "number,title,body,labels,state,url"]
+    if org:
+        # Wenn org angegeben: Repo muss explizit gesetzt sein
+        # Das Repo-Format wird von gh aus dem aktuellen git-Kontext bestimmt,
+        # falls kein --repo übergeben. Für Flexibilität: kein --repo ohne vollständigen
+        # "org/repo"-String. Owner reicht nicht — wird als Warnung behandelt.
+        pass
+
+    try:
+        result = subprocess.run(gh_cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            sys.stderr.write(f"WARNUNG: gh issue view #{issue_number}: {result.stderr.strip()}\n")
+            issue_detail = {"number": issue_number, "title": content.get("title", ""),
+                            "body": "", "labels": [], "url": ""}
+        else:
+            issue_detail = json.loads(result.stdout)
+    except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        sys.stderr.write(f"WARNUNG: gh issue view #{issue_number} Fehler: {e}\n")
+        issue_detail = {"number": issue_number, "title": content.get("title", ""),
+                        "body": "", "labels": [], "url": ""}
+
+    # Status und Priority aus Projekt-Feldwerten
+    status_val   = ""
+    priority_val = ""
+    for fv in item.get("fieldValues", []):
+        fname = (fv.get("field") or {}).get("name", "").lower()
+        if fname == "status":
+            # Mögliche Felder je nach gh-Version
+            status_val = (fv.get("name") or fv.get("text") or
+                          fv.get("optionId") or "").strip()
+        elif fname == "priority":
+            priority_val = (fv.get("name") or fv.get("text") or "").strip()
+
+    issues.append({
+        "number":   issue_number,
+        "title":    issue_detail.get("title") or content.get("title", ""),
+        "body":     issue_detail.get("body") or "",
+        "labels":   [l.get("name", "") for l in (issue_detail.get("labels") or [])],
+        "status":   status_val,
+        "priority": priority_val,
+        "url":      issue_detail.get("url") or "",
+    })
+
+with open(output_file, "w") as fh:
+    json.dump(issues, fh, ensure_ascii=False)
+PYEOF
+fi
+
+# Grundvalidierung: ISSUES_FILE muss eine JSON-Liste enthalten
+python3 - "$ISSUES_FILE" <<'PYEOF' || die "Issues-JSON ungültig"
+import json, sys
+with open(sys.argv[1]) as fh:
+    try:
+        d = json.load(fh)
+    except json.JSONDecodeError as e:
+        sys.stderr.write(f"FEHLER: JSON-Parse: {e}\n")
+        sys.exit(1)
+if not isinstance(d, list):
+    sys.stderr.write("FEHLER: Issues-JSON ist keine Liste\n")
+    sys.exit(1)
+PYEOF
+
+info "$(python3 -c "import json; print(len(json.load(open('${ISSUES_FILE}'))))" ) Issues geladen"
+
+# ---------------------------------------------------------------------------
+# Kern-Verarbeitung: Issues → Export-Plan (AC1–AC5)
+# Alles in einem Python-Prozess für Konsistenz.
+# Ergebnis wird in EXPORT_PLAN_FILE geschrieben (kein Shell-Argument → kein ARG_MAX).
+# ---------------------------------------------------------------------------
+
+python3 - "$ISSUES_FILE" "$PROJECT_SLUG" "$EXPORT_TS" "$EXPORT_PLAN_FILE" <<'PYEOF'
+import sys, json, re, datetime
+
+issues_file  = sys.argv[1]
+project_slug = sys.argv[2]
+export_ts    = sys.argv[3]
+output_file  = sys.argv[4]
+
+# --------------------------------------------------------------------------
+# Rohdaten
+# --------------------------------------------------------------------------
+with open(issues_file) as fh:
+    issues = json.load(fh)
+
+# --------------------------------------------------------------------------
+# Hilfsfunktionen
+# --------------------------------------------------------------------------
+
+def slugify(title):
+    t = str(title).lower()
+    t = re.sub(r"[^a-z0-9]+", "-", t)
+    t = t.strip("-")
+    return (t[:60] if t else "item")
+
+# Status-Mapping: GitHub → Story-Status (1:1, konservativ)
+STATUS_MAP = {
+    "To Do":       "To Do",
+    "Todo":        "To Do",
+    "Backlog":     "To Do",
+    "In Progress": "In Progress",
+    "In progress": "In Progress",
+    "In-Progress": "In Progress",
+    "Blocked":     "Blocked",
+    "In Review":   "In Review",
+    "In review":   "In Review",
+    "In-Review":   "In Review",
+    "Done":        "Done",
+    "Closed":      "Done",
+    "closed":      "Done",
+}
+
+# Priority-Mapping (Label oder Projekt-Feld)
+PRIORITY_MAP = {
+    "P0": "P0", "p0": "P0",
+    "P1": "P1", "p1": "P1",
+    "P2": "P2", "p2": "P2",
+    "P3": "P3", "p3": "P3",
+    "critical":   "P0",
+    "urgent":     "P0",
+    "high":       "P1",
+    "medium":     "P2",
+    "low":        "P3",
+    "normal":     "P2",
+}
+VALID_PRIORITIES = {"P0", "P1", "P2", "P3"}
+
+# Regex für Body-Marker
+SPEC_RE     = re.compile(r"^Spec:\s*(.+)$",       re.MULTILINE | re.IGNORECASE)
+IMPL_RE     = re.compile(r"^implements?:\s*(.+)$", re.MULTILINE | re.IGNORECASE)
+DEPENDS_RE  = re.compile(r"^depends?:?\s*(.+)$",  re.MULTILINE | re.IGNORECASE)
+ISSUE_REF   = re.compile(r"#(\d+)")
+AC_TOKEN    = re.compile(r"^AC\d+$", re.IGNORECASE)
+
+warnings = []  # [(type_str, message_str)]
+
+# --------------------------------------------------------------------------
+# V1 — Issue-Daten parsen
+# --------------------------------------------------------------------------
+
+parsed = []
+for iss in issues:
+    num    = int(iss.get("number") or 0)
+    title  = str(iss.get("title") or f"Issue #{num}").strip() or f"Issue #{num}"
+    body   = str(iss.get("body")  or "")
+    labels = [str(l).strip() for l in (iss.get("labels") or []) if str(l).strip()]
+    raw_st = str(iss.get("status")   or "").strip()
+    raw_pr = str(iss.get("priority") or "").strip()
+    url    = str(iss.get("url")      or "").strip()
+
+    # Spec: Marker
+    spec_val = None
+    m = SPEC_RE.search(body)
+    if m:
+        spec_val = m.group(1).strip()
+
+    # implements: Marker → AC-Token-Liste
+    impl_list = []
+    m = IMPL_RE.search(body)
+    if m:
+        raw = m.group(1).strip()
+        for tok in re.split(r"[,\s]+", raw):
+            tok = tok.strip()
+            if tok and AC_TOKEN.match(tok):
+                impl_list.append(tok.upper())
+
+    # depends: #n — rohe Issue-Nummern sammeln
+    raw_depends = []
+    m = DEPENDS_RE.search(body)
+    if m:
+        dep_text = m.group(1).strip()
+        for ref in ISSUE_REF.findall(dep_text):
+            raw_depends.append(int(ref))
+
+    # Status-Mapping
+    story_status = STATUS_MAP.get(raw_st)
+    if story_status is None:
+        if raw_st:
+            warnings.append(("STATUS-UNKNOWN",
+                f"Issue #{num}: Status '{raw_st}' unbekannt → 'To Do'"))
+        story_status = "To Do"
+
+    # Priority-Mapping: Projekt-Feld > Labels > P2 (Standard)
+    story_priority = PRIORITY_MAP.get(raw_pr)
+    if story_priority is None:
+        for lbl in labels:
+            p = PRIORITY_MAP.get(lbl.lower())
+            if p:
+                story_priority = p
+                break
+    if story_priority is None:
+        story_priority = "P2"
+
+    parsed.append({
+        "number":      num,
+        "title":       title,
+        "labels":      labels,
+        "status":      story_status,
+        "priority":    story_priority,
+        "spec":        spec_val,
+        "implements":  impl_list if impl_list else None,
+        "raw_depends": raw_depends,
+        "url":         url,
+    })
+
+# Index: issue_number → parsed-dict
+issue_index = {p["number"]: p for p in parsed}
+
+# --------------------------------------------------------------------------
+# V3 — Feature-Heuristik
+# --------------------------------------------------------------------------
+
+spec_groups  = {}   # spec_path → [issue_num, ...]
+label_groups = {}   # label     → [issue_num, ...]
+misc_issues  = []
+
+for pi in parsed:
+    num    = pi["number"]
+    spec   = pi["spec"]
+    labels = pi["labels"]
+    if spec:
+        spec_groups.setdefault(spec, []).append(num)
+    elif labels:
+        # Erstes Label alphabetisch als primären Cluster-Key
+        primary = sorted(labels)[0]
+        label_groups.setdefault(primary, []).append(num)
+    else:
+        misc_issues.append(num)
+
+# Ungewöhnliche Spec-Refs melden
+for spec in spec_groups:
+    if not spec.startswith("docs/specs/") and not spec.startswith("docs/"):
+        warnings.append(("SPEC-REF-UNUSUAL",
+            f"Spec-Referenz '{spec}' beginnt nicht mit 'docs/specs/' — Board-lint prüft Existenz"))
+
+# Feature-Planung
+next_fid = 1
+features_plan = []
+issue_to_fid  = {}   # issue_number → fid
+
+PMAP = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+
+def priority_rollup(nums):
+    ps = [issue_index[n]["priority"] for n in nums if n in issue_index]
+    if not ps:
+        return "P2"
+    best = min(ps, key=lambda p: PMAP.get(p, 9))
+    return best if best in VALID_PRIORITIES else "P2"
+
+def spec_feature_title(spec_path):
+    basename = spec_path.rsplit("/", 1)[-1]
+    stem = basename.rsplit(".", 1)[0] if "." in basename else basename
+    return stem.replace("-", " ").replace("_", " ").title()
+
+# Spec-basierte Features
+for spec_path in sorted(spec_groups.keys()):
+    nums = spec_groups[spec_path]
+    fid  = f"F-{next_fid:03d}"
+    next_fid += 1
+    title = spec_feature_title(spec_path)
+    features_plan.append({
+        "fid":        fid,
+        "title":      title,
+        "slug":       slugify(title),
+        "goal":       f"[Platzhalter — Owner ausfüllen im Cut-PR] Spec: {spec_path}",
+        "priority":   priority_rollup(nums),
+        "spec":       spec_path,
+        "labels":     None,
+        "issue_nums": nums,
+    })
+    for n in nums:
+        issue_to_fid[n] = fid
+
+# Label-basierte Features
+for label in sorted(label_groups.keys()):
+    nums = label_groups[label]
+    fid  = f"F-{next_fid:03d}"
+    next_fid += 1
+    title = label.replace("-", " ").replace("_", " ").title()
+    features_plan.append({
+        "fid":        fid,
+        "title":      title,
+        "slug":       slugify(title),
+        "goal":       f"[Platzhalter — Owner ausfüllen im Cut-PR] Label-Cluster: {label}",
+        "priority":   priority_rollup(nums),
+        "spec":       None,
+        "labels":     [label],
+        "issue_nums": nums,
+    })
+    for n in nums:
+        issue_to_fid[n] = fid
+
+# Misc-Feature
+if misc_issues:
+    fid = f"F-{next_fid:03d}"
+    next_fid += 1
+    features_plan.append({
+        "fid":        fid,
+        "title":      "Misc",
+        "slug":       "misc",
+        "goal":       "[Platzhalter — Owner ausfüllen im Cut-PR] Nicht kategorisierte Issues",
+        "priority":   "P3",
+        "spec":       None,
+        "labels":     None,
+        "issue_nums": misc_issues,
+    })
+    for n in misc_issues:
+        issue_to_fid[n] = fid
+
+# --------------------------------------------------------------------------
+# V2 — Story-Planung
+# --------------------------------------------------------------------------
+
+next_sid = 1
+stories_plan  = []
+issue_to_sid  = {}  # issue_number → sid
+
+# Slug-Dedup
+slug_seen = {}
+
+def unique_slug(base):
+    if base not in slug_seen:
+        slug_seen[base] = 0
+        return base
+    slug_seen[base] += 1
+    return f"{base}-{slug_seen[base]}"
+
+for fp in features_plan:
+    for num in fp["issue_nums"]:
+        pi = issue_index.get(num)
+        if not pi:
+            continue
+        sid  = f"S-{next_sid:03d}"
+        next_sid += 1
+        issue_to_sid[num] = sid
+        stories_plan.append({
+            "sid":         sid,
+            "fid":         fp["fid"],
+            "slug":        unique_slug(slugify(pi["title"])),
+            "title":       pi["title"],
+            "status":      pi["status"],
+            "priority":    pi["priority"],
+            "spec":        pi["spec"],
+            "implements":  pi["implements"],
+            "labels":      pi["labels"] if pi["labels"] else None,
+            "raw_depends": pi["raw_depends"],
+            "issue_num":   num,
+            "url":         pi["url"],
+        })
+
+# --------------------------------------------------------------------------
+# V4 — depends: #n → S-### auflösen
+# --------------------------------------------------------------------------
+
+unresolvable_depends = []
+
+for sp in stories_plan:
+    resolved = []
+    for issue_num in sp["raw_depends"]:
+        target_sid = issue_to_sid.get(issue_num)
+        if target_sid is None:
+            unresolvable_depends.append({
+                "from_story": sp["sid"],
+                "issue_num":  issue_num,
+            })
+            warnings.append(("DEPENDS-UNRESOLVABLE",
+                f"depends #{issue_num} → kein Export-Item (verworfen, Story {sp['sid']})"))
+        else:
+            resolved.append(target_sid)
+    sp["depends"] = resolved if resolved else None
+    del sp["raw_depends"]
+
+# --------------------------------------------------------------------------
+# V5 — board.yaml Zähler
+# --------------------------------------------------------------------------
+
+board_yaml_plan = {
+    "schema_version":  1,
+    "project_slug":    project_slug,
+    "next_feature_id": next_fid,
+    "next_story_id":   next_sid,
+}
+
+# --------------------------------------------------------------------------
+# V7 — Report-Daten
+# --------------------------------------------------------------------------
+
+clusters = {fp["title"]: len(fp["issue_nums"]) for fp in features_plan}
+
+report = {
+    "features_count":       len(features_plan),
+    "stories_count":        len(stories_plan),
+    "clusters":             clusters,
+    "unresolvable_depends": unresolvable_depends,
+    "warnings":             warnings,
+}
+
+# --------------------------------------------------------------------------
+# Ausgabe als JSON in Datei (S1: kein Shell-Argument → kein ARG_MAX)
+# --------------------------------------------------------------------------
+with open(output_file, "w") as fh:
+    json.dump({
+        "board_yaml": board_yaml_plan,
+        "features":   features_plan,
+        "stories":    stories_plan,
+        "report":     report,
+    }, fh, ensure_ascii=False)
+PYEOF
+
+# Sicherstellen dass Plan valides JSON ist und kein error-Feld hat
+python3 - "$EXPORT_PLAN_FILE" <<'PYEOF' || die "Export-Plan ungültig"
+import json, sys
+with open(sys.argv[1]) as fh:
+    d = json.load(fh)
+assert 'board_yaml' in d, 'Kein board_yaml in Plan'
+assert 'features'   in d, 'Kein features in Plan'
+assert 'stories'    in d, 'Kein stories in Plan'
+PYEOF
+
+FEATURES_COUNT="$(python3 -c "import json; print(len(json.load(open('${EXPORT_PLAN_FILE}'))['features']))")"
+STORIES_COUNT="$(python3 -c "import json; print(len(json.load(open('${EXPORT_PLAN_FILE}'))['stories']))")"
+info "Export-Plan: ${FEATURES_COUNT} Features, ${STORIES_COUNT} Stories"
+
+# ---------------------------------------------------------------------------
+# Dry-Run: nur Vorschau ausgeben, nichts schreiben
+# ---------------------------------------------------------------------------
+
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo ""
+  echo "=== DRY-RUN (kein Schreiben) ==="
+  python3 - "$EXPORT_PLAN_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1]) as fh:
+    plan = json.load(fh)
+print(f"\nboard.yaml: schema_version=1  project_slug={plan['board_yaml']['project_slug']}")
+print(f"            next_feature_id={plan['board_yaml']['next_feature_id']}  next_story_id={plan['board_yaml']['next_story_id']}")
+print(f"\n{len(plan['features'])} Features:")
+for f in plan['features']:
+    print(f"  {f['fid']}-{f['slug']}.yaml  ({len(f['issue_nums'])} Stories, priority={f['priority']})")
+print(f"\n{len(plan['stories'])} Stories:")
+for s in plan['stories']:
+    print(f"  {s['sid']}-{s['slug']}.yaml  parent={s['fid']}  github=#{s['issue_num']}  status={s['status']}")
+if plan['report']['warnings']:
+    print(f"\nWarnungen ({len(plan['report']['warnings'])}):")
+    for w in plan['report']['warnings']:
+        print(f"  [{w[0]}] {w[1]}")
+PYEOF
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Atomares Schreiben
+# Strategie (coder/L10, coder/L14):
+#   1. Staging-Verzeichnis auf gleichem Filesystem wie BOARD_DIR (kein /tmp)
+#   2. Alle Dateien ins Staging schreiben (Python)
+#   3. trap cleanup → bei Fehler: Staging entfernen, kein halbes board/
+#   4. mv Staging-Dateien → Ziel (rename(2), atomar je Datei)
+# ---------------------------------------------------------------------------
+
+STAGING_DIR="$(mktemp -d "${BOARD_DIR_ABS}/.export-staging.XXXXXX")"
+
+# Trap: DATA_STAGING_DIR und STAGING_DIR aufräumen bei Fehler
+# shellcheck disable=SC2064
+trap "rm -rf \"$DATA_STAGING_DIR\" \"$STAGING_DIR\"" EXIT
+
+info "Schreibe Staging-Verzeichnis (${STAGING_DIR})..."
+
+# Python schreibt alle YAML-Dateien + board.yaml ins Staging (liest Plan aus Datei)
+python3 - "$EXPORT_PLAN_FILE" "$STAGING_DIR" "$EXPORT_TS" <<'PYEOF'
+import sys, json, os, yaml
+
+with open(sys.argv[1]) as fh:
+    plan = json.load(fh)
+staging_dir = sys.argv[2]
+ts          = sys.argv[3]
+
+features_dir = os.path.join(staging_dir, "features")
+stories_dir  = os.path.join(staging_dir, "stories")
+os.makedirs(features_dir, exist_ok=True)
+os.makedirs(stories_dir,  exist_ok=True)
+
+# board.yaml
+with open(os.path.join(staging_dir, "board.yaml"), "w") as fh:
+    yaml.dump(plan["board_yaml"], fh,
+              allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+# Feature-YAMLs
+for fp in plan["features"]:
+    fid  = fp["fid"]
+    slug = fp["slug"]
+    data = {
+        "id":                 fid,
+        "title":              fp["title"],
+        "goal":               fp["goal"],
+        "status":             "Backlog",
+        "priority":           fp["priority"],
+        "spec":               fp.get("spec"),
+        "definition_of_done": None,
+        "labels":             fp.get("labels"),
+        "depends":            None,
+        "owner":              None,
+        "stories":            None,
+        "progress":           None,
+        "created_at":         ts,
+        "updated_at":         ts,
+    }
+    fname = f"{fid}-{slug}.yaml"
+    with open(os.path.join(features_dir, fname), "w") as fh:
+        yaml.dump(data, fh,
+                  allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+# Story-YAMLs
+for sp in plan["stories"]:
+    sid  = sp["sid"]
+    slug = sp["slug"]
+    # implements: AC-Liste aus Body-Markern (kann None sein wenn kein Marker)
+    implements = sp.get("implements")
+
+    data = {
+        "id":             sid,
+        "parent":         sp["fid"],
+        "title":          sp["title"],
+        "status":         sp["status"],
+        "priority":       sp["priority"],
+        "spec":           sp.get("spec"),
+        "implements":     implements,
+        "depends":        sp.get("depends"),
+        "labels":         sp.get("labels"),
+        # AC2: Issue-Bezug nachvollziehbar (als extra Felder, kein Label-Missbrauch)
+        "github_issue":   sp["issue_num"],
+        "github_url":     sp.get("url") or None,
+        # Dispo/Laufzeit-Felder: initialisiert mit None
+        "size_est":       None,
+        "dispo_est":      None,
+        "dispo_act":      None,
+        "dispo_forecast": None,
+        "estimate_note":  None,
+        "confidence":     None,
+        "branch":         None,
+        "pr":             None,
+        "blocked_reason": None,
+        "created_at":     ts,
+        "updated_at":     ts,
+        "done_at":        None,
+    }
+    fname = f"{sid}-{slug}.yaml"
+    with open(os.path.join(stories_dir, fname), "w") as fh:
+        yaml.dump(data, fh,
+                  allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+print("STAGING_OK")
+PYEOF
+
+info "Staging abgeschlossen — verschiebe ins Ziel-Verzeichnis..."
+
+# Zielverzeichnisse anlegen
+mkdir -p "$FEATURES_DIR" "$STORIES_DIR"
+
+# Dateien atomar verschieben (mv = rename(2), Quelle und Ziel müssen auf gleichem Filesystem sein)
+for f in "${STAGING_DIR}/features"/F-*.yaml; do
+  [[ -f "$f" ]] || continue
+  mv "$f" "$FEATURES_DIR/"
+done
+for f in "${STAGING_DIR}/stories"/S-*.yaml; do
+  [[ -f "$f" ]] || continue
+  mv "$f" "$STORIES_DIR/"
+done
+mv "${STAGING_DIR}/board.yaml" "$BOARD_YAML"
+
+# Staging-Verzeichnis (YAML-Files) aufräumen (Erfolg); DATA_STAGING_DIR bleibt
+# noch bis nach dem Report (Export-Plan wird dort noch gelesen).
+rm -rf "$STAGING_DIR"
+# Aktualisierter Trap: nur noch DATA_STAGING_DIR aufräumen
+# shellcheck disable=SC2064
+trap "rm -rf \"$DATA_STAGING_DIR\"" EXIT
+
+info "Dateien erfolgreich in ${BOARD_DIR}/ geschrieben."
+
+# ---------------------------------------------------------------------------
+# AC6 — Lint-Gate: board lint ausführen
+# ---------------------------------------------------------------------------
+
+LINT_SCRIPT="$(cd "$(dirname "$0")" && pwd)/board-lint.sh"
+LINT_EXIT=0
+LINT_OUTPUT=""
+
+if [[ ! -f "$LINT_SCRIPT" || ! -x "$LINT_SCRIPT" ]]; then
+  echo "FEHLER: board-lint.sh nicht gefunden oder nicht ausführbar (${LINT_SCRIPT})" >&2
+  echo "  Export qualifiziert NICHT für den Cut-PR — Lint NICHT ausführbar." >&2
+  echo "  Sicherstellen: scripts/board-lint.sh existiert und ist ausführbar (chmod +x)." >&2
+  exit 1
+else
+  info "Führe board lint aus (${LINT_SCRIPT} ${BOARD_DIR})..."
+  # Gemäß coder/L11: set +e um Exit-Code abzufangen (set -euo pipefail ist aktiv)
+  set +e
+  LINT_OUTPUT="$("$LINT_SCRIPT" "$BOARD_DIR" 2>&1)"
+  LINT_EXIT=$?
+  set -e
+
+  if [[ $LINT_EXIT -eq 0 ]]; then
+    LINT_RESULT="GREEN"
+  else
+    LINT_RESULT="RED (Exit ${LINT_EXIT})"
+  fi
+
+  if [[ -n "$LINT_OUTPUT" ]]; then
+    echo ""
+    echo "=== board lint Ausgabe ==="
+    echo "$LINT_OUTPUT"
+    echo "=========================="
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# AC7 — Lauf-Report
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=== Export-Report ==="
+python3 - "$EXPORT_PLAN_FILE" "$LINT_RESULT" <<'PYEOF'
+import json, sys
+
+with open(sys.argv[1]) as fh:
+    plan = json.load(fh)
+lint_result = sys.argv[2]
+r           = plan["report"]
+
+print(f"features: {r['features_count']}   stories: {r['stories_count']}")
+
+# Cluster-Übersicht
+cluster_parts = [f"{name}({count})" for name, count in r["clusters"].items()]
+if cluster_parts:
+    print("clusters:  " + " · ".join(cluster_parts))
+
+# Verworfene depends
+for dep in r["unresolvable_depends"]:
+    print(f"warnung:   depends #{dep['issue_num']} → kein Export-Item (verworfen, Story {dep['from_story']})")
+
+# Weitere Warnungen (außer bereits oben gedruckten)
+printed_types = {"DEPENDS-UNRESOLVABLE"}
+for w in r["warnings"]:
+    wtype, wmsg = w[0], w[1]
+    if wtype not in printed_types:
+        print(f"warnung:   [{wtype}] {wmsg}")
+
+print(f"lint:      {lint_result}")
+PYEOF
+
+echo "====================="
+echo ""
+
+# ---------------------------------------------------------------------------
+# Exit basierend auf Lint-Ergebnis (AC6)
+# ---------------------------------------------------------------------------
+
+if [[ $LINT_EXIT -ne 0 ]]; then
+  echo "FEHLER: board lint meldet Fehler — Export qualifiziert nicht für den Cut-PR." >&2
+  echo "Lint-Ausgabe oben prüfen, Fehler beheben, dann erneut laufen lassen." >&2
+  exit 1
+fi
+
+echo "Export erfolgreich — board/ ist lint-grün und bereit für den Cut-PR."
+echo ""
+echo "Nächste Schritte (Cut-Runbook, board-subsystem §10):"
+echo "  [3] git add board/ && git commit -m 'board: GitHub-Export'"
+echo "  [4] PR 'Board → Files' erstellen (Owner reviewt Features/Stories im Cut-PR)"
+echo "  [5] Nach Merge: .claude/profile.md  board: file  setzen,"
+echo "      GitHub-Board archivieren (NICHT löschen — Rückfallebene)"

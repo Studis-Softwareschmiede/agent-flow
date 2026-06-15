@@ -1078,34 +1078,24 @@ cmd_lint() {
 }
 
 # ---------------------------------------------------------------------------
-# Verb: export-github — Stub/Registrierung (AC11)
+# Verb: export-github — delegiert an scripts/board-github-export (AC11 / #129)
 #
-# Delegiert an board-github-export (spezifiziert in [[board-github-export]]).
-# Das Tool selbst wird in #129 implementiert.
-# Bis dahin: Hilfetext ausgeben, Exit 2 (Abhängigkeit fehlt).
+# Optionen werden 1:1 durchgereicht; board-github-export --help zeigt Details.
 # ---------------------------------------------------------------------------
 cmd_export_github() {
-  cat <<'EOF'
-board export-github — GitHub-Board nach board/-Dateien exportieren
+  local export_script
+  export_script="$(cd "$(dirname "$0")" && pwd)/board-github-export"
 
-Verwendung:
-  board export-github [<optionen>]
+  if [[ ! -x "$export_script" ]]; then
+    die "export-github: ${export_script} nicht gefunden oder nicht ausführbar"
+  fi
 
-Beschreibung:
-  Liest das aktuelle GitHub Project v2 (Issues, Status, Priority, depends,
-  Spec-Refs) und schreibt board/features/ + board/stories/ im Board-Format.
-  Das Verhalten ist in [[board-github-export]] spezifiziert.
-
-Status:
-  Noch nicht implementiert — wird in Item #129 bereitgestellt.
-  Delegationsziel: scripts/board-github-export
-
-Exit-Codes:
-  0   Erfolg (nach Implementierung)
-  1   Fehler beim Export
-  2   Abhängigkeit fehlt (board-github-export nicht installiert)
-EOF
-  exit 2
+  # BOARD_DIR aus der aktuellen Shell-Umgebung weitergeben (falls gesetzt)
+  if [[ -n "${BOARD_DIR:-}" ]]; then
+    exec "$export_script" --board-dir "$BOARD_DIR" "$@"
+  else
+    exec "$export_script" "$@"
+  fi
 }
 
 # ---------------------------------------------------------------------------
