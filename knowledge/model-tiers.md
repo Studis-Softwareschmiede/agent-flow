@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** 2026-06-10 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-06-15 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -34,6 +34,7 @@
 | reviewer    | sonnet | sonnet | opus   | **fable**  |
 | tester      | haiku  | sonnet | opus   | opus   |
 | dba         | haiku  | sonnet | opus   | opus   |
+| estimator   | haiku  | sonnet | opus   | opus   |
 | coder       | haiku  | sonnet | opus   | **fable**  |
 | designer    | haiku  | sonnet | opus   | opus   |
 | train       | sonnet | sonnet | opus   | opus   |
@@ -72,7 +73,7 @@ model = (cost_mode == "balanced") ? <kein Override>  // Frontmatter gilt
 
 - Der `model`-Parameter des Task-Tools nimmt `opus` | `sonnet` | `haiku` | `fable` (`fable` empirisch als Override bestätigt, 2026-06-10).
 - Im Build-Loop (`/flow` §3) gilt der Modus für **alle** Dispatch-Runden des Laufs gleich
-  (coder, reviewer, dba, tester, cicd) — der Modus wird einmal in §0 aufgelöst und durchgereicht.
+  (coder, reviewer, dba, tester, cicd, estimator) — der Modus wird einmal in §0 aufgelöst und durchgereicht.
 - Single-Dispatch-Skills (`/requirement`, `/retro`, `/train`) wenden ihn auf ihren einen Agenten an.
 
 ## Hinweise
