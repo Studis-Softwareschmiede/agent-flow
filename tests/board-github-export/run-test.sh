@@ -701,6 +701,256 @@ for fn in sorted(os.listdir(stories_dir)):
 fi
 
 # ---------------------------------------------------------------------------
+# Test 13: --single-feature Initial → genau 1 Feature "Initial", alle Stories parent darauf
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- Test 13: --single-feature Initial ---"
+
+SF_WORK_DIR="${TEST_WORK_DIR}/single-feature-test"
+mkdir -p "${SF_WORK_DIR}/docs/specs"
+cp "${TEST_WORK_DIR}/docs/specs/"*.md "${SF_WORK_DIR}/docs/specs/"
+
+SF_EXIT=0
+set +e
+SF_OUTPUT="$(
+  cd "$SF_WORK_DIR" && \
+  bash "$EXPORT_SCRIPT" \
+    --mock-input "$FIXTURE" \
+    --board-dir board \
+    --project-slug sf-test \
+    --single-feature Initial \
+    2>&1
+)"
+SF_EXIT=$?
+set -e
+
+echo "$SF_OUTPUT"
+
+if [[ $SF_EXIT -eq 0 ]]; then
+  pass "Test 13a: --single-feature Initial → Exit 0"
+else
+  fail "Test 13a: --single-feature Initial scheiterte (Exit ${SF_EXIT})"
+  echo "  Output: $SF_OUTPUT"
+fi
+
+# Genau 1 Feature-Datei
+SF_FEAT_COUNT="$(find "${SF_WORK_DIR}/board/features" -name "F-*.yaml" 2>/dev/null | wc -l | tr -d ' ')"
+if [[ $SF_FEAT_COUNT -eq 1 ]]; then
+  pass "Test 13b: Genau 1 Feature-Datei (erwartet 1)"
+else
+  fail "Test 13b: ${SF_FEAT_COUNT} Feature-Dateien (erwartet genau 1)"
+fi
+
+# Feature-Titel ist "Initial"
+SF_F001="$(find "${SF_WORK_DIR}/board/features" -name "F-001-*.yaml" | head -1)"
+if [[ -n "$SF_F001" ]]; then
+  if python3 -c "
+import yaml, sys
+with open(sys.argv[1]) as f: d = yaml.safe_load(f)
+assert d.get('title') == 'Initial', f'Titel ist {d.get(\"title\")!r} (erwartet Initial)'
+print('OK')
+" "$SF_F001" 2>/dev/null | grep -q OK; then
+    pass "Test 13c: Feature-Titel ist 'Initial'"
+  else
+    fail "Test 13c: Feature-Titel ist nicht 'Initial'"
+    python3 -c "import yaml,sys; d=yaml.safe_load(open(sys.argv[1]).read()); print('title:', d.get('title'))" "$SF_F001"
+  fi
+else
+  fail "Test 13c: F-001-Datei nicht gefunden"
+fi
+
+# Alle Stories haben parent=F-001
+if python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in os.listdir(stories_dir):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    parent = d.get('parent', '')
+    assert parent == 'F-001', f'{fn}: parent={parent!r} (erwartet F-001)'
+print('OK')
+" "${SF_WORK_DIR}/board/stories" 2>/dev/null | grep -q OK; then
+  pass "Test 13d: Alle Stories haben parent=F-001"
+else
+  fail "Test 13d: Nicht alle Stories haben parent=F-001"
+  python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in sorted(os.listdir(stories_dir)):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    print(f'  {fn}: parent={d.get(\"parent\")}')
+" "${SF_WORK_DIR}/board/stories"
+fi
+
+# Lint muss grün sein
+if echo "$SF_OUTPUT" | grep -q "lint:.*GREEN"; then
+  pass "Test 13e: Lint grün bei --single-feature"
+else
+  fail "Test 13e: Lint nicht grün bei --single-feature"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 14: Spec-Marker-Bereinigung
+#   (a) Issue mit Markdown-Spec-Marker → bereinigt zu docs/x.md
+#   (b) Datei fehlt → spec=null, WARN STORY-UNSPEC, lint grün (kein SPEC-MISSING)
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- Test 14: Spec-Marker-Bereinigung ---"
+
+SM_WORK_DIR="${TEST_WORK_DIR}/specmarker-test"
+mkdir -p "${SM_WORK_DIR}/docs/specs"
+# Nur test-feature-a.md existiert (test-feature-b.md absichtlich NICHT kopiert)
+cp "${TEST_WORK_DIR}/docs/specs/test-feature-a.md" "${SM_WORK_DIR}/docs/specs/"
+
+SM_FIXTURE="${TEST_WORK_DIR}/specmarker-issues.json"
+cat > "$SM_FIXTURE" <<'JSONEOF'
+[
+  {
+    "number": 30,
+    "title": "Issue mit bereinigtem Spec-Marker",
+    "body": "Spec: `docs/specs/test-feature-a.md` (§1–§3, AC1–AC2).\nimplements: AC1\n",
+    "labels": ["backend"],
+    "status": "To Do",
+    "priority": "P2",
+    "url": "https://github.com/test/repo/issues/30"
+  },
+  {
+    "number": 31,
+    "title": "Issue mit fehlendem Spec-Pfad",
+    "body": "Spec: `docs/specs/test-feature-b.md` (§1). \nimplements: AC1\n",
+    "labels": ["backend"],
+    "status": "To Do",
+    "priority": "P2",
+    "url": "https://github.com/test/repo/issues/31"
+  }
+]
+JSONEOF
+
+SM_EXIT=0
+set +e
+SM_OUTPUT="$(
+  cd "$SM_WORK_DIR" && \
+  bash "$EXPORT_SCRIPT" \
+    --mock-input "$SM_FIXTURE" \
+    --board-dir board \
+    --project-slug specmarker-test \
+    2>&1
+)"
+SM_EXIT=$?
+set -e
+
+echo "$SM_OUTPUT"
+
+# Export muss Exit 0 liefern
+if [[ $SM_EXIT -eq 0 ]]; then
+  pass "Test 14a: Export mit Spec-Marker-Bereinigung → Exit 0"
+else
+  fail "Test 14a: Export scheitert (Exit ${SM_EXIT})"
+fi
+
+# Issue 30: spec bereinigt → docs/specs/test-feature-a.md (kein Backtick, keine Klammer)
+if python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in os.listdir(stories_dir):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    if d.get('github_issue') == 30:
+        spec = d.get('spec')
+        assert spec == 'docs/specs/test-feature-a.md', f'Issue 30 spec={spec!r} (erwartet docs/specs/test-feature-a.md)'
+        print('OK')
+        raise SystemExit(0)
+raise AssertionError('Story für Issue 30 nicht gefunden')
+" "${SM_WORK_DIR}/board/stories" 2>/dev/null | grep -q OK; then
+  pass "Test 14b: Issue 30 spec bereinigt → docs/specs/test-feature-a.md"
+else
+  fail "Test 14b: Issue 30 spec nicht korrekt bereinigt"
+  python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in sorted(os.listdir(stories_dir)):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    if d.get('github_issue') == 30:
+        print(f'  spec={d.get(\"spec\")!r}')
+" "${SM_WORK_DIR}/board/stories"
+fi
+
+# Issue 31: spec fehlt → spec=null
+if python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in os.listdir(stories_dir):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    if d.get('github_issue') == 31:
+        spec = d.get('spec')
+        assert spec is None, f'Issue 31 spec={spec!r} (erwartet null)'
+        print('OK')
+        raise SystemExit(0)
+raise AssertionError('Story für Issue 31 nicht gefunden')
+" "${SM_WORK_DIR}/board/stories" 2>/dev/null | grep -q OK; then
+  pass "Test 14c: Issue 31 fehlende Spec-Datei → spec=null"
+else
+  fail "Test 14c: Issue 31 spec nicht null (fehlende Datei sollte spec=null setzen)"
+  python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in sorted(os.listdir(stories_dir)):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    if d.get('github_issue') == 31:
+        print(f'  spec={d.get(\"spec\")!r}')
+" "${SM_WORK_DIR}/board/stories"
+fi
+
+# Lint muss grün sein (WARN STORY-UNSPEC, kein FEHLER SPEC-MISSING)
+if echo "$SM_OUTPUT" | grep -q "lint:.*GREEN"; then
+  pass "Test 14d: Lint grün (kein SPEC-MISSING, nur WARN STORY-UNSPEC)"
+else
+  fail "Test 14d: Lint nicht grün"
+fi
+
+# Lint darf kein FEHLER SPEC-MISSING enthalten
+SM_LINT_EXIT=0
+SM_LINT_OUTPUT=""
+set +e
+SM_LINT_OUTPUT="$(
+  cd "$SM_WORK_DIR" && \
+  bash "$LINT_SCRIPT" board 2>&1
+)"
+SM_LINT_EXIT=$?
+set -e
+
+if [[ $SM_LINT_EXIT -eq 0 ]]; then
+  pass "Test 14e: board-lint Exit 0 bei fehlendem Spec (nur WARN, kein FEHLER)"
+else
+  fail "Test 14e: board-lint Exit ${SM_LINT_EXIT} (erwartet 0 — kein FEHLER erlaubt)"
+  echo "  Lint-Ausgabe: $SM_LINT_OUTPUT"
+fi
+
+if echo "$SM_LINT_OUTPUT" | grep -q "FEHLER SPEC-MISSING"; then
+  fail "Test 14f: FEHLER SPEC-MISSING vorhanden (darf nicht sein — spec=null verhindert das)"
+  echo "  Lint-Ausgabe: $SM_LINT_OUTPUT"
+else
+  pass "Test 14f: Kein FEHLER SPEC-MISSING in board-lint (spec=null korrekt gesetzt)"
+fi
+
+# Report soll die fehlende Spec erwähnen
+if echo "$SM_OUTPUT" | grep -q "docs/specs/test-feature-b.md"; then
+  pass "Test 14g: Report erwähnt fehlende Spec-Datei (docs/specs/test-feature-b.md)"
+else
+  fail "Test 14g: Report erwähnt fehlende Spec-Datei nicht"
+fi
+
+# ---------------------------------------------------------------------------
 # Ergebnis
 # ---------------------------------------------------------------------------
 echo ""

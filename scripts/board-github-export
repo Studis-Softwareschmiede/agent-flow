@@ -14,6 +14,8 @@
 #   --project-slug <slug>  Slug für board.yaml (Standard: Repo-Verzeichnisname)
 #   --force                Zweiten Lauf auf gefülltem board/ erzwingen (AC10-Schutz umgehen)
 #   --dry-run              Kein Schreiben; zeigt was erzeugt würde
+#   --single-feature <name>  Alle Stories unter EIN Feature mit diesem Namen gruppieren
+#                          (überspringt Spec-/Label-Cluster-Heuristik)
 #   --mock-input <datei>   JSON-Datei mit Issue-Daten statt echter gh-Aufrufe (Testmodus)
 #   --help                 Diese Hilfe anzeigen
 #
@@ -63,10 +65,11 @@ Optionen:
   --project <num>        GitHub-Projekt-Nummer (Standard: aus .claude/profile.md board:-Feld)
   --board-dir <pfad>     Ziel-board/-Verzeichnis (Standard: board/)
   --project-slug <slug>  Slug für board.yaml (Standard: Repo-Verzeichnisname)
-  --force                Zweiten Lauf auf gefülltem board/ erzwingen (AC10)
-  --dry-run              Kein Schreiben; zeigt nur was erzeugt würde
-  --mock-input <datei>   JSON-Datei mit Issue-Daten statt echter gh-Aufrufe (Testmodus)
-  --help                 Diese Hilfe anzeigen
+  --force                  Zweiten Lauf auf gefülltem board/ erzwingen (AC10)
+  --dry-run                Kein Schreiben; zeigt nur was erzeugt würde
+  --single-feature <name>  Alle Stories unter EIN Feature mit diesem Namen (kein Clustering)
+  --mock-input <datei>     JSON-Datei mit Issue-Daten statt echter gh-Aufrufe (Testmodus)
+  --help                   Diese Hilfe anzeigen
 
 Issue-JSON-Format für --mock-input (Liste von Objekten):
   [
@@ -97,20 +100,22 @@ PROJECT_SLUG=""
 FORCE=0
 DRY_RUN=0
 MOCK_INPUT=""
+SINGLE_FEATURE=""
 # Bug 2: Explicit-Flag-Tracking — explizite CLI-Flags haben immer Vorrang vor Profil-Fallback
 PROJECT_NUM_EXPLICIT=0
 ORG_EXPLICIT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --org)           shift; ORG="$1"; ORG_EXPLICIT=1          ;;
-    --project)       shift; PROJECT_NUM="$1"; PROJECT_NUM_EXPLICIT=1 ;;
-    --board-dir)     shift; BOARD_DIR="$1"    ;;
-    --project-slug)  shift; PROJECT_SLUG="$1" ;;
-    --force)         FORCE=1                  ;;
-    --dry-run)       DRY_RUN=1                ;;
-    --mock-input)    shift; MOCK_INPUT="$1"   ;;
-    --help|-h)       usage                    ;;
+    --org)             shift; ORG="$1"; ORG_EXPLICIT=1          ;;
+    --project)         shift; PROJECT_NUM="$1"; PROJECT_NUM_EXPLICIT=1 ;;
+    --board-dir)       shift; BOARD_DIR="$1"    ;;
+    --project-slug)    shift; PROJECT_SLUG="$1" ;;
+    --force)           FORCE=1                  ;;
+    --dry-run)         DRY_RUN=1                ;;
+    --single-feature)  shift; SINGLE_FEATURE="$1" ;;
+    --mock-input)      shift; MOCK_INPUT="$1"   ;;
+    --help|-h)         usage                    ;;
     *) die "Unbekannte Option '$1'. Nutze --help für Hilfe." ;;
   esac
   shift
@@ -362,13 +367,14 @@ info "$(python3 -c "import json; print(len(json.load(open('${ISSUES_FILE}'))))" 
 # Ergebnis wird in EXPORT_PLAN_FILE geschrieben (kein Shell-Argument → kein ARG_MAX).
 # ---------------------------------------------------------------------------
 
-python3 - "$ISSUES_FILE" "$PROJECT_SLUG" "$EXPORT_TS" "$EXPORT_PLAN_FILE" <<'PYEOF'
-import sys, json, re, datetime
+python3 - "$ISSUES_FILE" "$PROJECT_SLUG" "$EXPORT_TS" "$EXPORT_PLAN_FILE" "$SINGLE_FEATURE" <<'PYEOF'
+import sys, json, re, datetime, os
 
-issues_file  = sys.argv[1]
-project_slug = sys.argv[2]
-export_ts    = sys.argv[3]
-output_file  = sys.argv[4]
+issues_file    = sys.argv[1]
+project_slug   = sys.argv[2]
+export_ts      = sys.argv[3]
+output_file    = sys.argv[4]
+single_feature = sys.argv[5] if len(sys.argv) > 5 else ""  # "" means: use clustering heuristic
 
 # --------------------------------------------------------------------------
 # Rohdaten
@@ -425,7 +431,36 @@ DEPENDS_RE  = re.compile(r"^depends?:?\s*(.+)$",  re.MULTILINE | re.IGNORECASE)
 ISSUE_REF   = re.compile(r"#(\d+)")
 AC_TOKEN    = re.compile(r"^AC\d+$", re.IGNORECASE)
 
+# Spec-Marker-Bereinigung:
+# Reale Issue-Bodies tragen Marker wie:
+#   Spec: `docs/architecture/secrets-subsystem.md` (§1–§16, AC1–AC12, GE1–GE6).
+# → Backticks entfernen, Klammer-Annotation abschneiden, Trailing-Satzzeichen strippen.
+_SPEC_CLEAN_BACKTICK = re.compile(r"`")
+_SPEC_CLEAN_TRAIL    = re.compile(r"[\s(].*$")  # alles ab erstem Whitespace oder '(' abschneiden
+_SPEC_TRAIL_PUNCT    = re.compile(r"[.,;]+$")
+
+def clean_spec_marker(raw):
+    """Bereinigt einen rohen Spec:-Markerwert zu einem reinen Dateipfad.
+    Gibt (cleaned_path, None) zurück wenn die Datei existiert,
+    oder (None, raw) wenn die Datei nach der Bereinigung nicht gefunden wird."""
+    if not raw:
+        return None, None
+    # 1. Backticks entfernen
+    v = _SPEC_CLEAN_BACKTICK.sub("", raw)
+    # 2. Alles ab erstem Whitespace oder '(' abschneiden
+    v = _SPEC_CLEAN_TRAIL.sub("", v).strip()
+    # 3. Trailing-Satzzeichen strippen
+    v = _SPEC_TRAIL_PUNCT.sub("", v).strip()
+    if not v:
+        return None, None
+    # 4. Datei-Existenzprüfung (relativ zum cwd = Repo-Root beim Lauf)
+    if os.path.isfile(v):
+        return v, None
+    # Datei fehlt → spec: null (→ WARN STORY-UNSPEC, kein FEHLER SPEC-MISSING)
+    return None, v  # (None, missing_path)
+
 warnings = []  # [(type_str, message_str)]
+spec_missing_report = []  # [(issue_num, raw_marker, cleaned_path)] — für Report
 
 # --------------------------------------------------------------------------
 # V1 — Issue-Daten parsen
@@ -441,11 +476,18 @@ for iss in issues:
     raw_pr = str(iss.get("priority") or "").strip()
     url    = str(iss.get("url")      or "").strip()
 
-    # Spec: Marker
+    # Spec: Marker — bereinigen (Backticks, Klammer-Annotation, Trailing-Satzzeichen entfernen)
     spec_val = None
     m = SPEC_RE.search(body)
     if m:
-        spec_val = m.group(1).strip()
+        raw_spec = m.group(1).strip()
+        spec_val, missing_path = clean_spec_marker(raw_spec)
+        if missing_path is not None:
+            # Spec-Datei existiert nicht → spec=null, Report-Warnung
+            spec_missing_report.append((num, raw_spec, missing_path))
+            warnings.append(("SPEC-FILE-MISSING",
+                f"Issue #{num}: Spec-Pfad '{missing_path}' (bereinigt aus '{raw_spec}') existiert nicht → spec=null (WARN STORY-UNSPEC)"))
+            spec_val = None
 
     # implements: Marker → AC-Token-Liste
     impl_list = []
@@ -500,33 +542,9 @@ for iss in issues:
 issue_index = {p["number"]: p for p in parsed}
 
 # --------------------------------------------------------------------------
-# V3 — Feature-Heuristik
+# V3 — Feature-Heuristik (oder Single-Feature-Modus bei --single-feature)
 # --------------------------------------------------------------------------
 
-spec_groups  = {}   # spec_path → [issue_num, ...]
-label_groups = {}   # label     → [issue_num, ...]
-misc_issues  = []
-
-for pi in parsed:
-    num    = pi["number"]
-    spec   = pi["spec"]
-    labels = pi["labels"]
-    if spec:
-        spec_groups.setdefault(spec, []).append(num)
-    elif labels:
-        # Erstes Label alphabetisch als primären Cluster-Key
-        primary = sorted(labels)[0]
-        label_groups.setdefault(primary, []).append(num)
-    else:
-        misc_issues.append(num)
-
-# Ungewöhnliche Spec-Refs melden
-for spec in spec_groups:
-    if not spec.startswith("docs/specs/") and not spec.startswith("docs/"):
-        warnings.append(("SPEC-REF-UNUSUAL",
-            f"Spec-Referenz '{spec}' beginnt nicht mit 'docs/specs/' — Board-lint prüft Existenz"))
-
-# Feature-Planung
 next_fid = 1
 features_plan = []
 issue_to_fid  = {}   # issue_number → fid
@@ -545,60 +563,103 @@ def spec_feature_title(spec_path):
     stem = basename.rsplit(".", 1)[0] if "." in basename else basename
     return stem.replace("-", " ").replace("_", " ").title()
 
-# Spec-basierte Features
-for spec_path in sorted(spec_groups.keys()):
-    nums = spec_groups[spec_path]
-    fid  = f"F-{next_fid:03d}"
-    next_fid += 1
-    title = spec_feature_title(spec_path)
-    features_plan.append({
-        "fid":        fid,
-        "title":      title,
-        "slug":       slugify(title),
-        "goal":       f"[Platzhalter — Owner ausfüllen im Cut-PR] Spec: {spec_path}",
-        "priority":   priority_rollup(nums),
-        "spec":       spec_path,
-        "labels":     None,
-        "issue_nums": nums,
-    })
-    for n in nums:
-        issue_to_fid[n] = fid
-
-# Label-basierte Features
-for label in sorted(label_groups.keys()):
-    nums = label_groups[label]
-    fid  = f"F-{next_fid:03d}"
-    next_fid += 1
-    title = label.replace("-", " ").replace("_", " ").title()
-    features_plan.append({
-        "fid":        fid,
-        "title":      title,
-        "slug":       slugify(title),
-        "goal":       f"[Platzhalter — Owner ausfüllen im Cut-PR] Label-Cluster: {label}",
-        "priority":   priority_rollup(nums),
-        "spec":       None,
-        "labels":     [label],
-        "issue_nums": nums,
-    })
-    for n in nums:
-        issue_to_fid[n] = fid
-
-# Misc-Feature
-if misc_issues:
+if single_feature:
+    # --single-feature <name>: alle Issues unter EIN Feature (keine Heuristik)
+    all_nums = [pi["number"] for pi in parsed]
     fid = f"F-{next_fid:03d}"
     next_fid += 1
+    title = single_feature
     features_plan.append({
         "fid":        fid,
-        "title":      "Misc",
-        "slug":       "misc",
-        "goal":       "[Platzhalter — Owner ausfüllen im Cut-PR] Nicht kategorisierte Issues",
-        "priority":   "P3",
+        "title":      title,
+        "slug":       slugify(title),
+        "goal":       f"[Platzhalter — Owner ausfüllen im Cut-PR] Bootstrap-Feature: {title}",
+        "priority":   priority_rollup(all_nums),
         "spec":       None,
         "labels":     None,
-        "issue_nums": misc_issues,
+        "issue_nums": all_nums,
     })
-    for n in misc_issues:
+    for n in all_nums:
         issue_to_fid[n] = fid
+else:
+    # Standard-Heuristik: Spec-Cluster > Label-Cluster > Misc
+    spec_groups  = {}   # spec_path → [issue_num, ...]
+    label_groups = {}   # label     → [issue_num, ...]
+    misc_issues  = []
+
+    for pi in parsed:
+        num    = pi["number"]
+        spec   = pi["spec"]
+        labels = pi["labels"]
+        if spec:
+            spec_groups.setdefault(spec, []).append(num)
+        elif labels:
+            # Erstes Label alphabetisch als primären Cluster-Key
+            primary = sorted(labels)[0]
+            label_groups.setdefault(primary, []).append(num)
+        else:
+            misc_issues.append(num)
+
+    # Ungewöhnliche Spec-Refs melden
+    for spec in spec_groups:
+        if not spec.startswith("docs/specs/") and not spec.startswith("docs/"):
+            warnings.append(("SPEC-REF-UNUSUAL",
+                f"Spec-Referenz '{spec}' beginnt nicht mit 'docs/specs/' — Board-lint prüft Existenz"))
+
+    # Spec-basierte Features
+    for spec_path in sorted(spec_groups.keys()):
+        nums = spec_groups[spec_path]
+        fid  = f"F-{next_fid:03d}"
+        next_fid += 1
+        title = spec_feature_title(spec_path)
+        features_plan.append({
+            "fid":        fid,
+            "title":      title,
+            "slug":       slugify(title),
+            "goal":       f"[Platzhalter — Owner ausfüllen im Cut-PR] Spec: {spec_path}",
+            "priority":   priority_rollup(nums),
+            "spec":       spec_path,
+            "labels":     None,
+            "issue_nums": nums,
+        })
+        for n in nums:
+            issue_to_fid[n] = fid
+
+    # Label-basierte Features
+    for label in sorted(label_groups.keys()):
+        nums = label_groups[label]
+        fid  = f"F-{next_fid:03d}"
+        next_fid += 1
+        title = label.replace("-", " ").replace("_", " ").title()
+        features_plan.append({
+            "fid":        fid,
+            "title":      title,
+            "slug":       slugify(title),
+            "goal":       f"[Platzhalter — Owner ausfüllen im Cut-PR] Label-Cluster: {label}",
+            "priority":   priority_rollup(nums),
+            "spec":       None,
+            "labels":     [label],
+            "issue_nums": nums,
+        })
+        for n in nums:
+            issue_to_fid[n] = fid
+
+    # Misc-Feature
+    if misc_issues:
+        fid = f"F-{next_fid:03d}"
+        next_fid += 1
+        features_plan.append({
+            "fid":        fid,
+            "title":      "Misc",
+            "slug":       "misc",
+            "goal":       "[Platzhalter — Owner ausfüllen im Cut-PR] Nicht kategorisierte Issues",
+            "priority":   "P3",
+            "spec":       None,
+            "labels":     None,
+            "issue_nums": misc_issues,
+        })
+        for n in misc_issues:
+            issue_to_fid[n] = fid
 
 # --------------------------------------------------------------------------
 # V2 — Story-Planung
@@ -685,6 +746,7 @@ report = {
     "stories_count":        len(stories_plan),
     "clusters":             clusters,
     "unresolvable_depends": unresolvable_depends,
+    "spec_missing":         spec_missing_report,
     "warnings":             warnings,
 }
 
@@ -929,8 +991,13 @@ if cluster_parts:
 for dep in r["unresolvable_depends"]:
     print(f"warnung:   depends #{dep['issue_num']} → kein Export-Item (verworfen, Story {dep['from_story']})")
 
+# Bereingte Spec-Marker mit fehlender Datei
+for sm in r.get("spec_missing", []):
+    issue_num, raw_marker, cleaned = sm[0], sm[1], sm[2]
+    print(f"warnung:   Issue #{issue_num}: Spec-Datei '{cleaned}' nicht gefunden (bereinigt aus '{raw_marker}') → spec=null (WARN STORY-UNSPEC)")
+
 # Weitere Warnungen (außer bereits oben gedruckten)
-printed_types = {"DEPENDS-UNRESOLVABLE"}
+printed_types = {"DEPENDS-UNRESOLVABLE", "SPEC-FILE-MISSING"}
 for w in r["warnings"]:
     wtype, wmsg = w[0], w[1]
     if wtype not in printed_types:
