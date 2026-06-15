@@ -37,6 +37,9 @@ Jedes GitHub-Item wird zu einer Story-YAML: neue `S-###` (über `board.yaml`-Zä
 ### V3 — Feature-Heuristik
 Issues werden zu Auto-Features gruppiert: primär je referenzierter Spec-Datei (`Spec:`), ersatzweise je Label-Cluster. Je Gruppe entsteht ein Feature-YAML (`F-###`, `title` aus Spec/Cluster, `status` aus dem Rollup der Kind-Stories, `goal`-Platzhalter für Owner-Nachbenennung). Jede Story bekommt das passende `parent`.
 
+### V3a — Single-Feature-Modus (`--single-feature <name>`)
+Ist das optionale Flag `--single-feature <name>` gesetzt, wird die Heuristik aus V3 übersprungen: **alle** exportierten Stories kommen unter EIN Feature mit diesem `title` (z.B. `Initial`); jede Story trägt dessen `parent`. Bootstrap-Strategie für gewachsene Boards (etwa bei 1:1-Spec-Story-Beziehungen, wo die Heuristik kaum gruppiert) — der Owner schneidet im/nach dem Cut-PR feinere Features heraus. Unabhängig vom Modus werden Spec-Marker beim Parsen **bereinigt** (Backticks, `(§…)`-Annotation, Trailing-Satzzeichen → reiner Pfad); zeigt der bereinigte Pfad auf eine nicht existierende Datei → `spec: null` (Lint: `WARN STORY-UNSPEC`, kein `FEHLER SPEC-MISSING`) + Report-Hinweis.
+
 ### V4 — depends auflösen
 `depends: #n`-Freitext wird auf die exportierten Story-IDs umgesetzt (`#n` → `S-###`). Lässt sich `#n` nicht auf ein exportiertes Item abbilden, wird der Eintrag verworfen und im Lauf-Report als Warnung gelistet (nie als unauflösbare Referenz geschrieben).
 
@@ -62,7 +65,7 @@ Ein zweiter Export-Lauf auf ein bereits gefülltes `board/` legt nicht blind dop
 
 - **AC1** — `board export-github` liest das in `profile.md` referenzierte GitHub Project v2 (Titel, Body, Status, Priority, Labels, Marker `Spec:`/`implements:`/`depends:#n`). *(V1)*
 - **AC2** — Jedes GitHub-Item wird zu einer Story-YAML mit neuer `S-###`, 1:1-Status-Mapping, `priority`, `labels`, `spec`/`implements` aus den Body-Markern; der Issue-Bezug bleibt nachvollziehbar. *(V2)*
-- **AC3** — Issues werden zu Auto-Features gruppiert (primär je Spec-Datei, sonst Label-Cluster); je Gruppe ein Feature-YAML, jede Story trägt das passende `parent`. *(V3)*
+- **AC3** — Issues werden zu Auto-Features gruppiert (primär je Spec-Datei, sonst Label-Cluster); je Gruppe ein Feature-YAML, jede Story trägt das passende `parent`. Ist `--single-feature <name>` gesetzt, entfällt die Heuristik und alle Stories kommen unter EIN Feature `<name>`; Spec-Marker werden bereinigt, eine nicht existierende Spec-Datei → `spec: null` (WARN STORY-UNSPEC), nie ein nicht existenter Pfad als `spec`. *(V3, V3a)*
 - **AC4** — `depends:#n` wird auf exportierte Story-IDs umgesetzt; nicht abbildbare Referenzen werden verworfen + im Report gewarnt (nie als unauflösbar geschrieben). *(V4)*
 - **AC5** — `board/board.yaml` wird konform zu [[board-schema]] V1 mit Zählern auf die höchste vergebene Nummer geschrieben. *(V5)*
 - **AC6** — Nach dem Export läuft `board lint`; nur grüner Lint (Exit 0) qualifiziert für den Cut-PR; Fehler werden ausgegeben. *(V6)*
