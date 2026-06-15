@@ -2,7 +2,7 @@
 pack: migration/flyway-10
 pack_version: 1.1
 framework_version_range: ">=10.0, <11.0"
-pack_date: 2026-06-02
+pack_date: 2026-06-15
 requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01
   java: ">=17"
 primary_sources:
@@ -29,6 +29,9 @@ Flyway 10.x — Java-Migration-Tool, Current-Major mit **Java 17 als Mindest-Ver
 - `flyway-10/A03` — **Repeatable Migrations** unverändert: `R__<description>.sql`.
 - `flyway-10/A04` — **Undo Migrations** weiterhin Enterprise-only.
 - `flyway-10/A05` — **Native-Connector-Splits** (since 10.0): einzelne DB-Treiber als separate Module (`flyway-database-postgresql`, `flyway-database-mysql`, etc.). Bei Maven-Setup explizit deklarieren — der Core hat nicht mehr alle Treiber inkludiert. Verify gegen die aktuelle Maven-Coordinates-Tabelle der Release-Notes für deinen Dialekt.
+- `flyway-10/A06` — **`createSchema`-Callback deprecated (since 10.20.0).** Der Callback-Event-Name `createSchema` ist deprecated; Ersatz: `beforeCreateSchema` (identische Semantik: läuft vor dem automatischen Anlegen nicht-existenter Schemas). Die offizielle Callback-Referenz führt `createSchema` als „[deprecated, use beforeCreateSchema]". Quelle: [Flyway Release Notes — 10.20.0 (2024-10-16)](https://documentation.red-gate.com/fd/release-notes-flyway-engine-179732572.html) + [Flyway Callback Events Reference](https://documentation.red-gate.com/flyway/reference/callback-events).
+- `flyway-10/A07` — **`cleanOnValidationError` deprecated ab 10.17, entfernt in 11.** Ab Flyway 10.17.x erscheint eine Deprecation-Warnung; in Flyway 11 ist der Parameter vollständig entfernt. Workaround: explizites Shell-Skript (`flyway validate || flyway clean`). Die Redgate-Doku begründet die Abkündigung mit dem Sicherheitsrisiko beim Einsatz in Multi-Environment-TOML-Configs. Quelle: [Deprecation of Clean On Validation Error — Redgate Flyway Docs](https://documentation.red-gate.com/fd/deprecation-of-clean-on-validation-error-254154581.html).
+- `flyway-10/A08` — **Maven-GroupId `com.redgate.flyway` ist seit 10.0 kanonisch; Dual-Publish zu `org.flywaydb.enterprise` wurde mit Flyway 11.0.0 eingestellt (Breaking Change).** Flyway 10.0.0 wechselte die GroupId von `org.flywaydb.enterprise` zu `com.redgate.flyway`. Innerhalb von 10.x wurden `com.redgate.flyway` UND `org.flywaydb.enterprise` parallel publiziert. Dual-Publish wurde mit Flyway **11.0.0** eingestellt — bestehende Assets (bis einschließlich V10-Releases) bleiben erhalten, aber Releases nach V11 werden nicht mehr zu `org.flywaydb.enterprise` publiziert. Neue Maven-/Gradle-Deps müssen `com.redgate.flyway` verwenden; `org.flywaydb` (Community-OSS) bleibt separat weiterhin gültig. Quelle: [Flyway Release Notes — 10.0.0](https://documentation.red-gate.com/fd/release-notes-flyway-engine-179732572.html) + [Flyway V11 — updating from V10](https://documentation.red-gate.com/flyway/flyway-blog/flyway-v11-updating-from-v10).
 
 ## B. Anti-Patterns aus Einsatz
 
@@ -59,6 +62,9 @@ Flyway 10.x — Java-Migration-Tool, Current-Major mit **Java 17 als Mindest-Ver
 - In-place-Edit einer committeten `V<n>`-Migration → **Critical** (C02).
 - `spring.jpa.hibernate.ddl-auto=update`/`create` UND Flyway aktiv → **Critical** (C04).
 - `U<n>`-Undo-Migration in OSS-Edition → **Important** (A04).
+- `createSchema`-Callback in SQL/Java-Code → **Important** (A06 — ersetzen durch `beforeCreateSchema`).
+- `cleanOnValidationError` in Konfiguration → **Important** (A07 — deprecated ab 10.17, in v11 entfernt; durch Shell-Workaround ersetzen).
+- Maven-/Gradle-Dep mit GroupId `org.flywaydb.enterprise` → **Important** (A08 — ab Flyway 11.0.0 nicht mehr publiziert; auf `com.redgate.flyway` wechseln).
 
 ## Test-Approach
 
