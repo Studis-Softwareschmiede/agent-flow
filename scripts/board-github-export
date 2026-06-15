@@ -97,11 +97,14 @@ PROJECT_SLUG=""
 FORCE=0
 DRY_RUN=0
 MOCK_INPUT=""
+# Bug 2: Explicit-Flag-Tracking — explizite CLI-Flags haben immer Vorrang vor Profil-Fallback
+PROJECT_NUM_EXPLICIT=0
+ORG_EXPLICIT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --org)           shift; ORG="$1"          ;;
-    --project)       shift; PROJECT_NUM="$1"  ;;
+    --org)           shift; ORG="$1"; ORG_EXPLICIT=1          ;;
+    --project)       shift; PROJECT_NUM="$1"; PROJECT_NUM_EXPLICIT=1 ;;
     --board-dir)     shift; BOARD_DIR="$1"    ;;
     --project-slug)  shift; PROJECT_SLUG="$1" ;;
     --force)         FORCE=1                  ;;
@@ -115,6 +118,7 @@ done
 
 # ---------------------------------------------------------------------------
 # Konfiguration ermitteln
+# Bug 2: Explizite --project / --org haben immer Vorrang; Profil nur als Fallback.
 # ---------------------------------------------------------------------------
 
 PROFILE_FILE=".claude/profile.md"
@@ -124,23 +128,24 @@ if [[ -z "$PROJECT_SLUG" ]]; then
   PROJECT_SLUG="$(basename "$(pwd)")"
 fi
 
-# board-Nummer aus Profil (falls nicht via --project)
-if [[ -z "$PROJECT_NUM" ]]; then
-  if [[ -n "$MOCK_INPUT" ]]; then
-    # Im Mock-Modus: PROJECT_NUM optional
-    PROJECT_NUM="mock"
-  elif [[ -f "$PROFILE_FILE" ]]; then
-    BOARD_VALUE="$(grep -E "^board:" "$PROFILE_FILE" 2>/dev/null | head -1 | awk '{print $2}' || true)"
-    if [[ -z "$BOARD_VALUE" ]]; then
-      die "Kein 'board:'-Feld in ${PROFILE_FILE} gefunden"
-    fi
-    if [[ "$BOARD_VALUE" == "file" ]]; then
-      die "board: file — kein GitHub-Board zu exportieren (Migration bereits abgeschlossen)"
-    fi
-    PROJECT_NUM="$BOARD_VALUE"
-  else
-    die "--project <num> oder ${PROFILE_FILE} mit 'board: <num>' erforderlich"
+# board-Nummer: --project (explizit) > Profil-Fallback > Mock-Modus
+if [[ $PROJECT_NUM_EXPLICIT -eq 1 ]]; then
+  # --project wurde explizit übergeben → Profil NICHT lesen (Priorität gewährleistet)
+  : # PROJECT_NUM bereits gesetzt
+elif [[ -n "$MOCK_INPUT" ]]; then
+  # Mock-Modus ohne explizites --project: keine Projekt-Nummer erforderlich
+  PROJECT_NUM="${PROJECT_NUM:-mock}"
+elif [[ -f "$PROFILE_FILE" ]]; then
+  BOARD_VALUE="$(grep -E "^board:" "$PROFILE_FILE" 2>/dev/null | head -1 | awk '{print $2}' || true)"
+  if [[ -z "$BOARD_VALUE" ]]; then
+    die "Kein 'board:'-Feld in ${PROFILE_FILE} gefunden"
   fi
+  if [[ "$BOARD_VALUE" == "file" ]]; then
+    die "board: file — kein GitHub-Board zu exportieren (Migration bereits abgeschlossen)"
+  fi
+  PROJECT_NUM="$BOARD_VALUE"
+else
+  die "--project <num> oder ${PROFILE_FILE} mit 'board: <num>' erforderlich"
 fi
 
 # Zielverzeichnisse
@@ -210,6 +215,33 @@ else
     die "gh (GitHub CLI) nicht gefunden — bitte installieren oder --mock-input verwenden"
   fi
 
+  # Bug 3: --owner für Org-Projekte immer mitsenden.
+  # Vorrang: --org (explizit) > git-remote-Owner-Ableitung.
+  # Bug 2: ORG_EXPLICIT=1 → --org-Wert bereits gesetzt, kein Override.
+  if [[ $ORG_EXPLICIT -eq 0 ]] || [[ -z "$ORG" ]]; then
+    # Owner aus git remote origin ableiten (robust: Org-Projekte brauchen --owner)
+    DERIVED_OWNER=""
+    set +e
+    DERIVED_OWNER="$(git remote get-url origin 2>/dev/null | \
+      python3 -c "
+import sys, re
+url = sys.stdin.read().strip()
+# ssh: git@github.com:org/repo.git
+m = re.match(r'git@github\.com:([^/]+)/', url)
+if m: print(m.group(1)); raise SystemExit(0)
+# https: https://github.com/org/repo.git
+m = re.match(r'https?://(?:[^@]+@)?github\.com/([^/]+)/', url)
+if m: print(m.group(1)); raise SystemExit(0)
+" 2>/dev/null)"
+    set -e
+    if [[ -n "$DERIVED_OWNER" ]]; then
+      [[ -z "$ORG" ]] && ORG="$DERIVED_OWNER"
+      info "Owner aus git-Remote abgeleitet: ${ORG}"
+    else
+      info "WARNUNG: --owner konnte nicht abgeleitet werden — gh project item-list ohne --owner (nur User-Projekte)"
+    fi
+  fi
+
   # gh project item-list: alle Items des Projekts
   GH_ARGS=("project" "item-list" "$PROJECT_NUM" "--format" "json" "--limit" "500")
   if [[ -n "$ORG" ]]; then
@@ -276,13 +308,18 @@ for item in items:
         issue_detail = {"number": issue_number, "title": content.get("title", ""),
                         "body": "", "labels": [], "url": ""}
 
-    # Status und Priority aus Projekt-Feldwerten
-    status_val   = ""
+    # Bug 1: gh project item-list --format json liefert Status als TOP-LEVEL-Feld "status"
+    # am Item-Objekt (nicht in fieldValues.content.state).
+    # Vorrang: top-level "status" > fieldValues-Fallback für ältere gh-Versionen.
+    status_val   = str(item.get("status") or "").strip()
     priority_val = ""
+
+    # fieldValues als Fallback für Priority (und als Compat für ältere gh-Versionen
+    # die status nicht top-level liefern)
     for fv in item.get("fieldValues", []):
         fname = (fv.get("field") or {}).get("name", "").lower()
-        if fname == "status":
-            # Mögliche Felder je nach gh-Version
+        if fname == "status" and not status_val:
+            # Fallback: gh-Version liefert status in fieldValues
             status_val = (fv.get("name") or fv.get("text") or
                           fv.get("optionId") or "").strip()
         elif fname == "priority":
