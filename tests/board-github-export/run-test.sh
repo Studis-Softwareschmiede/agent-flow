@@ -582,6 +582,125 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test 12: Bug-1-Regression — echtes gh-Format: top-level "status", kein content.state
+# Abdeckung: Done→Done, Blocked→Blocked, To Do→To Do, In Progress→In Progress, In Review→In Review
+# Items haben "content" ohne "state"-Feld (wie das echte gh project item-list --format json).
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- Test 12: Bug-1-Regression — top-level status, kein content.state ---"
+
+GH_FORMAT_WORK_DIR="${TEST_WORK_DIR}/gh-format-test"
+mkdir -p "${GH_FORMAT_WORK_DIR}/docs/specs"
+cp "${TEST_WORK_DIR}/docs/specs/"*.md "${GH_FORMAT_WORK_DIR}/docs/specs/"
+
+# Fixture im echten gh-Ausgabe-Format: top-level "status", content OHNE "state"
+GH_FORMAT_FIXTURE="${TEST_WORK_DIR}/gh-format-issues.json"
+cat > "$GH_FORMAT_FIXTURE" <<'JSONEOF'
+[
+  {
+    "number": 20,
+    "title": "Story Done",
+    "body": "Spec: docs/specs/test-feature-a.md\nimplements: AC1\n",
+    "labels": ["backend"],
+    "status": "Done",
+    "priority": "P1",
+    "url": "https://github.com/org/repo/issues/20"
+  },
+  {
+    "number": 21,
+    "title": "Story Blocked",
+    "body": "Spec: docs/specs/test-feature-a.md\nimplements: AC2\n",
+    "labels": ["backend"],
+    "status": "Blocked",
+    "priority": "P0",
+    "url": "https://github.com/org/repo/issues/21"
+  },
+  {
+    "number": 22,
+    "title": "Story To Do",
+    "body": "Spec: docs/specs/test-feature-a.md\nimplements: AC3\n",
+    "labels": ["backend"],
+    "status": "To Do",
+    "priority": "P2",
+    "url": "https://github.com/org/repo/issues/22"
+  },
+  {
+    "number": 23,
+    "title": "Story In Progress",
+    "body": "Spec: docs/specs/test-feature-b.md\nimplements: AC1\n",
+    "labels": ["frontend"],
+    "status": "In Progress",
+    "priority": "P1",
+    "url": "https://github.com/org/repo/issues/23"
+  },
+  {
+    "number": 24,
+    "title": "Story In Review",
+    "body": "Spec: docs/specs/test-feature-b.md\nimplements: AC2\n",
+    "labels": ["frontend"],
+    "status": "In Review",
+    "priority": "P2",
+    "url": "https://github.com/org/repo/issues/24"
+  }
+]
+JSONEOF
+
+GH_FORMAT_EXIT=0
+set +e
+GH_FORMAT_OUTPUT="$(
+  cd "$GH_FORMAT_WORK_DIR" && \
+  bash "$EXPORT_SCRIPT" \
+    --mock-input "$GH_FORMAT_FIXTURE" \
+    --board-dir board \
+    --project-slug gh-format-test \
+    2>&1
+)"
+GH_FORMAT_EXIT=$?
+set -e
+
+echo "$GH_FORMAT_OUTPUT"
+
+if [[ $GH_FORMAT_EXIT -eq 0 ]]; then
+  pass "Test 12a: Export mit echtem gh-Format (top-level status) → Exit 0"
+else
+  fail "Test 12a: Export mit echtem gh-Format fehlgeschlagen (Exit ${GH_FORMAT_EXIT})"
+  echo "  Output: $GH_FORMAT_OUTPUT"
+fi
+
+# Kernassertion Bug 1: top-level status wird 1:1 gemappt (kein Fallback auf "To Do")
+if python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+by_issue = {}
+for fn in os.listdir(stories_dir):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    by_issue[d.get('github_issue')] = d.get('status')
+
+# Erwartetes 1:1-Mapping (Bug-1-Regression)
+assert by_issue.get(20) == 'Done',        f'Issue 20 (Done): erwartet Done, got {by_issue.get(20)}'
+assert by_issue.get(21) == 'Blocked',     f'Issue 21 (Blocked): erwartet Blocked, got {by_issue.get(21)}'
+assert by_issue.get(22) == 'To Do',       f'Issue 22 (To Do): erwartet To Do, got {by_issue.get(22)}'
+assert by_issue.get(23) == 'In Progress', f'Issue 23 (In Progress): erwartet In Progress, got {by_issue.get(23)}'
+assert by_issue.get(24) == 'In Review',   f'Issue 24 (In Review): erwartet In Review, got {by_issue.get(24)}'
+print('OK')
+" "${GH_FORMAT_WORK_DIR}/board/stories" 2>/dev/null | grep -q OK; then
+  pass "Test 12b: Bug-1-Regression: Done→Done, Blocked→Blocked, To Do→To Do, In Progress→In Progress, In Review→In Review (alle 1:1)"
+else
+  fail "Test 12b: Bug-1-Regression: Status-Mapping fehlerhaft (top-level status nicht korrekt übernommen)"
+  python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in sorted(os.listdir(stories_dir)):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    print(f'  github_issue={d.get(\"github_issue\")} status={d.get(\"status\")}')
+" "${GH_FORMAT_WORK_DIR}/board/stories"
+fi
+
+# ---------------------------------------------------------------------------
 # Ergebnis
 # ---------------------------------------------------------------------------
 echo ""
