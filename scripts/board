@@ -3,6 +3,7 @@
 #
 # Verben (implementiert): feature add, story add, set, show, list, next,
 #                         rollup (AC7), lint (AC8, delegiert an board-lint.sh),
+#                         ready (AC12, F-008 „Autonome Board-Abarbeitung"),
 #                         export-github (AC11, Stub/Registrierung — #129)
 # Single-Writer-Erzwingung: AC9
 #
@@ -39,6 +40,7 @@ Verwendung:
   board next
   board rollup <F-###|--all>
   board lint [<board-dir>]
+  board ready [--quiet]
   board export-github
 EOF
   exit 1
@@ -1099,6 +1101,198 @@ cmd_export_github() {
 }
 
 # ---------------------------------------------------------------------------
+# Verb: ready — AC12 (F-008 „Autonome Board-Abarbeitung")
+#
+# Prüft je To-Do-Story, ob sie „ready" für autonome Abarbeitung ist.
+# Ready-Regeln (alle müssen erfüllt sein):
+#   R1: status == "To Do"           (andere Stati → n/a, wird übersprungen)
+#   R2: spec gesetzt UND Datei existiert UND Frontmatter hat status: active
+#   R3: implements nicht leer UND jede AC-Nummer kommt in der Spec vor
+#   R4: depends leer ODER alle referenzierten Stories haben status == "Done"
+#   R5: blocked_reason leer/null
+#
+# Ausgabe:
+#   READY     S-xxx
+#   NOT-READY S-xxx — <Grund(e)>
+#   (n/a)     S-xxx  (status != "To Do" — nur ohne --quiet)
+#
+# Exit-Code: 0 wenn alle To-Do-Items ready (oder keine To-Do-Items),
+#            1 wenn mindestens eine To-Do-Story NOT-READY ist.
+# --quiet: unterdrückt n/a-Zeilen; gibt zuletzt eine Summary-Zeile aus.
+# ---------------------------------------------------------------------------
+cmd_ready() {
+  local quiet=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --quiet|-q) quiet=1 ;;
+      *) die "ready: unbekannte Option '$1'" ;;
+    esac
+    shift
+  done
+
+  # Lesend: kein require_board — fehlendes Board → Exit 0 (keine To-Do-Items)
+  local story_files=()
+  if [[ -d "$STORIES_DIR" ]]; then
+    while IFS= read -r -d '' f; do
+      story_files+=("$f")
+    done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null | sort -z)
+  fi
+
+  # Repo-Wurzel = Verzeichnis über BOARD_DIR (für relative Spec-Pfade).
+  # Fallback auf pwd falls BOARD_DIR nicht existiert (fehlendes Board → Exit 0).
+  local repo_root
+  if [[ -d "$BOARD_DIR" ]]; then
+    repo_root="$(cd "${BOARD_DIR}/.." && pwd)"
+  else
+    repo_root="$(pwd)"
+  fi
+
+  python3 - "$STORIES_DIR" "$repo_root" "$quiet" \
+            "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" <<'PYEOF'
+import sys, os, yaml, re
+
+stories_dir  = sys.argv[1]
+repo_root    = sys.argv[2]
+quiet        = sys.argv[3] == "1"
+n_stories    = int(sys.argv[4])
+story_files  = sys.argv[5 : 5 + n_stories]
+
+AC_IN_SPEC      = re.compile(r"\bAC(\d+)\b")
+FRONTMATTER_RE  = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+# --- Alle Stories laden für depends-Status-Lookup ---
+stories = {}  # id -> data
+for path in story_files:
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        data = {}
+    sid = str(data.get("id", "")).strip()
+    if sid:
+        stories[sid] = data
+
+# --- Sortierte IDs für deterministische Ausgabe ---
+def id_num(sid):
+    m = re.match(r'^S-(\d+)$', str(sid or ""))
+    return int(m.group(1)) if m else 999999
+
+sorted_ids = sorted(stories.keys(), key=id_num)
+
+not_ready_count = 0
+total_todo = 0
+
+lines = []
+
+for sid in sorted_ids:
+    data = stories[sid]
+    status = str(data.get("status", "")).strip()
+
+    if status != "To Do":
+        if not quiet:
+            lines.append(f"(n/a)     {sid}")
+        continue
+
+    total_todo += 1
+    reasons = []
+
+    # R2: spec gesetzt, Datei existiert, Frontmatter status: active
+    spec_val = data.get("spec")
+    spec_str = str(spec_val).strip() if spec_val is not None else ""
+    if not spec_str:
+        reasons.append("R2: spec nicht gesetzt")
+    else:
+        spec_abs = os.path.join(repo_root, spec_str)
+        if not os.path.isfile(spec_abs):
+            reasons.append(f"R2: spec-Datei fehlt ({spec_str!r})")
+        else:
+            # Frontmatter status prüfen
+            try:
+                with open(spec_abs, encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                fm_match = FRONTMATTER_RE.match(content)
+                if fm_match:
+                    try:
+                        fm = yaml.safe_load(fm_match.group(1)) or {}
+                    except Exception:
+                        fm = {}
+                    spec_status = str(fm.get("status", "")).strip()
+                    if spec_status != "active":
+                        reasons.append(f"R2: spec status={spec_status!r} (erwartet 'active')")
+                else:
+                    # Kein YAML-Frontmatter → als nicht-active werten
+                    reasons.append("R2: spec hat kein YAML-Frontmatter (status: active fehlt)")
+            except Exception as e:
+                reasons.append(f"R2: spec-Datei nicht lesbar ({e})")
+
+    # R3: implements nicht leer UND jede AC-Nummer in der Spec
+    impls = data.get("implements")
+    if impls is None or (isinstance(impls, list) and len(impls) == 0):
+        reasons.append("R3: implements leer")
+    elif isinstance(impls, list):
+        # Nur prüfen wenn spec existiert und lesbar (sonst bereits R2-Fehler)
+        if spec_str and os.path.isfile(os.path.join(repo_root, spec_str)):
+            try:
+                with open(os.path.join(repo_root, spec_str), encoding="utf-8", errors="replace") as f:
+                    spec_content = f.read()
+                spec_acs = {"AC" + m.group(1) for m in AC_IN_SPEC.finditer(spec_content)}
+                missing_acs = [str(ac).strip() for ac in impls if str(ac).strip() not in spec_acs]
+                if missing_acs:
+                    reasons.append(f"R3: AC fehlt in Spec: {', '.join(missing_acs)}")
+            except Exception:
+                pass  # spec-Lesefehler bereits in R2 gemeldet
+    else:
+        # Skalarer Wert (z.B. implements: AC1 ohne Listenklammern) — ungültiger Typ
+        reasons.append("R3: implements hat ungültigen Typ (erwartet Liste)")
+
+    # R4: depends leer ODER alle referenzierten Stories haben status == "Done"
+    deps = data.get("depends")
+    if deps is not None:
+        if not isinstance(deps, list):
+            deps = [deps]
+        deps = [str(d).strip() for d in deps if str(d).strip()]
+        not_done = []
+        missing_deps = []
+        for dep_id in deps:
+            dep_data = stories.get(dep_id)
+            if dep_data is None:
+                missing_deps.append(dep_id)
+            elif str(dep_data.get("status", "")).strip() != "Done":
+                not_done.append(f"{dep_id}({dep_data.get('status', '?')})")
+        if missing_deps:
+            reasons.append(f"R4: depends existiert nicht: {', '.join(missing_deps)}")
+        if not_done:
+            reasons.append(f"R4: depends nicht Done: {', '.join(not_done)}")
+
+    # R5: blocked_reason leer/null
+    blocked = data.get("blocked_reason")
+    if blocked is not None and str(blocked).strip():
+        reasons.append(f"R5: blocked_reason gesetzt ({str(blocked).strip()!r})")
+
+    if reasons:
+        not_ready_count += 1
+        lines.append(f"NOT-READY {sid} — {'; '.join(reasons)}")
+    else:
+        lines.append(f"READY     {sid}")
+
+# Ausgabe
+for line in lines:
+    print(line)
+
+# Summary — immer ausgeben (auch bei --quiet, auch wenn keine To-Do-Items)
+if total_todo == 0:
+    print(f"Summary: 0 To-Do-Stories — nichts zu prüfen")
+else:
+    ready_count = total_todo - not_ready_count
+    print(f"Summary: {ready_count}/{total_todo} To-Do-Stories ready")
+
+# Exit-Code via sys.exit
+sys.exit(1 if not_ready_count > 0 else 0)
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 [[ $# -ge 1 ]] || usage
@@ -1134,6 +1328,9 @@ case "$VERB" in
     ;;
   lint)
     cmd_lint "$@"
+    ;;
+  ready)
+    cmd_ready "$@"
     ;;
   export-github)
     cmd_export_github "$@"

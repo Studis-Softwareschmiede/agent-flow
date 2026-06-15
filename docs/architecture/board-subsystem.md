@@ -308,6 +308,7 @@ board set <id> <feld> <wert>
 board list  [--type feature|story] [--status …] [--parent F-###]
 board rollup <F-###>            # progress neu berechnen
 board lint                      # Integrität: parent existiert, depends auflösbar, AC in Spec, ids eindeutig
+board ready [--quiet]           # Readiness-Gate: prüft alle To-Do-Stories auf Abarbeitbarkeit (F-008)
 board export-github             # einmaliger Import: GitHub-Board → board/ (Migration)
 ```
 
