@@ -10,6 +10,8 @@ Expertise für Flutter (Web/App). Geladen bei `profile.language: flutter`. Wäch
 - `flutter/R05` — **Breaking (Flutter 3.22+):** `MaterialState*`-Klassen sind auf `WidgetState*` umbenannt (z.B. `MaterialStateProperty` → `WidgetStateProperty`, `MaterialStatesController` → `WidgetStatesController`); Migration per `dart fix --apply`. Quelle: [flutter.dev/release/breaking-changes/material-state](https://docs.flutter.dev/release/breaking-changes/material-state)
 - `flutter/R06` — **Breaking (Flutter 3.27+):** Android-Apps, die SDK 15+ targeten, laufen standardmäßig edge-to-edge (UI reicht hinter Status-/Navigationsbar); UI-Overlaps mit `SafeArea`/`MediaQuery` abfangen. Opt-out via `android:windowOptOutEdgeToEdgeEnforcement` in `styles.xml` gilt nur bis Android 15 — ab Android 16 nicht mehr möglich. Quelle: [flutter.dev/release/breaking-changes/default-systemuimode-edge-to-edge](https://docs.flutter.dev/release/breaking-changes/default-systemuimode-edge-to-edge)
 - `flutter/R07` — **Breaking (Flutter 3.38+):** Android-Standard-Seitenübergang ist jetzt `PredictiveBackPageTransitionsBuilder` (Dauer 450 ms statt 300 ms); Tests, die eine feste Transition-Dauer annehmen, brechen — `TransitionDurationObserver.pumpPastTransition()` nutzen. Quelle: [flutter.dev/release/breaking-changes/default-android-page-transition](https://docs.flutter.dev/release/breaking-changes/default-android-page-transition)
+- `flutter/R08` — **Breaking (Flutter 3.38+):** `SnackBar` mit `action` dismissed nicht mehr automatisch nach Ablauf der Dauer; Standard ist jetzt persistent bis zur Nutzerinteraktion. Für altes Verhalten `persist: false` explizit setzen. Quelle: [flutter.dev/release/breaking-changes/snackbar-with-action-behavior-update](https://docs.flutter.dev/release/breaking-changes/snackbar-with-action-behavior-update)
+- `flutter/R09` — **Breaking (Flutter 3.44+):** Android Gradle Plugin 9 entfernt die Unterstützung für das `kotlin-android`-Plugin (KGP); Apps, die `id("kotlin-android")` oder `apply plugin: 'kotlin-android'` verwenden, brechen mit AGP 9 beim Build. Migration: Plugin-Deklaration + `kotlinOptions {}`-Block entfernen, stattdessen separaten `kotlin { compilerOptions { jvmTarget = ... } }`-Block verwenden. Quelle: [flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin)
 
 ## Reviewer-Checklist
 - `setState`/`context` über `await` ohne mounted-Guard → **Critical**.
@@ -18,6 +20,8 @@ Expertise für Flutter (Web/App). Geladen bei `profile.language: flutter`. Wäch
 - `Image.network` ohne `errorBuilder` (Web: CORS/404) → **Important**.
 - `MaterialState*` statt `WidgetState*` (veraltet seit Flutter 3.22) → **Important**.
 - Android-App ohne `SafeArea` bei edge-to-edge (Flutter 3.27+) → **Important**.
+- `SnackBar` mit `action` ohne explizites `persist: false` (Flutter 3.38+: persistent bis Nutzerinteraktion) → **Important**.
+- `build.gradle` mit `kotlin-android`-Plugin (bei Flutter 3.44+ / AGP 9 bricht der Build) → **Important**.
 
 ## Test-Approach
 - `flutter analyze` sauber; `flutter build web --release`; Smoke = Seite/Container lädt (HTTP 200).
