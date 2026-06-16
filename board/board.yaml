@@ -1,4 +1,4 @@
 schema_version: 1
 project_slug: agent-flow
-next_feature_id: 2        # nächste freie Nummer → F-002
-next_story_id: 2          # nächste freie Nummer → S-002
+next_feature_id: 3        # nächste freie Nummer → F-003
+next_story_id: 3          # nächste freie Nummer → S-003
