@@ -146,7 +146,7 @@ Aus dem Klartext-Handoff deterministisch zählen (**kein** zweiter LLM-Lauf):
 | Feld | Quelle |
 |---|---|
 | `ts` | `date -u +%Y-%m-%dT%H:%M:%SZ` |
-| `item` | Story-ID (`S-###`) |
+| `item` | int (Board-Item-Nr = numerischer Anteil der Story-ID, `S-014` → `14`) |
 | `seq` | laufende Dispatch-Nummer **innerhalb** des Items (ab 1 hochzählen) |
 | `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` \| `estimator` |
 | `iter` | N aus `Review-Handoff … (Iteration N)`; bei nicht-Loop-Rollen die zugehörige Iteration |
@@ -162,9 +162,10 @@ Fehlender / nicht parsbarer Marker → Feld `null` / `0` / `[]`, **nie raten**. 
 
 Beispiel-Append (jq):
 ```bash
+# item = int aus Story-ID: Präfix "S-" entfernen → Zahl (S-014 → 14)
 jq -nc \
   --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --arg item "S-014" --argjson seq 1 \
+  --argjson item 14 --argjson seq 1 \
   --arg agent "coder" --argjson iter 1 \
   --argjson gate 'null' --argjson crit 0 --argjson imp 0 \
   --argjson rule_hits '[]' \
@@ -184,7 +185,7 @@ Das `|| true` stellt sicher, dass ein jq-/IO-Fehler den Loop nicht abbricht (K3)
 ### Beim Done (Item → `Done`, nach Rollout-Gate: PASS) — eine Zeile nach `items.jsonl`
 
 1. **`loc`/`files`** aus `git diff --shortstat` des Item-Diffs gegen `$default_branch`-Stand bei Item-Eintritt: `loc` = insertions + deletions, `files` = #geänderte Dateien.
-2. **Aggregation** über alle `dispatches.jsonl`-Zeilen des Items (filter `item == "<story-id>"`, z.B. `"S-014"`):
+2. **Aggregation** über alle `dispatches.jsonl`-Zeilen des Items (filter `item == <nr>`, numerisch, z.B. `item == 14` für Story `S-014`; `item` ist int — Präfix `S-` entfernen → Zahl):
    - `iters` = max der `iter`-Werte
    - `crit` = Σ `crit`
    - `imp` = Σ `imp`
@@ -209,7 +210,7 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 | Feld | Wert |
 |---|---|
 | `ts` | Done-Zeitstempel (ISO-8601 UTC) |
-| `item` | Story-ID (`S-###`) |
+| `item` | int (Board-Item-Nr = numerischer Anteil der Story-ID, `S-014` → `14`) |
 | `size_est` | aus §1a-Heuristik (Schritt A); Default `"M"` |
 | `ep_est` | S/M: aus §1a-Lookup über `baseline.json`; L/XL: `dispo_est` vom estimator; `null` wenn kein Wert |
 | `ep_act` | EP nach obiger Formel |
