@@ -1,0 +1,18 @@
+id: F-003
+title: Metrik-Ledger-Schema-Härtung
+goal: 'Sicherstellen, dass die /flow-Ledger-Schreibpfade dem bindenden metrics-subsystem-Datenmodell
+  entsprechen (Feldtypen, Single-Writer) und die Aggregation robust gegen Alt-/Fehldaten
+  ist. Anlass: Schema-Drift beim item-Feld (String-Story-ID statt int) blockierte
+  die EP-Aggregation.'
+status: Backlog
+priority: P2
+spec: docs/specs/metrics-ledger.md
+definition_of_done: null
+labels:
+- metrics
+depends: null
+owner: null
+stories: null
+progress: null
+created_at: '2026-06-16T18:53:09Z'
+updated_at: '2026-06-16T18:53:09Z'
