@@ -220,10 +220,12 @@ und `tok_total` (best-effort aus den Subagent-Transcripts). **QS-Schritt** = der
 `retro`-Agent (Modi C+D): er rechnet `est` gegen `act`, kalibriert EP-Gewichte und
 Mediane neu und trackt die Prognosegüte (`forecast_mae`).
 
-**ID-Brücke (wichtig für die Board-Ablösung):** Heute ist der Metrik-Schlüssel
-`item` die GitHub-Issue-Nummer. Nach der Umstellung muss `/flow` die **Story-ID
-`S-###`** als `item`-Schlüssel in `dispatches.jsonl`/`items.jsonl` schreiben, damit
-`dispo_est`/`dispo_act` eindeutig der richtigen Story zugeordnet bleiben. Die
+**ID-Brücke (wichtig für die Board-Ablösung):** Der Metrik-Schlüssel
+`item` ist ein **`int`** (Board-Item-/Issue-Nummer, vgl. metrics-subsystem §2.1/§2.2).
+`/flow` schreibt dafür den **numerischen Anteil der Story-ID** als `int` in
+`dispatches.jsonl`/`items.jsonl` (`S-014` → `14`) — so bleibt der Typ `int` (Aggregation
+braucht numerische Vergleiche) UND die Zuordnung zur Story **eindeutig** (`14 ↔ S-014`),
+damit `dispo_est`/`dispo_act` der richtigen Story zugeordnet bleiben. Die
 Story-YAML **spiegelt** diese Werte (oder joint sie per ID beim Rendern) — die
 Ledger bleiben die schreibende Quelle, die Story-Felder sind die lesbare Sicht.
 
@@ -328,7 +330,7 @@ Regel „`/flow` ist einziger Schreiber von Board-Status", nur auf die CLI gehob
 |---|---|---|
 | `new-project` | `gh project create`, Nummer ins Profil | `board/`-Skelett + `board.yaml` anlegen; `board: file` ins Profil |
 | `requirement` | `gh issue create` + `gh project item-add`, `Spec:`/`implements:` in Body | `board feature add` + `board story add` (legt **Feature** an, hängt Stories an); Spec unverändert unter `docs/specs/` |
-| `flow` | `gh project item-list` lesen, `gh project item-edit` schreiben | `board next` lesen, `board set … status …` schreiben — **Logik identisch**; schreibt Metrik-Ledger künftig mit Story-ID als `item`-Schlüssel (§4.4) |
+| `flow` | `gh project item-list` lesen, `gh project item-edit` schreiben | `board next` lesen, `board set … status …` schreiben — **Logik identisch**; schreibt Metrik-Ledger mit dem numerischen Anteil der Story-ID als `int`-`item`-Schlüssel (§4.4, `S-014` → `14`) |
 | `estimator` (**neu**) | — (Schätzung steckt deterministisch in `/flow`) | optionaler Schätz-Agent: liefert bei L/XL `dispo_est` + `estimate_note` (Hybrid, §4.4); S/M bleiben token-frei |
 | `coder/reviewer/tester` | lesen Item-Body + Spec | lesen `board show <story>` + Spec — schreiben weiterhin **keinen** Status |
 | `cicd` | git merge/push, kein Board-Status | unverändert; setzt ggf. `pr`/`branch` via `flow` |
@@ -408,7 +410,7 @@ eigenes Board), dann ein kleines Projekt, dann der Rest.
 1. **Schema festnageln:** Feld-Liste aus §4 als YAML-Schema (`board/board.schema.*`) + `board lint`-Regeln.
 2. **`scripts/board` spezifizieren** (Verben §7) — als eigene Spec unter `docs/specs/board-cli.md`.
 3. **Agents/Skills-Diff** (§8) je Komponente als Story-Backlog für `/flow` (Dogfooding auf `dev-gui`).
-4. **Dispo ans Board hängen** (§4.4): `dispo_est`/`dispo_act`/`estimate_note` als Story-Felder; `/flow` schreibt Story-ID als `item`-Schlüssel in die Ledger (ID-Brücke); optionaler `estimator`-Agent als eigene Spec (`docs/specs/estimator.md`).
+4. **Dispo ans Board hängen** (§4.4): `dispo_est`/`dispo_act`/`estimate_note` als Story-Felder; `/flow` schreibt den numerischen Anteil der Story-ID als `int`-`item`-Schlüssel in die Ledger (ID-Brücke, `S-014` → `14`); optionaler `estimator`-Agent als eigene Spec (`docs/specs/estimator.md`).
 5. **dev-gui-Aggregator** (§9) als eigenes Feature im dev-gui-Board.
 6. **Export-Tool + Cut-Runbook** (§10) als letzte Story vor dem Stichtag.
 
