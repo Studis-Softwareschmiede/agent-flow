@@ -411,7 +411,17 @@ if len(items_with_est) >= min_median:
 defect_rates = {}
 
 # Alle Items im Fenster (Normierungs-Basis = gesamter EP-Aufwand im Fenster)
-window_items = [it for it in valid_items if it['item'] is None or it['item'] >= since_item]
+# Defensiv: since_item == 0 → alle Items rein (kein Vergleich nötig).
+# Non-numerische item-Werte (Alt-Ledger mit String-IDs wie "S-###") →
+# immer ins Fenster aufnehmen, damit sie den Lauf nicht crashen (gemischte Ledger).
+def in_window(it_item, since):
+    if since == 0:
+        return True
+    try:
+        return int(it_item) >= since
+    except (TypeError, ValueError):
+        return True  # non-numerisch: kein Ausschluss (Alt-Daten, K3)
+window_items = [it for it in valid_items if in_window(it['item'], since_item)]
 window_ep_total = sum(it['ep_act'] for it in window_items)
 
 if window_ep_total > 0:
@@ -427,7 +437,7 @@ if window_ep_total > 0:
         raw_ep = safe_num(raw_item.get('ep_act'))
         if raw_ep is None or raw_ep <= 0:
             continue
-        if since_item > 0 and raw_item_id is not None and raw_item_id < since_item:
+        if not in_window(raw_item_id, since_item):
             continue
 
         hits = raw_item.get('rule_hits')
