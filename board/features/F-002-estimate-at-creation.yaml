@@ -2,11 +2,11 @@ id: F-002
 title: Schätzung zur Planungszeit — Estimation bei Story-Erstellung
 goal: 'Die A-priori-Schätzung (size_est + dispo_est/ep_est + confidence + estimate_note)
   entsteht beim Anlegen einer Story durch den requirement-Agenten und steht ab Geburt
-  in der Story-YAML — statt erst zur Ausführungszeit in /flow §1a. Dadurch sind
-  Schätzungen für Priorisierung, Kapazitätsplanung und Split-Entscheidungen vor dem
-  Lauf verfügbar und in der GUI sichtbar. Kernprinzip: Schätzen gehört zur Planung
-  (requirement), nicht zur Ausführung (/flow). Quellen-Trennung: Soll = Story-YAML
-  (von requirement), Ist = Ledger items.jsonl (ausschliesslich von /flow).
+  in der Story-YAML — statt erst zur Ausführungszeit in /flow §1a. Dadurch sind Schätzungen
+  für Priorisierung, Kapazitätsplanung und Split-Entscheidungen vor dem Lauf verfügbar
+  und in der GUI sichtbar. Kernprinzip: Schätzen gehört zur Planung (requirement),
+  nicht zur Ausführung (/flow). Quellen-Trennung: Soll = Story-YAML (von requirement),
+  Ist = Ledger items.jsonl (ausschliesslich von /flow).
 
   '
 status: Active
@@ -14,10 +14,10 @@ priority: P1
 spec: docs/specs/metrics-estimation.md
 definition_of_done: 'metrics-estimation.md v2 mit AC7-AC10 ist approved; requirement
   schätzt bei Story-Anlage (size_est/dispo_est/confidence/estimate_note in Story-YAML,
-  estimator nur bei L/XL); /flow §1a liest die Werte und fällt nur bei fehlenden
-  Feldern auf die Heuristik zurück, ohne vorhandene Schätzungen zu überschreiben;
-  requirement schreibt nie ins Ledger; Alt-Stories ohne Schätzfelder laufen
-  rückwärtskompatibel. AC7-AC10 gruen.
+  estimator nur bei L/XL); /flow §1a liest die Werte und fällt nur bei fehlenden Feldern
+  auf die Heuristik zurück, ohne vorhandene Schätzungen zu überschreiben; requirement
+  schreibt nie ins Ledger; Alt-Stories ohne Schätzfelder laufen rückwärtskompatibel.
+  AC7-AC10 gruen.
 
   '
 labels:
@@ -28,10 +28,11 @@ depends:
 - F-001
 owner: alex
 created_at: '2026-06-16T00:00:00Z'
-updated_at: '2026-06-16T00:00:00Z'
+updated_at: '2026-06-17T15:40:51Z'
 stories:
 - S-002
-progress: 0/1 done
+- S-004
+progress: 0/2 done
 tracking_issue: 179
 tracking_issue_url: https://github.com/Studis-Softwareschmiede/agent-flow/issues/179
 project_item_id: PVTI_lADOESX2dM4BY3Nszgv8Xwg
