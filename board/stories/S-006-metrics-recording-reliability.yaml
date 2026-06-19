@@ -1,0 +1,28 @@
+id: S-006
+parent: F-005
+title: '/flow erfasst Metriken zuverlässig: Skript-Touchpoints, item=S-###, Token im GUI-Kontext, Self-Check'
+status: To Do
+priority: P2
+spec: docs/specs/metrics-recording-reliability.md
+implements: [AC1, AC2, AC3, AC4, AC5, AC6, AC7]
+depends: null
+labels: [metrics, flow, process]
+size_est: M
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Prozess/Skill+Skript-Änderung, kein App-Code. Neu: scripts/metrics-append-dispatch.sh
+  + metrics-append-item.sh (append-only, || true); skills/flow/SKILL.md §2b ruft sie an
+  den Touchpoints; item kanonisch S-###-String in beiden Ledgern; metrics-collect.sh
+  Pfad-/Config-Auflösung im GUI-/Container-Kontext (CLAUDE_CONFIG_DIR/cwd-Escaping) oder
+  dokumentierte Vorbedingung; Done-Self-Check (items-Zeile + tok vorhanden?) mit sichtbarer
+  Notiz, gate-neutral. Erfassung bleibt deterministische Bash/jq-Arithmetik (~0 Token),
+  nicht-blockierend (K3/K4). Keine Rückbefüllung. M heuristisch (mehrere Skript-/Skill-Stellen
+  + Kontext-Pfad-Klärung).'
+confidence: medium
+branch: null
+pr: null
+blocked_reason: null
+created_at: 2026-06-19T00:00:00Z
+updated_at: 2026-06-19T00:00:00Z
+done_at: null

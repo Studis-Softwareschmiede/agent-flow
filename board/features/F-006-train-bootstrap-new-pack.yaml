@@ -1,0 +1,28 @@
+id: F-006
+title: 'train --bootstrap: neuen Knowledge-Pack ohne Vorgänger aus mitgegebenen Quellen anlegen'
+goal: 'Der --bootstrap-Modus legt heute nur Cut-orientiert an (Skelett = Kopie eines
+  Vorgänger-Packs, Quellen geerbt). Für ein brandneues Thema OHNE Vorgänger (neue Sprache,
+  neue Framework-Familie, neues Build-/Migration-Tool) fehlt der Weg. Diese Feature ergänzt:
+  /train --bootstrap <pack-id> <source-url …> legt einen frischen Pack aus mitgegebenen
+  Primärquellen an (Resolver bestimmt Ablageort/Format), befüllt Sektion A/Regeln daraus
+  (3-Regel-Cap gelockert), schützt vor Kollision/leeren Packs und liefert per PR + Gate.
+  Enabler für "Knowledge hinzufügen" aus der dev-gui (team-knowledge-add). Owner-Entscheid:
+  Thema + Quellen (Web-Recherche), kein mitgegebener Eigen-Inhalt.'
+status: Backlog
+priority: P2
+spec: docs/specs/train-bootstrap-new-pack.md
+definition_of_done: 'train-bootstrap-new-pack.md approved; /train --bootstrap <pack-id>
+  <urls…> legt neuen Pack ohne Vorgänger an (frisches Skelett, korrektes Format je Typ),
+  übernimmt URLs als primary_sources + Recherche-Basis, befüllt Regeln mit Quell-Link;
+  STOPP bei fehlender Quelle und bei existierendem Pack; Lieferung als PR (bootstrap/<pack-id>)
+  + reviewer + Mensch-Approve, kein Auto-Merge; Cut-Bootstrap unverändert. AC1-AC7 grün.'
+labels:
+- train
+- knowledge
+- bootstrap
+depends: null
+owner: alex
+created_at: '2026-06-19T00:00:00Z'
+updated_at: '2026-06-19T00:00:00Z'
+stories:
+- S-007

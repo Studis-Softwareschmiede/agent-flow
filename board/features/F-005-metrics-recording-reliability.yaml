@@ -1,0 +1,30 @@
+id: F-005
+title: Zuverlässige Metrik-Erfassung im /flow (Ledger-Lücken, ID-Format, Token)
+goal: 'Das Metrik-Ledger wird für aktuelle Stories nicht befüllt — darum bleibt die
+  Story-Detailansicht der GUI leer (live verifiziert 2026-06-19: dispatches.jsonl endet
+  13.06., items.jsonl 16.06.; S-165..S-171 ohne Zeile). Ursachen: (1) §2b-Erfassung ist
+  best-effort-Prosa mit || true → fehlt lautlos, (2) item teils als int teils als String
+  geschrieben → Konsumenten matchen nicht, (3) tok überall null (collect findet die
+  Transcripts im GUI-Kontext nicht). Fix: Append über benannte Skript-Touchpoints (drift-arm,
+  weiter K3/nicht-blockierend), kanonisches item-Format S-###, Token-Erfassung im
+  GUI-/Container-Kontext, und ein sichtbarer Self-Check beim Done, der fehlende Zeilen
+  meldet statt sie still zu schlucken. Keine Rückbefüllung alter Stories.'
+status: Backlog
+priority: P2
+spec: docs/specs/metrics-recording-reliability.md
+definition_of_done: 'metrics-recording-reliability.md approved; /flow schreibt je Done
+  zuverlässig items.jsonl + dispatches.jsonl über Skript-Touchpoints; item kanonisch als
+  S-###-String; metrics-collect befüllt tok im GUI-Kontext (oder dokumentierte Vorbedingung
+  + null-Fehlerpfad); Self-Check meldet fehlende Ledger-Zeile/Token sichtbar ohne Gate-Änderung;
+  Erfassung bleibt ~0-LLM-Token und nicht-blockierend (K3/K4); keine Migration historischer
+  Zeilen. AC1-AC7 grün.'
+labels:
+- metrics
+- flow
+- process
+depends: null
+owner: alex
+created_at: '2026-06-19T00:00:00Z'
+updated_at: '2026-06-19T00:00:00Z'
+stories:
+- S-006
