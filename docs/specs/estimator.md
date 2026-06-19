@@ -74,7 +74,7 @@ Der estimator gibt `dispo_est` (EP), `tok_est`, `confidence` und `estimate_note`
 - **Hebel 3 (Agent-Anweisung):** Bleibt ein systematisches Bias-Muster trotz Kalibrierung (V8) bestehen, destilliert `retro` daraus eine konkrete Änderung der estimator-Anweisung (`agents/estimator.md`) und liefert sie als **PR**. Mensch entscheidet.
 
 ### V10 — Validierungs-Gate
-Jede Anpassung (V8-Faktor, V9-Anker, V9-Anweisung) wird markiert und über die nächsten `N` (Default `N_MIN=10`) `L`/`XL`-Stories beobachtet. Sinkt `forecast_mae` im betroffenen Schnitt → **Validated** (mit gemessener Verbesserung), sonst → **Reverted** (Rückbau auf den vorigen Stand). Status + Messung werden in `baseline.json` (`estimator_calibration`) mitgeführt — analog zu [[metrics-retro-effectiveness]].
+Jede Anpassung (V8-Faktor, V9-Anker, V9-Anweisung) wird markiert und über die nächsten `N` (Default `N_MIN=10`) abgeschlossenen `L`/`XL`-Stories beobachtet (gezählt als Items mit `size_est ∈ {L, XL}` und `item > started_after_item` in `items.jsonl`). Sinkt `forecast_mae` um ≥5 % gegenüber `baseline_mae` → **Validated**, sonst → **Reverted** (Rückbau auf den vorigen Stand). Status + Messung werden in `baseline.json` (`estimator_calibration`) mitgeführt — analog zu [[metrics-retro-effectiveness]]. Vor Erreichen der N_MIN-Schwelle gilt die Kalibrierung als **vorläufig** (`status: "pending"`).
 
 ## Acceptance-Kriterien
 
@@ -108,7 +108,9 @@ Pro Anker (Markdown-Tabelle oder YAML-Frontmatter-Liste):
 ```
 estimator_bias:                 { "<lang>|<cost_mode>|<size>": <factor: float> }   // V8, auto
 estimator_calibration:          [ { target, kind: bias|anchor|prompt, status: pending|validated|reverted,
-                                    baseline_mae, measured_mae, n, decided_after_item } ]   // V10
+                                    baseline_mae, measured_mae, n, started_after_item, decided_after_item } ]   // V10
+//   started_after_item: höchste item-Nr. in items.jsonl zum Zeitpunkt der Anpassung (Beobachtungs-Startpunkt);
+//   decided_after_item: item-Nr. nach dem N_MIN erreicht wurde und der Status-Wechsel erfolgte (null solange pending)
 
 // Optional — überschreiben die im Agent dokumentierten Defaults (V4/V6):
 estimator_bias_cap:             <float>   // Default ±0.50; |factor| wird auf diesen Betrag begrenzt

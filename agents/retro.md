@@ -117,7 +117,7 @@ Schlägt das Script fehl oder sind die Ledger leer/zu klein → kein Abbruch, ke
 | `medians` | Median-Schnitte `<lang>\|<cost_mode>\|<size>` → `{n, ep, iters, crit, tok_total, secs_total}` (`n` = Stichprobengrösse) |
 | `forecast_mae` | Mittlerer Forecast-Fehler (null wenn keine `ep_est`-Daten) |
 | `estimator_bias` | `{ "<lang>\|<cost_mode>\|<size>": <float> }` — Bias-Faktoren je Schnitt (auto, Modus C/E1); `{}` bei Datenmangel |
-| `estimator_calibration` | `[ { target, kind, status, baseline_mae, measured_mae, n, decided_after_item } ]` — Validierungs-Gate (Modus E3); Pass-through durch Script |
+| `estimator_calibration` | `[ { target, kind, status, baseline_mae, measured_mae, n, started_after_item, decided_after_item } ]` — Validierungs-Gate (Modus E3); Pass-through durch Script |
 
 ## C4. baseline.json + Cooldown-Stempel in den Projekt-Repo persistieren
 
@@ -333,13 +333,14 @@ Jede Anpassung (AC8-Bias-Faktor, E2-Anker, E2-Anweisung) wird mit einem Eintrag 
 **Format eines Eintrags:**
 ```json
 {
-  "target":             "<schnitt oder Dateiname, z.B. 'md|balanced|L' oder 'reference-stories.md'>",
-  "kind":               "bias | anchor | prompt",
-  "status":             "pending | validated | reverted",
-  "baseline_mae":       <float|null>,
-  "measured_mae":       <float|null>,
-  "n":                  <int>,
-  "decided_after_item": <int|null>
+  "target":              "<schnitt oder Dateiname, z.B. 'md|balanced|L' oder 'reference-stories.md'>",
+  "kind":                "bias | anchor | prompt",
+  "status":              "pending | validated | reverted",
+  "baseline_mae":        <float|null>,
+  "measured_mae":        <float|null>,
+  "n":                   <int>,
+  "started_after_item":  <int|null>,
+  "decided_after_item":  <int|null>
 }
 ```
 
@@ -347,14 +348,15 @@ Jede Anpassung (AC8-Bias-Faktor, E2-Anker, E2-Anweisung) wird mit einem Eintrag 
 
 1. **Anlegen** (`status: "pending"`): Beim Lauf, in dem die Änderung aktiv wird (Bias-Faktor in `baseline.json` erschrieben **oder** PR gemergt), legt retro einen neuen Eintrag an:
    - `baseline_mae`: aktuelles `baseline.json.forecast_mae` zum Zeitpunkt der Änderung.
+   - `started_after_item`: höchste numerische `item`-Nr. in `items.jsonl` zum Zeitpunkt der Anpassung (oder `null` wenn `items.jsonl` leer). Dieser Wert markiert den **Beobachtungs-Startpunkt**.
    - `n = 0`, `measured_mae = null`, `decided_after_item = null`.
 
-2. **Beobachten** (N-Zählung): Bei jedem Folge-Lauf zählt retro die `L`/`XL`-Items in `items.jsonl` mit `item > decided_after_item` (bzw. ab dem Item nach dem Anlege-Lauf). Liegt `n < N_MIN (10)` → Status bleibt `"pending"`, kein Entscheid.
+2. **Beobachten** (N-Zählung): Bei jedem Folge-Lauf zählt retro die `L`/`XL`-Items in `items.jsonl` mit `size_est ∈ {L, XL}` **und** `item > started_after_item` (numerisch). Liegt `n < N_MIN (10)` → Status bleibt `"pending"`, kein Entscheid.
 
 3. **Entscheiden** (nach N ≥ N_MIN Items):
-   - Lese aktuelles `forecast_mae` aus `baseline.json` (nach dem Modus-C-Lauf).
-   - **`validated`**: `measured_mae < baseline_mae × 0.95` (d.h. ≥ 5 % MAE-Reduktion im betroffenen Schnitt) → Status `"validated"`, `measured_mae` setzen, `decided_after_item` setzen.
-   - **`reverted`**: `measured_mae ≥ baseline_mae × 0.95` (keine signifikante Verbesserung) → Status `"reverted"`, Werte setzen. Für `kind: "bias"`: Faktor auf 0 zurücksetzen (im nächsten Modus-C-Lauf wird `estimator_bias[<schnitt>]` neu aus Items berechnet); für `kind: "anchor"` / `kind: "prompt"`: separater Revert-PR (analog D3).
+   - Lese aktuelles `forecast_mae` aus `baseline.json` (nach dem Modus-C-Lauf). Dieses Wert ist `measured_mae`.
+   - **`validated`**: `measured_mae < baseline_mae × 0.95` (d.h. ≥ 5 % MAE-Reduktion) → Status `"validated"`, `measured_mae` setzen, `decided_after_item` = höchste numerische `item`-Nr. im beobachteten Fenster setzen.
+   - **`reverted`**: `measured_mae ≥ baseline_mae × 0.95` (keine signifikante Verbesserung) → Status `"reverted"`, `measured_mae` + `decided_after_item` setzen. Für `kind: "bias"`: Faktor auf 0 zurücksetzen (im nächsten Modus-C-Lauf wird `estimator_bias[<schnitt>]` neu aus Items berechnet); für `kind: "anchor"` / `kind: "prompt"`: separater Revert-PR (analog D3).
 
 4. **Fortschreiben**: Jeder neue retro-Lauf aktualisiert `n` für alle `"pending"`-Einträge. Das Script `metrics-aggregate.sh` führt `estimator_calibration` als Pass-through (Single-Writer: retro schreibt die Liste; das Script bewahrt sie).
 

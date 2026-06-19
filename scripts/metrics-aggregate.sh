@@ -517,7 +517,7 @@ if Path(baseline_file).is_file():
 #   { target: str, kind: "bias"|"anchor"|"prompt",
 #     status: "pending"|"validated"|"reverted",
 #     baseline_mae: float|null, measured_mae: float|null,
-#     n: int, decided_after_item: int|null }
+#     n: int, started_after_item: int|null, decided_after_item: int|null }
 estimator_calibration = []
 ec = _persistent_baseline.get('estimator_calibration')
 if isinstance(ec, list):
