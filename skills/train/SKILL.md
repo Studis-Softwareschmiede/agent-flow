@@ -1,9 +1,9 @@
 ---
 name: train
-description: Startet den train-Agenten — recherchiert im Netz aktuelle Patterns für eine Sprache, ein Framework oder ein Build-Tool und öffnet einen PR, der den entsprechenden Pack aktualisiert (mit Quellen, PR+Gate). Sondermodus /train model-tiers kuratiert die Modell-Klassen-/Cost-Matrix gegen die Anthropic-Modell-Quellen. Aufruf: /train [--cost <mode>] [--force] <pack-id> [<pack-id> …]
+description: Startet den train-Agenten — recherchiert im Netz aktuelle Patterns für eine Sprache, ein Framework oder ein Build-Tool und öffnet einen PR, der den entsprechenden Pack aktualisiert (mit Quellen, PR+Gate). Sondermodus /train model-tiers kuratiert die Modell-Klassen-/Cost-Matrix gegen die Anthropic-Modell-Quellen. Bootstrap-Modus /train --bootstrap <pack-id> [<url> …] legt einen neuen Pack aus mitgegebenen Primärquellen an (from-scratch, kein Vorgänger nötig). Aufruf: /train [--cost <mode>] [--force] [--bootstrap] <pack-id> [<pack-id> … | <url> …]
 ---
 
-# /train [--cost <mode>] [--force] <pack-id> [<pack-id> …]
+# /train [--cost <mode>] [--force] [--bootstrap] <pack-id> [<pack-id> … | <url> …]
 
 ## Token-Parsen (immer zuerst)
 
@@ -13,7 +13,11 @@ Bevor Pack-IDs aufgelöst werden, werden alle Steuer-Token aus der Eingabe herau
 2. `--force` — Sondermodus-Flag (nur für `model-tiers`); gehört NICHT zur Pack-ID-Liste.
 3. `--bootstrap` — Bootstrap-Flag (Pack anlegen statt abbrechen); gehört NICHT zur Pack-ID-Liste.
 
-Alles, was nach dem Herausparsen der obigen Tokens übrig bleibt, ist die **Pack-ID-Liste** (ein oder mehrere durch Leerzeichen getrennte IDs).
+**Ist `--bootstrap` gesetzt:** Das erste verbleibende Token nach den Flags ist die **Pack-ID** (genau eine). Alle weiteren Token, die mit `http://` oder `https://` beginnen, sind **Quell-URLs** und werden als `primary_sources` an den Bootstrap-Agent übergeben. Quell-URLs gehören NICHT zur Pack-ID-Liste. Verbleiben danach noch Nicht-URL-Token (weder Flag noch URL), ist das ein Aufruf-Fehler → **SOFORTIGER STOPP** mit Meldung:
+
+> `Unbekannte Token nach Pack-ID: '<token> …' — beim --bootstrap-Modus sind nach der Pack-ID nur URLs erlaubt (http:// oder https://). Aufruf: /train --bootstrap <pack-id> [<url> …]`
+
+**Ist `--bootstrap` NICHT gesetzt:** Alles, was nach dem Herausparsen der obigen Tokens übrig bleibt, ist die **Pack-ID-Liste** (ein oder mehrere durch Leerzeichen getrennte IDs).
 
 **Cost-Mode auflösen:** Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced` (Kurzformen `low`/`max`/`front` normalisieren; `front`→`frontier`). Beim Task-Dispatch den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Rolle `train`) mitgeben; bei `balanced` **keinen** Override (Frontmatter `sonnet` gilt).
 
@@ -42,7 +46,12 @@ Starte den **train**-Agenten (Task-Tool) für eine **Sprache**, ein **Framework*
 
 **`model-tiers` (Sondermodus — Modell-Klassen-/Cost-Matrix kuratieren):** `/train model-tiers [--force]` hält die Matrix `knowledge/model-tiers.md` (Rolle × `low-cost|balanced|max-quality|frontier` → Modell-Klasse) gegen die **Anthropic-Modell-Primärquellen** (Models overview, Model-Deprecations, Pricing — als `primary_sources` im Pack-Header) aktuell. Greift **nur** bei Klassen-/Tier-Änderungen (neue Klasse/Tier, Deprecation/Umbenennung, Tier-Rebalancing) — **nicht** bei neuen Punktversionen. Setzt bei jedem Lauf `last_curated:` (Frischesignal + Cooldown-State), läuft **monatlich + manuell** (Cooldown, `--force` umgeht), liefert via PR+Gate (kein Auto-/Self-Merge). Bindende Spec: `docs/specs/model-tier-curator.md`; Mechanik: `agents/train.md` Abschnitt „Model-Tiers-Modus".
 
-**`--bootstrap` (fehlenden Pack anlegen):** `/train --bootstrap <pack-id>` bricht bei einem **fehlenden** Pack NICHT ab, sondern legt ihn an (Skelett aus dem Vorgänger bei Cut + Sektion A aus Primärquellen + Solver-Constraints). Primär von `/upgrade` (Phase E) genutzt; bei gesetztem `AGENT_FLOW_KNOWLEDGE_DIR` schreibt er zusätzlich in den hermetischen Staging-Dir des Laufs. Vertrag: `docs/architecture/upgrade-subsystem.md` §8 + `agents/train.md` Abschnitt „Bootstrap-Modus".
+**`--bootstrap` (Pack anlegen):** `/train --bootstrap <pack-id> [<url> …]` legt einen Pack an, statt abzubrechen. Zwei Pfade je nach Vorgänger-Existenz:
+
+- **Cut-Bootstrap (Vorgänger vorhanden):** Skelett durch Kopie des Vorgänger-Packs (klassischer `/upgrade`-Phase-E-Fall). Quellen werden vom Vorgänger geerbt; mitgegebene URLs erweitern die `primary_sources`. Primär von `/upgrade` (Phase E) genutzt.
+- **No-Predecessor-Bootstrap (kein Vorgänger, from-scratch):** Frisches Skelett aus mitgegebenen Quell-URLs. ≥1 URL ist Pflicht — fehlen alle URLs → **STOPP** mit Meldung „Beim From-Scratch-Bootstrap sind ≥1 Quell-URLs als Argument erforderlich (`/train --bootstrap <pack-id> <url> …`)". Existiert der Pack bereits → **STOPP** mit Hinweis „Pack `<id>` existiert — nutze `/train <id>` zum Aktualisieren". Pack-Format (Sprache/Framework/Build/Migration) + Ablageort werden aus der Pack-ID abgeleitet (Spec `docs/specs/train-bootstrap-new-pack.md` V2). 3-Regel-Obergrenze für Sektion A gelockert.
+
+Bei gesetztem `AGENT_FLOW_KNOWLEDGE_DIR` schreibt er zusätzlich in den hermetischen Staging-Dir des Laufs. Vertrag: `docs/specs/train-bootstrap-new-pack.md` (AC1–AC7) + `docs/architecture/upgrade-subsystem.md` §8 + `agents/train.md` Abschnitt „Bootstrap-Modus".
 
 Er liest den vom Resolver bestimmten Pack, recherchiert aus **Primär-/autoritativen Quellen** (offizielle Docs/Specs/Release-Notes — keine Einzel-Blogs; bei Framework-/Build-Packs **strikt** nach `primary_sources`/`non_sources` aus dem Pack-Header), priorisiert **faktische Deltas** (Deprecations/neue stabile APIs/Breaking Changes), promotet **max. 3 Regeln/Lauf** und öffnet einen **PR**.
 
