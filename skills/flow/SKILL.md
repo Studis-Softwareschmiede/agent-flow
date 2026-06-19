@@ -50,11 +50,18 @@ Dieser Plan wird dem User ausgegeben und steuert die Dispatch-Reihenfolge in §3
 - Aus dem JSON die **Spec-Referenz** lesen: `spec: docs/specs/<feature>.md` + `implements: [AC…]` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Story-Titel).
 - Leere Ausgabe → nichts zu tun; weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
 
-### 1a. A-priori-Grössenklasse + `ep_est` (Spec `metrics-estimation` AC1–AC3, §2b)
+### 1a. A-priori-Grössenklasse + `ep_est` (Spec `metrics-estimation` AC1–AC3/AC8/AC10, §2b)
 
-> **Einziger Schreiber:** Schätzung + Mapping laufen hier in /flow; das Ergebnis (`size_est`, `ep_est`) wird beim Done in `items.jsonl` eingetragen. **Kein LLM-Aufruf für S/M** — L/XL dispatchen den `estimator`-Agenten (Schritt B). Fehler → `size_est = "M"`, `ep_est = null`, kein Loop-Abbruch (K3).
+> **Konsument zuerst (v2, AC8/V8):** `/flow` liest die bei Story-Anlage von **requirement** geschriebenen Schätzfelder (`size_est`, `dispo_est`, `confidence`, `estimate_note`) aus der Story-YAML. Sind die Felder vorhanden → **übernehmen, nicht überschreiben** (kein erneuter estimator-Dispatch, keine Neuberechnung). Fehlen die Felder (Alt-Story / manuell angelegtes Item ohne Schätzfelder) → **Fallback**: `/flow` führt die §1a-Heuristik selbst durch (Rückwärtskompatibilität, AC10). Fehler → `size_est = "M"`, `ep_est = null`, kein Loop-Abbruch (K3).
 
-**Schritt A — Heuristik (token-frei, deterministisch):**
+**Schritt A — Felder aus Story-YAML lesen (Konsument-Pfad, AC8):**
+
+Lese die Story-YAML (`board/stories/<story-id>.yaml`) und prüfe, ob `size_est` gesetzt ist (nicht `null`, nicht leer):
+
+- **`size_est` gesetzt:** übernehme `size_est` und `dispo_est` unverändert als Session-Variablen. Schritt B und C entfallen vollständig — requirement hat bereits geschätzt. Weiter mit §2 (In Progress).
+- **`size_est` fehlt oder ist `null`:** → **Fallback-Pfad** (Alt-Story / manuell angelegtes Item). Führe Schritt A-Fallback, B und C aus.
+
+**Schritt A-Fallback — Heuristik (token-frei, deterministisch; nur wenn `size_est` fehlt):**
 
 Zähle aus Item-Body + referenzierter Spec (`docs/specs/<feature>.md`):
 - `n_ac` = #Acceptance-Kriterien (Zeilen die mit `- **AC` beginnen oder AC-Nummerierung tragen)
@@ -72,7 +79,7 @@ Zähle aus Item-Body + referenzierter Spec (`docs/specs/<feature>.md`):
 | 8–12  | `L` |
 | ≥ 13  | `XL` |
 
-**Schritt B — estimator-Dispatch nur bei L/XL (AC1, replaces früherer 1-Satz-LLM-Korrektur):**
+**Schritt B — estimator-Dispatch nur bei L/XL (Fallback-Pfad; AC1, nur wenn `size_est` aus Story-YAML fehlte):**
 
 Wurde `size_est` als `L` oder `XL` eingestuft — oder wurde `--estimate` explizit übergeben — dispatche den **`estimator`-Agenten** (Task). `S`/`M` überspringen diesen Schritt vollständig (keine LLM-Runde).
 
@@ -104,7 +111,7 @@ board set <story-id> confidence "$confidence_from_estimator"       || true
 4. Liegt eine `split_suggestion` vor (nicht null): gib sie in der laufenden Session als informativen Hinweis aus (ändere das Board **nicht** — rein beratend, AC6).
 5. *(Metrik: §2b-Touchpoint — T0 vor Dispatch setzen; nach Handoff `scripts/metrics-append-dispatch.sh` aufrufen: Agent-Rolle `estimator`, `gate: null`.)*
 
-**Schritt C — Mapping size_est → ep_est (AC3):**
+**Schritt C — Mapping size_est → ep_est (AC3; Fallback-Pfad; nur wenn `size_est` aus Story-YAML fehlte):**
 
 **Bei `L`/`XL`** (estimator wurde dispatcht): `ep_est = dispo_est_from_estimator` (direkt übernehmen, kann `null` sein — erwarteter Zustand bei Cold-Start oder Fehlerpfad). **Schritt C-Lookup unten entfällt** für L/XL (estimator ersetzt die Heuristik-Tabelle).
 
@@ -115,9 +122,13 @@ board set <story-id> confidence "$confidence_from_estimator"       || true
 3. Fehlt auch das: globaler Median aller `.ep`-Werte in `medians` → `ep_est`.
 4. Keine `baseline.json` vorhanden oder alle `.ep`-Werte `null`/leer → `ep_est = null` (erwarteter Zustand bis genug Historie).
 
-`ep_est` (und `size_est`) als Session-Variable merken → beim Done in `items.jsonl` eintragen (§2b unten).
-
 Wenn `medians[key].n` < 3: Schnitt vorhanden aber dünn — trotzdem verwenden (kein spezieller Fallback), aber intern notieren (kein User-Output nötig).
+
+**Session-Variablen nach §1a** (beide Pfade, für §2b-Done):
+
+`ep_est` (und `size_est`) als Session-Variable merken → beim Done in `items.jsonl` eintragen (§2b unten).
+- **Konsument-Pfad (size_est vorhanden):** `ep_est` = `dispo_est` aus Story-YAML (für L/XL) resp. kein erneuter Lookup (Wert aus requirement bereits korrekt); für S/M direkt `dispo_est` aus Story-YAML als `ep_est` verwenden.
+- **Fallback-Pfad:** `ep_est` aus Schritt C wie oben.
 
 ## 2. In Progress
 - `board set <story-id> status "In Progress"` — setzt die Story auf In Progress.
@@ -178,7 +189,7 @@ Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3,
 
 1. **`loc`/`files`** aus `git diff --shortstat` des Item-Diffs gegen `$default_branch`-Stand bei Item-Eintritt: `loc` = insertions + deletions, `files` = #geänderte Dateien.
 2. **`blocked`** = 1 wenn das Item zwischenzeitlich den Status `NEEDS-HUMAN`, ungelöste `depends` oder manuellen Eingriff hatte, sonst 0.
-3. **Schätzfelder:** `size_est` + `ep_est` aus §1a (beim Item-Eintritt bestimmt, Session-Variable). War §1a nicht ausführbar oder ergab keinen Wert → `size_est = "M"`, `ep_est = null` (K3). `tok_total` = `null` (Phase 0, Befüllung durch `metrics-token-collect`).
+3. **Schätzfelder:** `size_est` + `ep_est` aus §1a Session-Variable (Konsument-Pfad: aus Story-YAML; Fallback: §1a-Heuristik). War §1a nicht ausführbar oder ergab keinen Wert → `size_est = "M"`, `ep_est = null` (K3). `tok_total` = `null` (Phase 0, Befüllung durch `metrics-token-collect`).
 4. Das Skript `metrics-append-item.sh` übernimmt Rollup (Aggregation aller dispatch-Zeilen), EP-Berechnung und den Append.
 
 Felder der `items.jsonl`-Zeile (subsystem §2.2):
@@ -187,8 +198,8 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 |---|---|
 | `ts` | Done-Zeitstempel (ISO-8601 UTC) |
 | `item` | **String** `S-###` — kanonische Board-ID (AC2, V2: kein int-Präfix-Strip) |
-| `size_est` | aus §1a-Heuristik (Schritt A); Default `"M"` |
-| `ep_est` | S/M: aus §1a-Lookup über `baseline.json`; L/XL: `dispo_est` vom estimator; `null` wenn kein Wert |
+| `size_est` | aus §1a Session-Variable — Konsument-Pfad: aus Story-YAML (von requirement geschrieben); Fallback-Pfad: §1a-Heuristik; Default `"M"` |
+| `ep_est` | aus §1a Session-Variable — Konsument-Pfad: `dispo_est` aus Story-YAML; Fallback S/M: Baseline-Lookup, L/XL: `dispo_est` vom estimator; `null` wenn kein Wert |
 | `ep_act` | EP nach EP-Formel (§3 subsystem); `metrics-append-item.sh` berechnet intern |
 | `iters` | max `iter` der Dispatches |
 | `crit` | Σ `crit` |
