@@ -38,6 +38,15 @@ if [[ -z "$STORY_ID" || -z "$AGENT" ]]; then
   exit 0
 fi
 
+# ID-Normalisierung (V2): kanonisches String-Format "S-###" erzwingen.
+# Eine rein numerische ID (z.B. "179") würde als bloße Zahl ins Ledger gelangen und
+# könnte später beim Lesen (numerisches ID-Matching) mit einer wiederverwendeten
+# Story-Nummer kollidieren. Daher hier an der Quelle zu "S-179" normalisieren.
+if [[ "$STORY_ID" =~ ^[0-9]+$ ]]; then
+  echo "[metrics-append-dispatch] WARN: numerische story-id='${STORY_ID}' → normalisiert zu 'S-${STORY_ID}'" >&2
+  STORY_ID="S-${STORY_ID}"
+fi
+
 # AGENT-Enum-Guard (Typo-Schutz, K3-tolerant — ungültig → Warnung, kein Abbruch)
 case "$AGENT" in
   coder|reviewer|dba|tester|cicd|estimator) ;;
