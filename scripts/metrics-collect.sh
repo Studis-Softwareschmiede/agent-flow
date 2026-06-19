@@ -9,21 +9,31 @@
 # Jeder Fehler → null, nie Loop-Stopp, nie Gate-Änderung (K3/K4).
 # Kein LLM-Aufruf — reine Bash/jq-Dateiarithmetik (K1, AC6).
 #
-# Usage: scripts/metrics-collect.sh <item_number>
+# Usage: scripts/metrics-collect.sh <story-id>
+#   <story-id>: kanonisches String-Format "S-###" (AC2) ODER numerisch "<nr>"
+#               S-Präfix wird intern für das Transcript-Matching als numerischer Anteil
+#               und für das Ledger-Matching als String verwendet.
+#
+# ─── Pfad-Auflösung (AC4/V3) ─────────────────────────────────────────────────
+# Transcript-Verzeichnis wird in dieser Priorität gesucht:
+#   1. $CLAUDE_CONFIG_DIR/.claude/projects/... (GUI-/Container-Kontext)
+#   2. $HOME/.claude/projects/...             (Standard-Kontext)
+#
+# Pfad-Escaping: cwd mit '/' → '-' ergibt den Verzeichnisnamen (führendes '-' = '/')
+# Beispiel: /Users/alex/Git/Studis-Softwareschmiede → -Users-alex-Git-Studis-Softwareschmiede
+#
+# Schlägt das Auffinden fehl → tok bleibt null, kein Crash (K3/K4).
 #
 # ─── Phase-0-Verifikation (AC1) ──────────────────────────────────────────────
 # Tatsächlich vorgefundenes Transcript-Format (empirisch verifiziert 2026-06-12):
 #
-#   Pfad:  ~/.claude/projects/<escaped-cwd>/<session-uuid>/subagents/agent-<id>.jsonl
-#          ~/.claude/projects/<escaped-cwd>/<session-uuid>/subagents/agent-<id>.meta.json
-#
-#   Pfad-Escaping: cwd mit '/' → '-' ergibt den Verzeichnisnamen (führendes '-' = '/')
-#   Beispiel: /Users/alex/Git/Studis-Softwareschmiede → -Users-alex-Git-Studis-Softwareschmiede
+#   Pfad:  <claude-dir>/projects/<escaped-cwd>/<session-uuid>/subagents/agent-<id>.jsonl
+#          <claude-dir>/projects/<escaped-cwd>/<session-uuid>/subagents/agent-<id>.meta.json
 #
 #   meta.json-Schema:
 #     { "agentType": "agent-flow:coder", "description": "coder #108 Ledger-Schema",
 #       "toolUseId": "toolu_..." }
-#   - `description` enthält "#<item>" wenn von /flow dispatcht (reliable Matching-Quelle)
+#   - `description` enthält "#<item_nr>" wenn von /flow dispatcht (reliable Matching-Quelle)
 #   - `agentType` enthält die Rolle nach dem letzten ':' (coder/reviewer/tester/dba/cicd)
 #
 #   JSONL-Zeilen-Schema (assistant-Zeilen mit usage):
@@ -40,28 +50,38 @@
 #     out   = Σ output_tokens aller assistant-Zeilen
 #     cache = Σ (cache_creation_input_tokens + cache_read_input_tokens) aller assistant-Zeilen
 #
-#   Dispatch-Matching: meta.json description enthält "#<item>" UND agentType enthält Rolle.
+#   Dispatch-Matching: meta.json description enthält "#<item_nr>" UND agentType enthält Rolle.
 #   Bei mehreren Subagents je Dispatch (gleiche Rolle/Item): Token summieren.
 #
 # ─── Fallback ────────────────────────────────────────────────────────────────
-# Wird kein Transcript-Verzeichnis gefunden oder enthält kein Subagent "#<item>":
+# Wird kein Transcript-Verzeichnis gefunden oder enthält kein Subagent "#<item_nr>":
 #   → tok-Felder bleiben null, Script gibt einzeiligen Hinweis aus, Exit 0.
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
-ITEM="${1:-}"
-if [[ -z "$ITEM" ]]; then
+ITEM_RAW="${1:-}"
+if [[ -z "$ITEM_RAW" ]]; then
   echo "[metrics-collect] WARN: kein Item-Argument — tok bleibt null" >&2
   exit 0
 fi
-# Numerik-Guard: $ITEM fliesst in ein grep -E-Pattern (find_subagent_jsonls_for_item).
-# Ein Nicht-Zahl-Wert wie "108|109" würde via Regex-Alternation mehrere Items matchen
-# → falsche Token-Zuordnung. Nur reine Ziffern zulassen.
-if [[ ! "$ITEM" =~ ^[0-9]+$ ]]; then
-  echo "[metrics-collect] WARN: Item-Argument ist keine Zahl ('$ITEM') — tok bleibt null" >&2
+
+# Item-Argument: akzeptiert sowohl "S-014" (String) als auch "14" (numerisch)
+# ITEM_NR = numerischer Anteil für Transcript-Matching (#14 in meta.json description)
+# ITEM_STR = kanonischer String "S-###" für Ledger-Matching (AC2)
+if [[ "$ITEM_RAW" =~ ^S-([0-9]+)$ ]]; then
+  ITEM_NR="${BASH_REMATCH[1]}"
+  ITEM_STR="$ITEM_RAW"
+elif [[ "$ITEM_RAW" =~ ^[0-9]+$ ]]; then
+  ITEM_NR="$ITEM_RAW"
+  ITEM_STR="S-${ITEM_RAW}"
+else
+  echo "[metrics-collect] WARN: Item-Argument nicht parsebar ('$ITEM_RAW') — tok bleibt null" >&2
   exit 0
 fi
+
+# ITEM bleibt ITEM_NR für das Subagent-Matching (grep -E auf "#<nr>")
+ITEM="$ITEM_NR"
 
 # Prüfen ob jq vorhanden
 if ! command -v jq >/dev/null 2>&1; then
@@ -79,7 +99,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DISPATCHES_FILE="$REPO_ROOT/.claude/metrics/dispatches.jsonl"
 ITEMS_FILE="$REPO_ROOT/.claude/metrics/items.jsonl"
-CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
+
+# Pfad-Auflösung (AC4/V3): CLAUDE_CONFIG_DIR hat Vorrang vor HOME
+# Ermöglicht Token-Erfassung im GUI-/Container-Kontext, wo ~/.claude u.U. nicht greift.
+if [[ -n "${CLAUDE_CONFIG_DIR:-}" && -d "${CLAUDE_CONFIG_DIR}/.claude/projects" ]]; then
+  CLAUDE_PROJECTS_DIR="${CLAUDE_CONFIG_DIR}/.claude/projects"
+elif [[ -d "$HOME/.claude/projects" ]]; then
+  CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
+else
+  # Fallback: $HOME/.claude/projects (wird in main() auf Existenz geprüft)
+  CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
+fi
 
 # Global temp files, cleaned up by EXIT trap
 WORK_DISPATCHES=""
@@ -200,9 +230,11 @@ PYEOF
 # ─── dispatches.jsonl patchen ─────────────────────────────────────────────────
 # Für jede Dispatch-Zeile des Items mit tok==null: passendes Subagent-JSONL finden
 # und tok setzen.
+# Matcht item sowohl als String "S-###" (neu, AC2) als auch als int (Alt-Zeilen, AC7).
 patch_dispatches() {
-  local item="$1"
-  local subagent_list="$2"
+  local item_str="$1"   # kanonischer String, z.B. "S-014"
+  local item_nr="$2"    # numerischer Anteil, z.B. "14" (für Alt-Zeilen-Compat)
+  local subagent_list="$3"
   [[ -f "$DISPATCHES_FILE" ]] || return 0
   [[ -n "$subagent_list" ]] || return 0
 
@@ -212,13 +244,20 @@ patch_dispatches() {
   local patched_count=0
 
   while IFS= read -r line; do
-    # Nur Zeilen für dieses Item mit null-tok verarbeiten
+    # Nur Zeilen für dieses Item mit null-tok verarbeiten.
+    # item-Feld kann String "S-###" (neu) oder int-Zahl (Alt-Zeilen, AC7) sein.
     local line_item line_tok line_agent
-    line_item="$(printf '%s' "$line" | jq -r '.item // empty' 2>/dev/null)" || line_item=""
+    line_item="$(printf '%s' "$line" | jq -r '.item // empty | tostring' 2>/dev/null)" || line_item=""
     line_tok="$(printf '%s' "$line" | jq -r 'if .tok == null then "null" else "set" end' 2>/dev/null)" || line_tok=""
     line_agent="$(printf '%s' "$line" | jq -r '.agent // empty' 2>/dev/null)" || line_agent=""
 
-    if [[ "$line_item" == "$item" && "$line_tok" == "null" && -n "$line_agent" ]]; then
+    # Match: String "S-###" ODER numerischer Wert (Alt-Zeilen)
+    local item_matches=false
+    if [[ "$line_item" == "$item_str" || "$line_item" == "$item_nr" ]]; then
+      item_matches=true
+    fi
+
+    if [[ "$item_matches" == "true" && "$line_tok" == "null" && -n "$line_agent" ]]; then
       local role_normalized
       role_normalized="$(printf '%s' "$line_agent" | tr '[:upper:]' '[:lower:]')"
 
@@ -267,16 +306,23 @@ patch_dispatches() {
 }
 
 # ─── items.jsonl patchen (tok_total) ─────────────────────────────────────────
+# Matcht item als String "S-###" (neu, AC2) oder als int (Alt-Zeilen, AC7).
 patch_items_tok_total() {
-  local item="$1"
+  local item_str="$1"   # kanonischer String, z.B. "S-014"
+  local item_nr="$2"    # numerischer Anteil, z.B. "14" (für Alt-Zeilen-Compat)
   [[ -f "$DISPATCHES_FILE" ]] || return 0
   [[ -f "$ITEMS_FILE" ]] || return 0
 
-  # tok_total = Σ (tok.in + tok.out + tok.cache) aller Dispatches für dieses Item
+  # tok_total = Σ (tok.in + tok.out + tok.cache) aller gepatchten Dispatches für dieses Item
+  # Matcht item als String ODER als Zahl (Alt-Zeilen-Compat)
   local tok_total
   tok_total="$(jq -s \
-    --argjson item "$item" \
-    '[.[] | select(.item == $item and .tok != null) | (.tok.in // 0) + (.tok.out // 0) + (.tok.cache // 0)] | add // null' \
+    --arg item_str "$item_str" \
+    --arg item_nr  "$item_nr" \
+    '[.[] | select((.item == $item_str or (.item | type == "number" and tostring == $item_nr))
+                   and .tok != null)
+           | (.tok.in // 0) + (.tok.out // 0) + (.tok.cache // 0)
+     ] | add // null' \
     "$DISPATCHES_FILE" 2>/dev/null)" || tok_total="null"
 
   [[ "$tok_total" != "null" && -n "$tok_total" ]] || return 0
@@ -287,10 +333,16 @@ patch_items_tok_total() {
 
   while IFS= read -r line; do
     local line_item line_toktotal
-    line_item="$(printf '%s' "$line" | jq -r '.item // empty' 2>/dev/null)" || line_item=""
+    line_item="$(printf '%s' "$line" | jq -r '.item // empty | tostring' 2>/dev/null)" || line_item=""
     line_toktotal="$(printf '%s' "$line" | jq -r 'if .tok_total == null then "null" else "set" end' 2>/dev/null)" || line_toktotal=""
 
-    if [[ "$line_item" == "$item" && "$line_toktotal" == "null" ]]; then
+    # Match: String "S-###" ODER numerischer Wert (Alt-Zeilen)
+    local item_matches=false
+    if [[ "$line_item" == "$item_str" || "$line_item" == "$item_nr" ]]; then
+      item_matches=true
+    fi
+
+    if [[ "$item_matches" == "true" && "$line_toktotal" == "null" ]]; then
       local patched_line
       patched_line="$(printf '%s' "$line" | jq -c \
         --argjson tt "$tok_total" \
@@ -316,7 +368,7 @@ main() {
     return 0
   }
 
-  # Subagent-JSONLs für dieses Item einsammeln
+  # Subagent-JSONLs für dieses Item einsammeln (ITEM = numerischer Anteil für description-Matching)
   local subagent_list
   subagent_list="$(find_subagent_jsonls_for_item "$ITEM")" || subagent_list=""
 
@@ -324,23 +376,23 @@ main() {
   [[ -n "$subagent_list" ]] && subagent_count="$(printf '%s\n' "$subagent_list" | wc -l | tr -d ' ')" || true
 
   if [[ "$subagent_count" -eq 0 ]]; then
-    echo "[metrics-collect] INFO: Keine Subagent-Transcripts für Item #${ITEM} gefunden — tok bleibt null" >&2
+    echo "[metrics-collect] INFO: Keine Subagent-Transcripts für ${ITEM_STR} (#${ITEM_NR}) gefunden — tok bleibt null" >&2
     return 0
   fi
 
-  # Dispatches patchen (AC3)
-  patch_dispatches "$ITEM" "$subagent_list" || true
+  # Dispatches patchen (AC3): übergebe String + Nummer für dual-Match (String neu + int Alt)
+  patch_dispatches "$ITEM_STR" "$ITEM_NR" "$subagent_list" || true
 
   # items.jsonl tok_total patchen (AC3)
-  patch_items_tok_total "$ITEM" || true
+  patch_items_tok_total "$ITEM_STR" "$ITEM_NR" || true
 
-  echo "[metrics-collect] OK: Item #${ITEM} — ${subagent_count} Subagent(s) verarbeitet" >&2
+  echo "[metrics-collect] OK: ${ITEM_STR} (#${ITEM_NR}) — ${subagent_count} Subagent(s) verarbeitet" >&2
 }
 
 # Alle Fehler → exit 0 + Hinweis (AC5, K3) — Messung blockiert nie den Loop
 {
   main
 } || {
-  echo "[metrics-collect] WARN: Fehler beim Token-Sammeln für Item #${ITEM} — tok bleibt null" >&2
+  echo "[metrics-collect] WARN: Fehler beim Token-Sammeln für ${ITEM_STR:-Item} — tok bleibt null" >&2
   exit 0
 }
