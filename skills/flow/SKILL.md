@@ -102,7 +102,7 @@ board set <story-id> estimate_note "$estimate_note_from_estimator" || true
 board set <story-id> confidence "$confidence_from_estimator"       || true
 ```
 4. Liegt eine `split_suggestion` vor (nicht null): gib sie in der laufenden Session als informativen Hinweis aus (ändere das Board **nicht** — rein beratend, AC6).
-5. *(Metrik: T0 vor Dispatch setzen; nach Handoff Dispatch-Zeile in `dispatches.jsonl` appenden — Agent-Rolle `estimator`, `gate: null`.)*
+5. *(Metrik: §2b-Touchpoint — T0 vor Dispatch setzen; nach Handoff `scripts/metrics-append-dispatch.sh` aufrufen: Agent-Rolle `estimator`, `gate: null`.)*
 
 **Schritt C — Mapping size_est → ep_est (AC3):**
 
@@ -127,7 +127,7 @@ Wenn `medians[key].n` < 3: Schnitt vorhanden aber dünn — trotzdem verwenden (
 
 Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a in `agents/reviewer.md`) — kein separater Agent-Dispatch. Der Reviewer prüft im normalen Build-Loop, ob der Diff env-Variablen einführt ohne `.env.example`/`.env.gpg` nachzuziehen. Keine Änderung am Dispatch-Ablauf nötig.
 
-## 2b. Metrik-Erfassung — Ledger-Touchpoints (Spec [`docs/architecture/metrics-subsystem.md`](../../docs/architecture/metrics-subsystem.md) §2–§4)
+## 2b. Metrik-Erfassung — Ledger-Touchpoints (Spec [`docs/architecture/metrics-subsystem.md`](../../docs/architecture/metrics-subsystem.md) §2–§4, [`docs/specs/metrics-recording-reliability.md`](../../docs/specs/metrics-recording-reliability.md))
 
 > **Einziger Schreiber:** Nur `/flow` schreibt `.claude/metrics/dispatches.jsonl` + `items.jsonl` — kein anderer Agent berührt diese Dateien (K2). Erfassung ist deterministische Arithmetik, **~0 zusätzliche LLM-Token**. Jeder Metrik-Fehler wird **still übergangen** (K3) — Messen blockiert nie den Loop und verändert kein Gate.
 
@@ -137,16 +137,18 @@ Bei Bedarf `.claude/metrics/` anlegen (falls nicht vorhanden). Schreiben **aussc
 ### Vor jedem Agent-Dispatch (coder / reviewer / dba / tester / cicd / estimator)
 ```bash
 T0=$(date -u +%s)
+SEQ=$(( SEQ + 1 ))   # laufende Dispatch-Nummer innerhalb des Items, ab 1
 ```
-Diesen Wert für den nachfolgenden Dispatch-Schlusspunkt merken.
+Diesen Wert für den nachfolgenden Dispatch-Schlusspunkt merken; `SEQ` zu Beginn jedes Items auf 0 initialisieren.
 
 ### Nach jedem Agent-Dispatch — eine Zeile nach `dispatches.jsonl`
+
 Aus dem Klartext-Handoff deterministisch zählen (**kein** zweiter LLM-Lauf):
 
 | Feld | Quelle |
 |---|---|
 | `ts` | `date -u +%Y-%m-%dT%H:%M:%SZ` |
-| `item` | int (Board-Item-Nr = numerischer Anteil der Story-ID, `S-014` → `14`) |
+| `item` | **String** `S-###` — kanonische Board-ID (AC2, V2: identisch zur File-Board-ID, keine int-Konvertierung) |
 | `seq` | laufende Dispatch-Nummer **innerhalb** des Items (ab 1 hochzählen) |
 | `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` \| `estimator` |
 | `iter` | N aus `Review-Handoff … (Iteration N)`; bei nicht-Loop-Rollen die zugehörige Iteration |
@@ -160,60 +162,34 @@ Aus dem Klartext-Handoff deterministisch zählen (**kein** zweiter LLM-Lauf):
 
 Fehlender / nicht parsbarer Marker → Feld `null` / `0` / `[]`, **nie raten**. Zeile wegschreiben, auch wenn einzelne Felder `null` sind.
 
-Beispiel-Append (jq):
+**Aufruf (benannter Touchpoint, V1):**
 ```bash
-# item = int aus Story-ID: Präfix "S-" entfernen → Zahl (S-014 → 14)
-jq -nc \
-  --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --argjson item 14 --argjson seq 1 \
-  --arg agent "coder" --argjson iter 1 \
-  --argjson gate 'null' --argjson crit 0 --argjson imp 0 \
-  --argjson rule_hits '[]' \
-  --argjson secs "$(($(date -u +%s) - T0))" \
-  --arg cost_mode "balanced" \
-  '{ts:$ts, item:$item, seq:$seq, agent:$agent, iter:$iter,
-    gate:$gate, crit:$crit, imp:$imp, rule_hits:$rule_hits,
-    secs:$secs, tok:null, cost_mode:$cost_mode}' \
-  >> .claude/metrics/dispatches.jsonl || true
+# Nach jedem Dispatch — Beispiel coder, Iteration 1:
+METRIC_CRIT=0 METRIC_IMP=0 METRIC_RULE_HITS='[]' \
+bash "$REPO_ROOT/scripts/metrics-append-dispatch.sh" \
+  "$STORY_ID" "coder" "$SEQ" "$ITER" "null" "$(($(date -u +%s) - T0))" "$COST_MODE" >&2 || true
 ```
-Das Beispiel zeigt den **coder**-Dispatch (`gate` = `null`, da der coder kein Gate
-setzt). Für **reviewer/dba/tester** stattdessen den echten Gate-Wert als String
-übergeben — `--arg gate "PASS"` (bzw. `"CHANGES-REQUIRED"` / `"FAIL"` / `"SKIPPED-*"`);
-`gate:$gate` im Body bleibt unverändert und ist Schema-konform (`gate: string | null`).
-Das `|| true` stellt sicher, dass ein jq-/IO-Fehler den Loop nicht abbricht (K3).
+Für **reviewer/dba/tester** stattdessen den echten Gate-Wert übergeben (z.B. `"PASS"`, `"CHANGES-REQUIRED"`, `"FAIL"`, `"SKIPPED-*"`) und `METRIC_CRIT`/`METRIC_IMP`/`METRIC_RULE_HITS` aus dem Handoff befüllen.
+Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3).
+
+`STORY_ID` = kanonische Story-ID als String `S-###` (z.B. `"S-014"`, nicht `14`). `REPO_ROOT` = Pfad zum Plugin-Repo.
 
 ### Beim Done (Item → `Done`, nach Rollout-Gate: PASS) — eine Zeile nach `items.jsonl`
 
 1. **`loc`/`files`** aus `git diff --shortstat` des Item-Diffs gegen `$default_branch`-Stand bei Item-Eintritt: `loc` = insertions + deletions, `files` = #geänderte Dateien.
-2. **Aggregation** über alle `dispatches.jsonl`-Zeilen des Items (filter `item == <nr>`, numerisch, z.B. `item == 14` für Story `S-014`; `item` ist int — Präfix `S-` entfernen → Zahl):
-   - `iters` = max der `iter`-Werte
-   - `crit` = Σ `crit`
-   - `imp` = Σ `imp`
-   - `test_fails` = Anzahl Zeilen mit `gate == "FAIL"` und `agent == "tester"`
-   - `rule_hits` = Vereinigung aller `rule_hits`-Arrays
-   - `secs_total` = Σ `secs` (null-Felder als 0)
-3. **EP-Formel** (Startgewichte, es sei denn `baseline.json.weights` vorhanden → diese haben Vorrang):
-   ```
-   EP = 1
-      + 2 · (iters − 1)
-      + 1 · crit
-      + 0.5 · imp
-      + 2 · test_fails
-      + round(log10(loc + 1))
-      + 3 · blocked
-   ```
-4. **`blocked`** = 1 wenn das Item zwischenzeitlich den Status `NEEDS-HUMAN`, ungelöste `depends` oder manuellen Eingriff hatte, sonst 0.
-5. **Schätzfelder:** `size_est` + `ep_est` aus §1a (beim Item-Eintritt bestimmt, Session-Variable). War §1a nicht ausführbar oder ergab keinen Wert → `size_est = "M"`, `ep_est = null` (K3). `tok` / `tok_total` = `null` (Phase 0, Befüllung durch `metrics-token-collect`).
+2. **`blocked`** = 1 wenn das Item zwischenzeitlich den Status `NEEDS-HUMAN`, ungelöste `depends` oder manuellen Eingriff hatte, sonst 0.
+3. **Schätzfelder:** `size_est` + `ep_est` aus §1a (beim Item-Eintritt bestimmt, Session-Variable). War §1a nicht ausführbar oder ergab keinen Wert → `size_est = "M"`, `ep_est = null` (K3). `tok_total` = `null` (Phase 0, Befüllung durch `metrics-token-collect`).
+4. Das Skript `metrics-append-item.sh` übernimmt Rollup (Aggregation aller dispatch-Zeilen), EP-Berechnung und den Append.
 
 Felder der `items.jsonl`-Zeile (subsystem §2.2):
 
 | Feld | Wert |
 |---|---|
 | `ts` | Done-Zeitstempel (ISO-8601 UTC) |
-| `item` | int (Board-Item-Nr = numerischer Anteil der Story-ID, `S-014` → `14`) |
+| `item` | **String** `S-###` — kanonische Board-ID (AC2, V2: kein int-Präfix-Strip) |
 | `size_est` | aus §1a-Heuristik (Schritt A); Default `"M"` |
 | `ep_est` | S/M: aus §1a-Lookup über `baseline.json`; L/XL: `dispo_est` vom estimator; `null` wenn kein Wert |
-| `ep_act` | EP nach obiger Formel |
+| `ep_act` | EP nach EP-Formel (§3 subsystem); `metrics-append-item.sh` berechnet intern |
 | `iters` | max `iter` der Dispatches |
 | `crit` | Σ `crit` |
 | `imp` | Σ `imp` |
@@ -227,13 +203,46 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 | `lang` | `profile.lang` (`language:`-Wert aus `.claude/profile.md`) |
 | `cost_mode` | aktiver Cost-Mode |
 
-Append analog zu `dispatches.jsonl` mit `|| true` (kein Loop-Abbruch bei Fehler, K3).
+**Aufruf (benannter Touchpoint, V1):**
+```bash
+# Shortstat für loc/files
+SHORTSTAT="$(git diff --shortstat "$BASE_SHA" HEAD 2>/dev/null)" || SHORTSTAT=""
+LOC=$(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)
+LOC=$(( LOC + $(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0) ))
+FILES=$(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo 0)
+
+bash "$REPO_ROOT/scripts/metrics-append-item.sh" \
+  "$STORY_ID" "${SIZE_EST:-M}" "${EP_EST:-null}" "$LOC" "$FILES" \
+  "${BLOCKED:-0}" "${LANG:-md}" "${COST_MODE:-balanced}" >&2 || true
+```
+Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3).
+
+### Self-Check beim Done (V4, AC5)
+
+Nach dem `metrics-append-item.sh`-Aufruf prüfen, ob die Zeile tatsächlich geschrieben wurde und ob `tok_total` nach dem Token-Nachtrag befüllt ist:
+
+```bash
+# Prüfe ob items.jsonl-Zeile für STORY_ID existiert
+if grep -q "\"item\":\"${STORY_ID}\"" "$REPO_ROOT/.claude/metrics/items.jsonl" 2>/dev/null; then ITEMS_LINE=1; else ITEMS_LINE=0; fi
+if [[ "$ITEMS_LINE" -eq 0 ]]; then
+  echo "HINWEIS: Metrik für ${STORY_ID} nicht erfasst — items.jsonl-Zeile fehlt. Ledger unvollständig." >&2
+fi
+
+# Prüfe ob tok_total befüllt ist (nach metrics-collect.sh)
+if [[ "$ITEMS_LINE" -gt 0 ]]; then
+  TOK_VAL="$(grep "\"item\":\"${STORY_ID}\"" "$REPO_ROOT/.claude/metrics/items.jsonl" 2>/dev/null | tail -1 | jq -r '.tok_total // "null"' 2>/dev/null || echo "null")"
+  if [[ "$TOK_VAL" == "null" ]]; then
+    echo "HINWEIS: tok_total für ${STORY_ID} nicht befüllt — Token-Pfad nicht auflösbar (Transcripts nicht gefunden oder CLAUDE_CONFIG_DIR falsch). EP-Metriken bleiben valide." >&2
+  fi
+fi
+```
+Diese Prüfung verändert kein Gate (K4, AC5) — sie ist nur informativ.
 
 ### Dispo-Spiegel in Story-YAML (AC6 — nach items.jsonl-Rollup)
 
 Nach dem Append der `items.jsonl`-Zeile spiegelt `/flow` die Dispo-Ist-Werte per ID-Join in die Story-YAML zurück. Die Ledger bleiben Source of Truth; die Story-Felder sind die lesbare Sicht (board-subsystem §4.4).
 
-**Join:** Lies `ep_act` + `tok_total` + `ep_est` aus der soeben geschriebenen `items.jsonl`-Zeile (Story-ID = `item`-Feld).
+**Join:** Lies `ep_act` + `tok_total` + `ep_est` aus der soeben geschriebenen `items.jsonl`-Zeile (Story-ID = `item`-Feld, String-Match `"S-###"`).
 
 **Setze via `board set`** (drei Aufrufe, alle mit `|| true` — fehlender Join blockiert nie):
 ```bash
@@ -254,15 +263,22 @@ Schlägt ein `board set`-Aufruf fehl → Story-Feld bleibt `null`, kein Abbruch 
 Nach dem Append der `items.jsonl`-Zeile (`tok_total` initial `null`) sofort:
 
 ```bash
-bash "$REPO_ROOT/scripts/metrics-collect.sh" "$ITEM_NR" >&2 || true
+bash "$REPO_ROOT/scripts/metrics-collect.sh" "$STORY_ID" >&2 || true
 ```
 
 Das Script parst die Subagent-Transcript-JSONL, summiert echte Token je Dispatch
 und patcht die `tok`-Felder der betroffenen `dispatches.jsonl`-Zeilen + `tok_total`
-der `items.jsonl`-Zeile (nur `null`-Felder, bestehende Werte bleiben). Schlägt das
-Script fehl oder findet es keine Transcripts → Felder bleiben `null`, **kein Abbruch**,
-das Item bleibt `Done` (K3/K4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis, das
-`scripts/` enthält); bei Dogfooding-Lauf = cwd des agent-flow-Repos.
+der `items.jsonl`-Zeile (nur `null`-Felder, bestehende Werte bleiben). Matching erfolgt
+über den String `S-###` im `item`-Feld (AC2). Schlägt das Script fehl oder findet es
+keine Transcripts → Felder bleiben `null`, **kein Abbruch**, das Item bleibt `Done`
+(K3/K4, AC3/AC4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis, das `scripts/` enthält);
+bei Dogfooding-Lauf = cwd des agent-flow-Repos.
+
+**Pfad-Auflösung (AC4, V3):** `metrics-collect.sh` liest Subagent-Transcripts aus
+`$CLAUDE_CONFIG_DIR/.claude/projects/<escaped-cwd>/…` (falls `CLAUDE_CONFIG_DIR` gesetzt)
+bzw. `$HOME/.claude/projects/<escaped-cwd>/…`. Im GUI-/Container-Kontext muss
+`CLAUDE_CONFIG_DIR` auf das korrekte Basis-Verzeichnis zeigen (z.B. `/home/user`).
+Fehlt die Variable und greift `$HOME` nicht → `tok` bleibt `null`, kein Crash (K3/K4).
 
 ### Datei-Hygiene (Spec V11 / subsystem §11)
 - `dispatches.jsonl` + `items.jsonl`: gitignored (`.gitignore`).
@@ -273,22 +289,22 @@ das Item bleibt `Done` (K3/K4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis,
 
 > **Parallele Worktrees — Frische + Hot-Spot-Warnung (flow/P1).** Beim Dispatch von mehreren coder-Tasks parallel oder in schneller Folge: (a) **Worktree-Frische:** weise jeden coder an, `git fetch origin && git reset --hard origin/<default_branch>` auszuführen und das Vorhandensein erwarteter Vorgänger-Artefakte zu verifizieren, bevor er implementiert (`coder/R03`). (b) **Hot-Spot-Files:** wenn mehrere parallele Items dieselben zentralen Wiring-Dateien berühren (z. B. `server.js`-Router-Registrierung, `App.jsx`/`AppShell.jsx`-Route-/View-Map, `index.ts`-Re-Exporte), serialisiere die betreffenden Items ODER vereinbare ein append-only/Block-Konvention für diese Dateien und plane frühe Rebase-Punkte ein. (c) **Strukturelle Dauer-Kur — Hot-Spot eliminieren statt umfahren:** ein zentrales manuelles Wiring-Register (Router-Liste, View-Switch/Map, Re-Export-Sammeldatei), das wiederholt Konflikt-Brennpunkt ist, sollte durch **Konventions-/Auto-Discovery** ersetzt werden — der Loader entdeckt neue Einträge per Dateisystem-Konvention (z. B. `src/routers/*.js` mit `create(deps)`-Export, datengetriebenes `viewRegistry.js`), sodass ein neues Item nur eine **neue Datei** hinzufügt und die geteilte Sammeldatei gar nicht mehr anfasst. Das ist die nachhaltigste Form der Konflikt-Vermeidung bei Dauer-Parallelarbeit (Serialisierung/append-only sind nur Umgehungen). Migrationshinweis: bei der Umstellung ALLE bestehenden Einträge übernehmen — auch direkte Inline-Handler (`app.get`/`app.post` direkt in `server.js`), nicht nur die per `app.use(router)` montierten — sonst entfällt still ein Endpunkt. Unkontrollierte parallele Edits an Hot-Spot-Files erzeugen wiederkehrende Merge-Konflikte. *[seen-in: dev-gui-cloudflare Items #107–#111 (server.js-Router-Overlap, DeployOrchestrator-Duplikat — Problem + Serialisierung) + dev-gui Items #207/#208 (Router-Auto-Registry `src/routerLoader.js`/`src/routers/*.js` + Frontend-View-Registry `client/src/viewRegistry.js` — strukturelle Kur, ~30-Einträge-Hot-Spots eliminiert); promoted: 2026-06-09, geschärft: 2026-06-14]*
 
-1. **coder** (Task): `TASK #<n>` · `SPEC: docs/specs/<feature>.md (AC<…>)` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Story-Kontext: der coder liest via `board show <story-id>` (statt Issue-Body). Er editiert nur den Working-Tree (Code + ggf. kleine Spec-Präzisierung). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)*
-2. **reviewer** (Task): `git diff` + die **Spec** (`docs/specs/<feature>.md`, AC<…>). Story-Kontext: der reviewer liest via `board show <story-id>` (statt Issue-Body). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies sein `Review-Gate`:
+1. **coder** (Task): `TASK #<n>` · `SPEC: docs/specs/<feature>.md (AC<…>)` · `ITERATION: N` · bei N>1 die offenen `FINDINGS`. Story-Kontext: der coder liest via `board show <story-id>` (statt Issue-Body). Er editiert nur den Working-Tree (Code + ggf. kleine Spec-Präzisierung). *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen.)*
+2. **reviewer** (Task): `git diff` + die **Spec** (`docs/specs/<feature>.md`, AC<…>). Story-Kontext: der reviewer liest via `board show <story-id>` (statt Issue-Body). *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen.)* Lies sein `Review-Gate`:
    - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` merken, N++ → zurück zu 3.1.
    - `PASS` → **DB-Trigger prüfen** (siehe 3.2a). Triggert er → weiter zu 3.2a; sonst → weiter zu 4.
 2a. **DBA-Zweit-Review (nur bei DB-Trigger)** — Trigger gilt, wenn **eines** zutrifft (Architektur-Spec §11):
     - Board-Item hat Label `db`, ODER
     - `git diff` berührt `db_scripts/`, `docs/data-model.md`, ODER Datenzugriffscode (Heuristik: Imports von `pg`/`postgres`/`mysql2`/`mariadb`/`better-sqlite3`/`sqlite3`/`mongoose`/`mongodb`/`prisma`/`drizzle`/`supabase`).
 
-    Dann zusätzlich **dba** (Task, Review-Modus): `git diff` + Spec + Item-Label. *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies sein `Review-Gate`:
+    Dann zusätzlich **dba** (Task, Review-Modus): `git diff` + Spec + Item-Label. *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen.)* Lies sein `Review-Gate`:
     - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` an coder zurück, N++ → 3.1.
     - `PASS` → **beide Gates PASS** → weiter zu 4 (Tester). Pflicht: **beide** Reviews müssen PASS sagen, bevor `tester` läuft.
 - **SPEC-LÜCKE:** meldet der coder eine strukturelle/Scope-Lücke (oder der reviewer/dba verweist auf `requirement`) → `board set <id> status Blocked --reason "Spec unvollständig — /requirement nötig"`, dem User melden. Nicht im Loop raten.
 - **Schleifenschutz:** überlebt derselbe Befund N=3 → `board set <id> status Blocked --reason "Loop-Schutz N=3 — gleicher Befund überlebt 3 Iterationen"`, melde es dem User, frage ob mit den restlichen Items weiter. Dann 1.
 
 ## 4. Test-Gate
-- **tester** (Task): Working-Tree + die **Spec** (AC<…>). Story-Kontext: der tester liest via `board show <story-id>` (statt Issue-Body). *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* Lies `Test-Gate`:
+- **tester** (Task): Working-Tree + die **Spec** (AC<…>). Story-Kontext: der tester liest via `board show <story-id>` (statt Issue-Body). *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen.)* Lies `Test-Gate`:
   - `FAIL` → als Befund zurück an coder (zählt zum Schleifenschutz) → 3.1.
   - `PASS` → weiter zu 5.
   - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): `board set <id> status Blocked --reason "DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"`, dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert.
@@ -298,7 +314,7 @@ das Item bleibt `Done` (K3/K4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis,
 
 ## 5. Landen — delegiert an `cicd` als ausführenden Abschluss-Arm
 
-Nach `tester`-PASS: **`cicd`-Agent** (Task) dispatchen mit dem SHIP-TRIGGER. *(Metrik: §2b T0 vor Dispatch merken; nach Handoff Dispatch-Zeile appenden.)* cicd führt die git-Operationen (merge + push) im Auftrag des Orchestrators durch, beobachtet den CI-Lauf und führt den lokalen Rollout + Disk-Hygiene durch.
+Nach `tester`-PASS: **`cicd`-Agent** (Task) dispatchen mit dem SHIP-TRIGGER. *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen.)* cicd führt die git-Operationen (merge + push) im Auftrag des Orchestrators durch, beobachtet den CI-Lauf und führt den lokalen Rollout + Disk-Hygiene durch.
 
 **Warum cicd statt Orchestrator-eigene git-Operationen:** der Orchestrator bleibt der konzeptuelle Eigner des Flows und der Board-Übergänge; cicd ist der spezialisierte Ausführungs-Arm für den technischen Abschluss (git + Docker + Prune). Das ist keine Verletzung des „einziger git-Schreiber"-Prinzips — der Orchestrator delegiert explizit (via SHIP-TRIGGER), cicd handelt nicht eigenständig.
 
@@ -323,7 +339,7 @@ IMAGE: <profile.image>:latest
 - Commit-Message endet mit der `Co-Authored-By`-Zeile (von cicd ausgeführt).
 
 **Orchestrator nach cicd-Rückgabe:**
-- `Rollout-Gate: PASS` → `board set <id> status Done` (+ PR/Commit verlinkt) + Test-URL melden. *(Metrik: §2b „Beim Done"-Schritt ausführen — `items.jsonl`-Rollup-Zeile appenden.)*
+- `Rollout-Gate: PASS` → `board set <id> status Done` (+ PR/Commit verlinkt) + Test-URL melden. *(Metrik: §2b-Touchpoint „Beim Done" — `metrics-append-item.sh` aufrufen + Self-Check + Token-Nachtrag via `metrics-collect.sh`.)*
 - `Rollout-Gate: FAIL` → melden + `board set <id> status Blocked --reason "CI rot oder Smoke fehlgeschlagen"`, User fragen.
 - `Rollout-Gate: NEEDS-HUMAN` → `board set <id> status Blocked --reason "Manueller Eingriff nötig"`, User vorlegen.
 

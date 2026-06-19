@@ -40,7 +40,7 @@ Pro-Dispatch-Granularität (explizit gewünscht): jeder einzelne Task-Dispatch e
 | Feld | Typ | Bedeutung |
 |---|---|---|
 | `ts` | string (ISO-8601 UTC) | Dispatch-Ende-Zeitstempel |
-| `item` | int | Board-Item-/Issue-Nummer |
+| `item` | string | Board-Item-ID als kanonischer String `S-###` (AC2, V2: kein int-Präfix-Strip; Alt-Zeilen mit int-Typ bleiben unangetastet) |
 | `seq` | int | laufende Dispatch-Nummer **innerhalb** des Items (1, 2, 3 …) |
 | `agent` | string | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` |
 | `iter` | int | Build-Loop-Iteration (aus `Review-Handoff … (Iteration N)`); für nicht-Loop-Rollen die zugehörige Iteration |
@@ -59,7 +59,7 @@ Genau **eine** Zeile, geschrieben wenn `/flow` das Item auf `Done` setzt (Rollup
 | Feld | Typ | Bedeutung |
 |---|---|---|
 | `ts` | string (ISO-8601 UTC) | Done-Zeitstempel |
-| `item` | int | Board-Item-/Issue-Nummer |
+| `item` | string | Board-Item-ID als kanonischer String `S-###` (AC2, V2: kein int-Präfix-Strip; Alt-Zeilen mit int-Typ bleiben unangetastet) |
 | `size_est` | string | A-priori-Grössenklasse `S` \| `M` \| `L` \| `XL` (§7) |
 | `ep_est` | number \| null | prognostizierter Aufwand (aus `baseline.json`-Mapping; `null` solange keine Baseline existiert) |
 | `ep_act` | number | tatsächlicher Aufwand nach EP-Formel (§5) |
@@ -140,8 +140,8 @@ EP = 1
 `/flow` ist einziger Metrik-Schreiber. Touchpoints im bestehenden Loop (`coder → reviewer ⇄ tester → cicd ship → Done`):
 
 1. **Vor jedem Task-Dispatch** (coder/reviewer/dba/tester/cicd): `T0=$(date -u +%s)` merken.
-2. **Nach jedem Dispatch**: aus dem Klartext-Handoff zählen — `gate` (das jeweilige `*-Gate`), `iter` (aus `Review-Handoff … (Iteration N)`), `crit`/`imp` (Anzahl Einträge unter `## Critical` / `## Important`), `rule_hits` (die Regel-ID-Tags der Befunde). `secs = $(date -u +%s) − T0`. **Eine Zeile** nach `dispatches.jsonl` appenden (`tok` zunächst `null`, wird in Schritt 4 best-effort nachgetragen).
-3. **Beim Done** (Item → `Done`, nach Rollout-Gate PASS): `git diff --shortstat` für `loc`/`files`; Dispatches des Items rollupen (`iters`, Σ`crit`, Σ`imp`, `test_fails`, `rule_hits`-Union, `secs_total`); `ep_act` nach §3; `ep_est` aus dem beim Eintritt bestimmten `size_est` × `baseline.json` (§7). **Eine Zeile** nach `items.jsonl`.
+2. **Nach jedem Dispatch**: aus dem Klartext-Handoff zählen — `gate` (das jeweilige `*-Gate`), `iter` (aus `Review-Handoff … (Iteration N)`), `crit`/`imp` (Anzahl Einträge unter `## Critical` / `## Important`), `rule_hits` (die Regel-ID-Tags der Befunde). `secs = $(date -u +%s) − T0`. **Eine Zeile** nach `dispatches.jsonl` appenden via `scripts/metrics-append-dispatch.sh` (`tok` zunächst `null`, wird in Schritt 4 best-effort nachgetragen). `item` als kanonischer String `S-###` (V2).
+3. **Beim Done** (Item → `Done`, nach Rollout-Gate PASS): `git diff --shortstat` für `loc`/`files`; Dispatches des Items rollupen via `scripts/metrics-append-item.sh` (`iters`, Σ`crit`, Σ`imp`, `test_fails`, `rule_hits`-Union, `secs_total`); `ep_act` nach §3; `ep_est` aus dem beim Eintritt bestimmten `size_est` × `baseline.json` (§7). **Eine Zeile** nach `items.jsonl`. `item` als kanonischer String `S-###` (V2). Danach Self-Check (V4): sichtbare Notiz wenn Zeile fehlt oder `tok_total` null bleibt.
 4. **Token-Nachtrag (out-of-band, §6)**: nach dem Item-Abschluss `scripts/metrics-collect.sh <item>` aufrufen → parst die Subagent-Transcripts, summiert `tok` je Dispatch, patcht die `tok`-Felder der betroffenen `dispatches.jsonl`-Zeilen + `tok_total` der `items.jsonl`-Zeile. Schlägt das fehl (Pfad/Format unbekannt) → Felder bleiben `null`, kein Abbruch.
 
 **Schreib-Disziplin:** append-only; bei (4) ein In-Place-Patch derselben Zeilen über das Script (jq-Rewrite), KEIN zweiter LLM-Lauf. Fehlerhafte/unvollständige Marker → das betroffene Feld `null`/`0`, nie raten, nie das Item blockieren (Messen darf den Loop nie aufhalten — Best-Effort-Prinzip).
