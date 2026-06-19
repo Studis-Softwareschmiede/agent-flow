@@ -1,7 +1,7 @@
 ---
 id: train-bootstrap-new-pack
 title: train --bootstrap — neuen Knowledge-Pack ohne Vorgänger aus mitgegebenen Primärquellen anlegen
-status: draft
+status: active
 version: 1
 ---
 
