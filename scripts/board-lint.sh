@@ -647,9 +647,17 @@ for fid, entry in features.items():
     # progress — Konsistenz-Check: einfache Heuristik
     # progress korrekt = "<done>/<total> done ..." basierend auf Kind-Status
     progress_val = data.get("progress")
-    if progress_val is not None and str(progress_val).strip() != "":
+    total = len(expected_children)
+    if total > 0 and (progress_val is None or str(progress_val).strip() == ""):
+        # Kind-Stories vorhanden, aber progress ist null/leer → ROLLUP-STALE
+        done_count = sum(
+            1 for sid in expected_children
+            if stories.get(sid, {}).get("data", {}).get("status") == "Done"
+        )
+        expected_prefix = f"{done_count}/{total} done"
+        messages.append((rel(path), f"WARN ROLLUP-STALE {rel(path)} progress null (erwartet '{expected_prefix}')"))
+    elif progress_val is not None and str(progress_val).strip() != "":
         # Berechne erwarteten Zaehler
-        total = len(expected_children)
         done_count = sum(
             1 for sid in expected_children
             if stories.get(sid, {}).get("data", {}).get("status") == "Done"

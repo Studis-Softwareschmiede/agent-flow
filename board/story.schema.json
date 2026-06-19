@@ -4,7 +4,7 @@
   "title": "Story YAML (board/stories/S-###-<slug>.yaml)",
   "description": "Schema fuer ein Story-Item im board/-Verzeichnis (board-subsystem §4.2).",
   "type": "object",
-  "required": ["id", "parent", "title", "status", "priority", "spec", "implements", "created_at", "updated_at"],
+  "required": ["id", "parent", "title", "status", "priority", "created_at", "updated_at"],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -44,7 +44,7 @@
         "pattern": "^AC\\d+$"
       },
       "minItems": 1,
-      "description": "Pflicht: Liste der AC-Tokens (AC1, AC2, …) die diese Story erfuellt."
+      "description": "Pflicht fuer native Stories: Liste der AC-Tokens (AC1, AC2, …) die diese Story erfuellt."
     },
     "depends": {
       "type": ["array", "null"],
@@ -111,6 +111,23 @@
       "type": ["string", "null"],
       "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)?$",
       "description": "Optionaler Abschlusszeitstempel ISO-8601-UTC (null bis Story Done)."
+    },
+    "github_issue": {
+      "type": ["integer", "null"],
+      "description": "Optionaler GitHub-Issue-Nummer (nur bei importierten Stories via board export-github gesetzt). Marker fuer importierte Story: lint meldet fehlende spec/implements als WARN STORY-UNSPEC statt FEHLER FIELD-REQUIRED."
     }
+  },
+  "if": {
+    "properties": {
+      "github_issue": { "type": "integer" }
+    },
+    "required": ["github_issue"]
+  },
+  "then": {
+    "description": "Importierte Story (github_issue gesetzt): spec und implements sind optional (WARN STORY-UNSPEC via board-lint.sh)."
+  },
+  "else": {
+    "description": "Native Story (kein github_issue oder null): spec und implements sind Pflichtfelder.",
+    "required": ["spec", "implements"]
   }
 }
