@@ -3,6 +3,7 @@ id: <feature-slug>          # stabile Spec-ID, kebab-case, z.B. "user-login"
 title: <Feature-Titel>
 status: draft               # draft | active | superseded — genau diese drei Werte gültig; "approved" ist KEIN gültiger Status (Synonym-Drift für "active", siehe docs/specs/spec-status-lifecycle.md)
 version: 1
+spec_format: use-case-2.0   # aktuelle Standard-Version dieser Vorlage (offizielle Methodik-Bezeichnung, kein interner Zähler). requirement übernimmt diesen Wert 1:1 beim Anlegen neuer Specs. /agent-flow:reconcile Stufe 1 vergleicht den spec_format-Stempel jeder Spec gegen diesen Vorlagen-Wert, um veraltete/fehlende Form zu erkennen (docs/architecture/reconcile-subsystem.md §3, §8).
 ---
 
 # Spec: <Feature-Titel>  (`<feature-slug>`)
@@ -10,6 +11,7 @@ version: 1
 > **Schicht 3 von 3.** Testbares **Verhalten + Verträge**, sprach-/paradigma-unabhängig (Intent, keine Idiome/Klassen).
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien + Coverage-Gate), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
 > **Struktur (Use-Case-2.0-Hybrid):** Die **Flows** (Main/Alternative) sind die *Herleitung* und **optional** — nur bei verzweigungsreichem Verhalten. Die **Acceptance-Kriterien** sind der *Pflicht-Vertrag* und werden aus den Flows abgeleitet. Geschäftsregeln werden NICHT hier definiert, sondern in `architecture.md` (Verhalten) / `data-model.md` (Validierung) als `BR-NNN` und hier nur **referenziert**.
+> **Diese Vorlage ist aktuell auf `spec_format: use-case-2.0`** (siehe Frontmatter oben) — die offizielle Bezeichnung des angewandten Spec-Standards. Der `/agent-flow:reconcile`-Button (Stufe 1) vergleicht den `spec_format`-Stempel jeder bestehenden Spec gegen diesen Vorlagen-Wert, um veraltete oder fehlende Form zu erkennen und zu konvertieren.
 
 ## Zweck
 <1–2 Sätze: was dieses Feature leistet und warum.>

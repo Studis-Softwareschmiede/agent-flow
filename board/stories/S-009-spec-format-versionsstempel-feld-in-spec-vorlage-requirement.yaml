@@ -2,7 +2,7 @@ id: S-009
 parent: F-008
 title: 'spec_format-Versionsstempel: Feld in Spec-Vorlage + requirement stempelt neue
   Specs automatisch'
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/spec-format-field.md
 implements:
@@ -22,9 +22,9 @@ dispo_forecast: null
 estimate_note: Heuristik score=7 (n_ac=5, n_comp=2 [_template.md, agents/requirement.md],
   label_bump=0) -> M. dispo_est aus baseline.json md|balanced|M (ep=3.0, n=8>=3).
 confidence: medium
-branch: null
+branch: feat/S-009-spec-format-stamp
 pr: null
 blocked_reason: null
 created_at: '2026-06-30T21:10:13Z'
-updated_at: '2026-06-30T21:10:48Z'
-done_at: null
+updated_at: '2026-06-30T21:19:33Z'
+done_at: '2026-06-30T21:19:33Z'
