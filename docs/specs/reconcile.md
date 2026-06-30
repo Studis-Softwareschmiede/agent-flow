@@ -60,7 +60,7 @@ spec_format: use-case-2.0
 - **Skill-Befehl:** `/agent-flow:reconcile` (Arbeitstitel laut Vertrag §2). Auslöser dünn (dev-gui POST `/api/command`), gesamte Logik in agent-flow.
 - **Kanban-Abfrage (Stufe-2-Gate):** „leer" = die vier aktiven Spalten (To Do, In Progress, Blocked, In Review) enthalten **null** Items; abgefragt über das File-Board (`scripts/board`).
 - **Audit-Schnittstelle:** Dispatch von `reviewer` im Audit-Modus (`agents/reviewer.md` „Audit-Modus") = Repo statt Diff, Output = priorisierter Fund-Report, **kein** Gate.
-- **Logbuch-Format:** `docs/spec-audit.md`, Block = Datums-Kopf + 1 Zeile/Dokument, neueste oben, append-prepend (oben einfügen).
+- **Logbuch-Format:** `docs/spec-audit.md`, Block = Datums-Kopf + 1 Zeile/Dokument, neueste oben, append-prepend (oben einfügen). **Schreib-Mechanismus:** `scripts/spec-audit-append.sh <Zeile> [<Zeile> …]` (Lines auch via Stdin `-`) — idempotent (legt die Datei aus `templates/_docs/spec-audit.md` an, falls sie fehlt), schreibt **nichts**, wenn keine Zeile übergeben wird (AC11).
 - **Doc-Schreiber:** ausschließlich der `/agent-flow:reconcile`-Skill (kein anderer Touchpoint schreibt Reconcile-Änderungen).
 
 ## Edge-Cases & Fehlerverhalten
