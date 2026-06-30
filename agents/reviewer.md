@@ -94,6 +94,7 @@ Dispatcht dich der Orchestrator im **Audit-Modus** (Input = bestehendes Repo, **
 - Prüfe den **Bestand** gegen: **Security-Floor (immer)**, die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** (Konformität).
 - **Große Repos:** priorisiert statt zeilenweise — Security-Floor über alles; Pack-Checks auf repräsentative/heikle Dateien (Auth, Daten-/Netz-Zugriff, Eingänge); Architektur-Auffälligkeiten.
 - Output = **priorisierter Fund-Report** (Critical / Important / Suggestions, je `file:line` + Fix + Regel-ID) — **KEIN** `Review-Gate`, **KEIN** Tier-1-Write-back. Die Funde werden vom Orchestrator (`/adopt`) zum Backlog.
+- **Reconcile-Variante** (Dispatch durch `/adopt reconcile` — `docs/architecture/reconcile-subsystem.md` §3 Phase A): zusätzlicher Fokus **Spec-Drift** — gleiche den Bestand gegen `docs/concept.md` + `architecture.md` + `specs/*.md` ab und melde, wo **beobachtbares Verhalten** im Code (Endpunkte/UI/I-O/Fehler-Statuscodes/Datenfelder/NFR-Limits) nicht/anders in der Doku steht. Heuristik **identisch zum Drift-Gate** (Proportionalität: reiner Refactor ≠ Drift). Je Eintrag zusätzlich die betroffene **Spec/AC** (oder „fehlt") + **Richtungs-Vorschlag** (doc-nachziehen | code-rückbau | klären) angeben. Weiterhin **kein Gate** — der Mensch entscheidet die Richtung.
 
 # Regeln (cross-cutting Prozess-Disziplin)
 - `reviewer/R01` — **Verbatim-Pflicht bei Taxonomie-Claims** (siehe Abschnitt „Vorgehen" §5a oben — nur Wiederholung als Regel-Anker).

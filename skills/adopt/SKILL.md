@@ -1,13 +1,15 @@
 ---
 name: adopt
-description: Adoptiert ein BESTEHENDES GitHub-Repo in die Fabrik — klont es (fremde Repos werden in die Org geforkt), übernimmt es per init (Stack erkennen, .claude/+docs/ scaffolden, Spec aus Code ableiten, CI/Security ergänzen), auditiert den Bestand gegen den Fabrik-Standard, legt die Funde als priorisiertes Backlog aufs Board und validiert das Skeleton end-to-end via tester-Agent (Cache-Flag profile.adoption_validated_at). Behebt NICHTS automatisch — /flow arbeitet das Backlog ab. Aufruf: /agent-flow:adopt <owner/repo> | /agent-flow:adopt re-validate.
+description: Adoptiert ein BESTEHENDES GitHub-Repo in die Fabrik — klont es (fremde Repos werden in die Org geforkt), übernimmt es per init (Stack erkennen, .claude/+docs/ scaffolden, Spec aus Code ableiten, CI/Security ergänzen), auditiert den Bestand gegen den Fabrik-Standard, legt die Funde als priorisiertes Backlog aufs Board und validiert das Skeleton end-to-end via tester-Agent (Cache-Flag profile.adoption_validated_at). Der reconcile-Modus gleicht zudem wiederkehrend einen bereits adoptierten Code gegen die Doku ab (Code→Doc-Drift) und zieht Konzept/Spec nach. Behebt NICHTS automatisch — /flow arbeitet das Backlog ab. Aufruf: /agent-flow:adopt <owner/repo> | /agent-flow:adopt re-validate | /agent-flow:adopt reconcile.
 ---
 
-# /adopt <owner/repo>   ·   /adopt re-validate
+# /adopt <owner/repo>   ·   /adopt re-validate   ·   /adopt reconcile
 
 Bringt ein bestehendes Repo auf Fabrik-Standard: **clone/fork → adopt → audit → Backlog → Validate (E2E-Smoke) → (du wählst) → `/flow`**. Es wird **nichts automatisch behoben** — der Audit erzeugt Items, gefixt wird inkrementell per `/flow` + PR durchs Gate. Der **Validate-Step** (§6) prüft das Skeleton end-to-end via `tester`-Agent und schreibt das Cache-Flag `profile.adoption_validated_at` (Spec [`docs/architecture/db-subsystem.md`](../../docs/architecture/db-subsystem.md) §18).
 
 `/adopt re-validate` (Mode ohne `<owner/repo>`): cwd = bereits adoptiertes Repo. Läuft **nur** den Validate-Step (§6) erneut — nützlich nach manuellen Spec-/Template-Updates oder wenn `adoption_validated_at` durch `/flow` invalidiert wurde (Spec §18). Keine Detection, kein Scaffold, kein Audit; springt direkt zu §6.
+
+`/adopt reconcile` (Mode ohne `<owner/repo>`): cwd = bereits adoptiertes Repo. **Wiederkehrender Code→Doc-Drift-Abgleich** — gleicht den *aktuellen* Code gegen die committed Doku ab und zieht Konzept/Spec nach, wo der Code vorausgeeilt ist. Komplement zum per-PR-Drift-Gate (verhindert nur NEUE Drift im `/flow`-Fluss) und zur einmaligen Spec-Ableitung bei der Adoption. Springt direkt zu §7; behebt nichts automatisch (Mensch entscheidet pro Drift die Richtung). Vertrag: [`docs/architecture/reconcile-subsystem.md`](../../docs/architecture/reconcile-subsystem.md).
 
 ## 0. Auth
 `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"`.
@@ -512,8 +514,40 @@ Expliziter Befehl ohne `<owner/repo>`-Argument. cwd = bereits adoptiertes Repo (
   - `/flow` hat das Flag invalidiert (Spec §18, `skills/flow/SKILL.md` §5a) und der User will explizit re-validieren statt auf den nächsten `/preview up` zu warten.
   - Nach Plugin-Update (`templates/_shared/db-<dialect>/` neu gepullt).
 
+## 7. reconcile — wiederkehrender Code→Doc-Drift-Abgleich (Spec [`docs/architecture/reconcile-subsystem.md`](../../docs/architecture/reconcile-subsystem.md))
+Expliziter Befehl ohne `<owner/repo>`-Argument. cwd = bereits adoptiertes Repo. Gleicht den **aktuellen Code** gegen die committed Doku ab und zieht die Doku nach, wo der Code vorausgeeilt ist. **Rückwärtiges, wiederkehrendes Gegenstück** zum vorwärtigen per-PR-Drift-Gate (CONCEPT §4d) und zur **einmaligen** Spec-Ableitung aus §2 — beide decken die *akkumulierte* Drift nicht ab.
+
+**Vorbedingung:** `.claude/profile.md` + `docs/` (concept/architecture/specs) existieren. Fehlt `docs/` → klar-Output „erst `/adopt <owner/repo>` laufen lassen (Spec-aus-Code, §2)" + Exit 0. Keine Detection, kein Scaffold der Stack-/CI-Dateien; springt direkt hierher.
+
+### 7.a Erkennen (abgeleitet — Spec §3 Phase A)
+- **Auth** wie §0.
+- HEAD-SHA festhalten: `git rev-parse --short HEAD` (geprüfter Code-Stand fürs Logbuch).
+- `reviewer` im **Audit-Modus** dispatchen (Task — `agents/reviewer.md` „Audit-Modus": Bestand, **kein** Diff, **kein** Gate) mit Zusatz-Fokus **Spec-Drift**: vergleiche beobachtbares Verhalten im Code gegen `docs/concept.md` + `docs/architecture.md` + `docs/specs/*.md`.
+  - **Drift-Heuristik = identisch zum Drift-Gate** (CONCEPT §4d): neue/geänderte Endpunkte, UI-Flows, Ein-/Ausgaben, Fehler-/Statuscodes, Datenfelder, NFR-relevante Limits. Reiner Refactor/Typo ohne Verhaltensänderung → **keine** Drift (**Proportionalität**).
+  - Auftrag-Output an den Orchestrator = **Drift-Liste**, je Eintrag `{Bereich, Code-Fundstelle (Pfad:Zeile), betroffene Spec/AC oder „fehlt", Richtungs-Vorschlag (doc-nachziehen | code-rückbau | klären)}`.
+- **Keine Drift gefunden** → klar-Output „Code und Doku deckungsgleich (HEAD `<sha>`)", Logbuch-Eintrag mit 0 Drifts, Exit 0.
+
+### 7.b Entscheiden (Mensch — Pflicht, kein Auto-Fix — Spec §3 Phase B)
+Pro Drift via **AskUserQuestion** eine Richtung (verwandte Drifts clustern, kein 1-Frage-pro-Zeile-Dump):
+
+| Richtung | Bedeutung | Folge |
+|---|---|---|
+| **doc-nachziehen** | Code war beabsichtigt, Doku veraltet | Doc-Update in den Reconcile-PR (7.c) |
+| **code-rückbau** | Verhalten war ungewollt | Board-Item (To Do) → `/flow` |
+| **→ requirement** | neue Capability / Scope-Sprung | an `requirement` zur sauberen Spec (Hybrid-Authoring), **nicht** hier nebenbei |
+| **akzeptiert (won't-fix)** | bewusst geduldet | nur Logbuch-Eintrag mit Begründung |
+
+### 7.c Landen (Spec §3 Phase C)
+- **Doc-Updates:** **ein** PR auf Branch `reconcile/<YYYY-MM-DD>`; `concept.md`/`architecture.md`/`specs/*.md` nachziehen, `AC<n>`/`BR-NNN` stabil halten bzw. **additiv** ergänzen. `main` ist protected → **PR, kein Direkt-Push** (Fork-PR-Falle aus §1 beachten: `gh pr create --repo <fork> …`). Der `reviewer` reviewt den PR normal (gleiche Gate-Logik, nur ist hier die Doc-Änderung der Diff).
+- **Code-Rückbauten:** je Eintrag ein GitHub-Issue (To Do), Acceptance referenziert die nachgezogene Spec/AC; Cluster verwandter Funde wie in §4.
+- **Logbuch `docs/spec-audit.md`:** fehlt es → aus `${CLAUDE_PLUGIN_ROOT}/templates/_docs/spec-audit.md` anlegen. Einen Lauf-Eintrag **oben** ergänzen (Datum, HEAD-SHA, #Drifts, Tabelle mit finalem Status je Drift: `doc-nachgezogen → PR #`, `rückbau-geplant → Issue #`, `akzeptiert → Begründung`). Das Logbuch ist **durable Entscheidungs-Historie**, NICHT die abgeleitete Roh-Drift-Liste (Spec §4).
+
+### 7.d Übergabe
+Report: HEAD-SHA · #Drifts nach Richtung · Doc-PR-URL · angelegte Rückbau-Issues · Logbuch-Pfad. → „Doc-PR mergen; Rückbauten via `/agent-flow:flow`." **Stop.**
+
 ## Grenzen
 - **Behebt nichts automatisch** — erzeugt nur das Backlog; Fix = `/flow` (PR-gated).
+- **reconcile (§7) ist kein Auto-Fix in beide Richtungen:** Phase A schlägt nur vor (abgeleitet), Phase B ist Mensch-Pflicht; weder Doc noch Code ändern sich ohne Owner-Entscheidung. Kein eigener Agent (Erkennung = `reviewer`-Audit-Modus), keine handgepflegte Drift-Matrix als Wahrheit (Spec §6).
 - Pusht NUR auf das Org-Repo bzw. den Org-Fork — **nie** ungefragt auf ein fremdes Upstream (Upstream-PR nur auf deinen Wunsch + Approve).
 - Idempotent: bestehende `.claude/`-/`docs/`-Dateien nicht überschreiben (mergen/fragen).
 - Die **abgeleitete Spec ist Entwurf**, bis du sie bestätigst (sie ist danach die Drift-Gate-Referenz für `/flow`).

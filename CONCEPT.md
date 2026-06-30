@@ -155,6 +155,8 @@ docs/
 
 **Bestehende Apps / Reverse-Engineering (entschieden: eigener Schritt):** `/init` (Repo adoptieren) bietet einen **einmaligen, mensch-validierten** Schritt „**Spec aus Code ableiten**": liest den Code → erzeugt `docs/concept.md` + `architecture.md` + `specs/` als Entwurf → Mensch reviewt/korrigiert → committen. Erst danach ist die App **portierbar** und unter Drift-Gate. (Macht auch die bestehenden Brewing-Apps dokumentier-/portierbar.)
 
+**Reconcile (rückwärtige Aufholung, entschieden):** Das Drift-Gate verhindert nur *neue* Drift im `/flow`-Fluss, die Spec-Ableitung läuft nur *einmal* bei der Adoption — **akkumulierte** Abweichung (Direkt-Commits, Pre-Adoption-Bestand, fremder Upstream) holt `/adopt reconcile` als **wiederkehrender Code→Doc-Abgleich** auf: `reviewer`-Audit-Modus erkennt die Drift (abgeleitet, gleiche Heuristik wie das Gate) → Owner entscheidet pro Drift die Richtung (doc-nachziehen | code-rückbau | →requirement | won't-fix) → Doc-Updates als PR, Rückbauten als Board-Item; durable Entscheidungs-Historie in `docs/spec-audit.md`. Kein Auto-Fix, kein eigener Agent. Vertrag: `docs/architecture/reconcile-subsystem.md`.
+
 **Sprach-Port (A → B):** neues Repo → `docs/` seeden → `profile.md` auf Sprache B → Board aus den Specs neu generieren → `/flow`. Der `coder` baut alles **aus den Specs**; der Alt-Code wird nicht gelesen.
 
 **Traceability:** Spec-ID → Board-Item → Commit/PR → **Test** (`@trace <slug>#AC/BR` im Testcode) —
