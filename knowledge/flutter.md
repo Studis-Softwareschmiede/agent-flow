@@ -25,3 +25,9 @@ Expertise für Flutter (Web/App). Geladen bei `profile.language: flutter`. Wäch
 
 ## Test-Approach
 - `flutter analyze` sauber; `flutter build web --release`; Smoke = Seite/Container lädt (HTTP 200).
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Idiom (`flutter_test`/`package:test`):** der `tags:`-Parameter von `test()`/`testWidgets()` (nativ via `dart test --tags` filterbar), ein Tag-String je Kriterium: `testWidgets('rejects empty password', tags: ['trace:user-login#AC1', 'trace:user-login#BR-002'], (tester) async { … });`.
+- **Extraktions-Rezept (Regex):** `'trace:([a-z0-9][a-z0-9-]*)#(AC\d+|BR-\d+)'` über die `tags:`-Argumente.
+- **Fallback:** kanonisches Token in der Test-Description; Core-Regex.

@@ -30,6 +30,12 @@
   sie; Board-Items referenzieren **Spec + AC-Nummern** (nicht eingebettete Kriterien). **Hartes Drift-Gate:**
   ein Diff, der beobachtbares Verhalten ohne Spec-Delta ändert → reviewer `CHANGES-REQUIRED`; Code + Spec
   landen im selben Commit/PR. `.claude/` hält nur Prozess-State (profile, lessons).
+- **Traceability (Spec↔Test):** Jeder Test trägt das kanonische Trace-Tag
+  `@trace <spec-slug>#AC<n>[,BR-NNN]` im sprach-idiomatischen Format (`knowledge/<lang>.md` →
+  `## Spec-Tagging`). Der `tester` parst die Tags und rechnet das **Coverage-Gate** (jede genannte AC +
+  jede referenzierte BR ≥ 1 deckender Test). Geschäftsregeln (`BR-NNN`) leben zentral in
+  `architecture.md`/`data-model.md`; Specs referenzieren sie. Map = abgeleitet, nie handgepflegt.
+  Source of Truth: `docs/architecture/traceability-subsystem.md`.
 - **Zwei-Tier-Lernen:** `reviewer` schreibt **Tier 1** (projekt-lokal, `.claude/lessons/coder.md`);
   `retro` hebt verallgemeinerbares in **Tier 2** (globale Packs/Skills, via PR+Gate).
 - **Observability (Tier 1, §5a):** Pack-Regeln haben stabile IDs (`flutter/R007`); `reviewer` taggt
@@ -55,8 +61,12 @@ Ablauf         1. Anforderung lesen → Lücken/Mehrdeutigkeiten sammeln
                2. LOOP: max. 2–3 gezielte Fragen (AskUserQuestion) → eindeutig + zerlegbar?
                   nein → nächste Runde; ja → 3.
                3. Spec schreiben/fortschreiben (durable): docs/specs/<feature>.md aus _template —
-                  Verhalten + nummerierte Acceptance-Kriterien (AC1…) + Verträge + Edge-Cases.
-                  Scope/Struktur → concept.md/architecture.md nachziehen.
+                  bei verzweigungsreichem Verhalten optional Main Success Scenario + Alternative Flows
+                  (Herleitung), daraus die nummerierten Acceptance-Kriterien (AC1…, **stabile IDs**,
+                  jeder Alt-/Fehlerpfad ⇒ eine AC) + Verträge + Edge-Cases.
+                  Geschäftsregeln NICHT in der Spec definieren — in architecture.md (Verhalten) bzw.
+                  data-model.md (Validierung) als BR-NNN anlegen/fortschreiben und in der AC via (→ BR-NNN)
+                  referenzieren. Scope/Struktur → concept.md/architecture.md nachziehen.
                4. In TODOs zerlegen (jedes ≈ ein coder→reviewer→tester-Lauf); pro TODO ein
                   GitHub-Issue + Board (To Do), Body: Spec-Ref + implements AC<…> + Priority + Depends-on
 Output         Specs: docs/specs/<…>.md (neu|aktualisiert)
@@ -64,6 +74,7 @@ Output         Specs: docs/specs/<…>.md (neu|aktualisiert)
 Harte Grenzen  • kein Code, kein Commit/PR/Merge (Specs nur in den Working-Tree; commit macht der Skill)
                • bewegt Items NIE über „To Do" hinaus (nur /flow)
                • jedes Item MUSS auf eine Spec + AC-Nummern zeigen
+               • Geschäftsregeln leben in architecture.md/data-model.md (BR-NNN), nie dupliziert in Specs
                • keine Secrets, keine Schema-/Infra-Annahmen erfinden
 ```
 
@@ -142,7 +153,9 @@ Lese-Pflichten • die Spec docs/specs/<feature>.md  (PRIMÄRE Quelle: Verhalten
 Tools          Read, Edit, Write, Bash, Grep, Glob
 Ablauf         1. Spec-Sektion + AC + Vorgaben + Lessons + Pack lesen
                2. Bei N>1: zuerst Critical+Important-Befunde beheben
-               3. Implementieren im Projekt-Stil; Tests gemäß „Test-Approach" mitschreiben
+               3. Implementieren im Projekt-Stil; Tests gemäß „Test-Approach" mitschreiben.
+                  JEDER Test trägt das Trace-Tag gemäß knowledge/<lang>.md → „## Spec-Tagging"
+                  (@trace <spec-slug>#AC<n>[,BR-NNN]) für die AC/BR, die er abdeckt.
                4. Spec-Drift vermeiden: kleine Lücke (Edge-Case/Feld/Statuscode) → Spec in
                   docs/specs/ mitpflegen; strukturell/Scope → als SPEC-LÜCKE melden
                5. Self-Test: profile.build (+ Smoke); rot → fixen, NICHT handoff
@@ -171,6 +184,8 @@ Lese-Pflichten • git diff + geänderte Dateien in voller Datei + Aufrufer (gre
 Tools          Read, Grep, Glob, Bash   (lesen/prüfen; KEIN Edit am Produktivcode)
 Ablauf         1. Diff + Kontext + Checkliste lesen
                2. Spec-Konformität: erfüllt der Code die AC? Verträge/Edge-Cases/NFRs?
+                  Referenzierte BR-NNN existieren in architecture.md/data-model.md? (sonst Critical)
+                  Tragen neue/geänderte Tests Trace-Tags (knowledge/<lang>.md → Spec-Tagging)? (fehlend = Important)
                3. Drift-Gate (HART): Diff ändert/erweitert beobachtbares Verhalten
                   (Endpunkte/UI/I-O/Fehler-Statuscodes/Datenfelder/NFR-Limits) ohne Spec-Delta
                   → Critical „Spec-Drift" → CHANGES-REQUIRED. (Refactor/Typo ohne Verhalten = kein Drift.)
@@ -198,12 +213,15 @@ Lese-Pflichten • .claude/profile.md  (build/test/lint/smoke-Befehle)
 Tools          Read, Bash, Grep, Glob   (ausführen + prüfen; KEIN Edit/Write am Code)
 Ablauf         1. profile.build → muss grün
                2. profile.test  (Default Smoke; profil-erweiterbar auf echte Suite)
-               3. AC-Abgleich: jede genannte AC erfüllt? (pro AC: erfüllt/nicht)
+               3. AC-Abgleich + Coverage-Gate: Trace-Tags via Pack-Rezept (knowledge/<lang>.md →
+                  Spec-Tagging) parsen. Jede genannte AC erfüllt UND von ≥1 Test getaggt; jede von diesen
+                  AC referenzierte BR-NNN von ≥1 Test gedeckt. Lücke → FAIL (Grund: „TRACE-GAP: <spec>#<crit>").
                4. Gate setzen
 Output/Handoff Test-Gate: PASS | FAIL | Ran:<Befehle> | Result:<…> | Failures:<…>
 Harte Grenzen  • schreibt KEINEN Produktiv-/Testcode, keine Fixes
                  (FAIL → zurück an coder; fehlende Tests = reviewer-Befund)
-               • PASS nur wenn Build grün UND Tests grün UND alle genannten AC erfüllt
+               • PASS nur wenn Build grün UND Tests grün UND alle genannten AC erfüllt UND
+                 Coverage-Gate grün (keine ungedeckte AC/BR)
                • bekannte nicht-fatale Fehler (pro Profil deklariert) tolerierbar
 ```
 

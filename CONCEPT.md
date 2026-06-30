@@ -133,13 +133,14 @@ agent-flow/knowledge/  flutter.md  html.md  java.md  js.md  sql.md  …
 ```
 docs/
   concept.md         # Konzept:       Problem · Nutzer · Ziele · Nicht-Ziele · Scope.        Ändert selten.
-  architecture.md    # Detailkonzept: Domänenmodell · Komponenten · Kern-Flows · Zustände ·
-                     #                NFRs · Entscheidungen (ADR-Stil).  Logisch, nicht sprachlich.
+  architecture.md    # Detailkonzept: Domänenmodell · Geschäftsregeln (BR-NNN, zentral) · Komponenten ·
+                     #                Kern-Flows · Zustände · NFRs · Entscheidungen (ADR-Stil).
+                     #                Logisch, nicht sprachlich.
   data-model.md      # (DB-Domäne)    Entitäten · Relationen · RLS-Konzept — Teil des Detailkonzepts.
   design.md          # (UI-Domäne)    Design-System/UX-Vorgaben — Teil des Detailkonzepts.
-  specs/<feature>.md # Spezifikation: ID · Zweck · Verhalten · Acceptance-Kriterien (nummeriert, testbar)
-                     #                · Verträge (I/O, API, Schema) · Edge-Cases/Fehler · NFRs ·
-                     #                Nicht-Ziele · Abhängigkeiten · Status/Version.
+  specs/<feature>.md # Spezifikation: ID · Zweck · (optional) Main/Alternative Flows · Acceptance-Kriterien
+                     #                (nummeriert, testbar, referenzieren BR-NNN) · Verträge (I/O, API, Schema)
+                     #                · Edge-Cases/Fehler · NFRs · Nicht-Ziele · Abhängigkeiten · Status/Version.
   glossary.md        # Ubiquitous Language (stützt die Sprach-Unabhängigkeit).
 ```
 
@@ -156,7 +157,11 @@ docs/
 
 **Sprach-Port (A → B):** neues Repo → `docs/` seeden → `profile.md` auf Sprache B → Board aus den Specs neu generieren → `/flow`. Der `coder` baut alles **aus den Specs**; der Alt-Code wird nicht gelesen.
 
-**Traceability:** Spec-ID → Board-Item → Commit/PR — durchgängig, in beide Richtungen.
+**Traceability:** Spec-ID → Board-Item → Commit/PR → **Test** (`@trace <slug>#AC/BR` im Testcode) —
+durchgängig, in beide Richtungen. Der `tester` rechnet ein **Coverage-Gate** (jede genannte AC + jede
+referenzierte BR ≥ 1 deckender Test); die Map ist **abgeleitet**, nie handgepflegt. Sprach-neutraler
+Vertrag + kanonisches Token: `docs/architecture/traceability-subsystem.md`; Idiom je Sprache im
+Knowledge Pack (`## Spec-Tagging`).
 
 **Touchpoints (Umsetzung später):** `templates/_docs/` (4 Skelette) · `new-project` (scaffoldet `docs/`) · `requirement` (schreibt durable Docs + Board mit Spec-IDs) · `/init` (Reverse-Eng-Schritt) · `coder` (Quelle = Spec; darf Lücken nachziehen) · `reviewer` (Drift-Gate + Spec-Konformität) · `tester` (Tests aus Acceptance-Kriterien) · `/flow` (lädt Spec pro Item; Landen = Code+Spec im selben PR). **Abgrenzung:** Im Brewing sind `requirement-analyst`-Specs bewusst *transient/gitignored* — die Fabrik macht hier das Gegenteil: nur das *Q&A* bleibt flüchtig, der **Spec-Output ist durable**. Zwei getrennte Projekte, zwei Lebenszyklen; nicht vermischen.
 
@@ -288,6 +293,8 @@ erst wenn das Framework an einem Wegwerf-Projekt bewiesen ist.
 **Entschieden:** Org-Name `Studis-Softwareschmiede` + Repo-Arbeitstitel `agent-flow`; GitHub-Zugang via **GitHub App `softwareschmiede-bot`** (App-Key+IDs in `.env.gpg`, kurzlebige Token via JWT-Mint). Bitwarden hält `studis-softwareschmiede-gpg-passphrase` + `studis-softwareschmiede-github-app` (Felder app_id/installation_id/private_key_b64) + optional `studis-softwareschmiede-claude-token`. *(Der frühere Fine-grained-PAT `studis-softwareschmiede-github-token` wurde durch die App abgelöst und **revoked**.)* Gate-Stufe = `reviewer`-Check + Mensch-Approve; Tester = Build+Smoke (profil-erweiterbar); Board = Task-Queue-Pipeline (siehe §4a). **Deploy/Preview (§8a):** Container folgt der Arbeitsmaschine (Mac→`localhost`, VPS→`<app>.alexstuder.cloud`); `dev.alexstuder.cloud` = SSH-DNS zum aktuellen VPS (migrierbar via Bootstrap-Upsert). Cloudflare-Creds (`API_TOKEN`/`ACCOUNT_ID`/`ZONE_ID`) aus dem Brewing-Setup in die factory-`.env.gpg` übernommen. `dev`-SSH = **A-Record→VPS-IP** (gehärtet, kein Tunnel); Preview-**TTL = manuell** (`/preview down`; Reaper später); **ghcr-Image = Source of Truth** (Cleanup lässt es unangetastet).
 
 **Entschieden (Spec-getriebene Doku, §4d):** Entwicklung läuft **Konzept → Detailkonzept → Spezifikation → Code**; die drei Doc-Schichten sind durable, sprach-neutrale **Source of Truth**. (1) Ort = **`docs/` im App-Repo** (beim Port geseedet); (2) **3 Schichten** `concept.md` / `architecture.md` / `specs/`; (3) **hartes Drift-Gate** (reviewer blockt Verhaltensänderung ohne Spec-Delta, Code+Spec im selben PR); (4) **Hybrid-Authoring** (requirement legt Specs an, coder darf kleine Lücken nachziehen, Strukturelles → zurück an requirement); (5) **eigener Reverse-Eng-Schritt** „Spec aus Code ableiten" (via `/init`, mensch-validiert) → macht auch Bestands-Apps portierbar. Bewusst **anders als die Brewing-Konvention** (dort Specs transient/gitignored): in der Fabrik ist nur das Q&A flüchtig, der Spec-Output durable.
+
+**Entschieden (Stufe-1-Traceability):** (1) **Use-Case-2.0-Hybrid** im Spec-Template — Main/Alternative Flows optional als Herleitung, Acceptance-Kriterien bleiben der Pflicht-Vertrag (keine Pre-/Postconditions als Pflichtfelder). (2) **Geschäftsregeln `BR-NNN`** leben zentral in `architecture.md` (Verhalten) / `data-model.md` (Validierung + Enforcement-Layer), kein eigenes File; Specs referenzieren, Tests taggen. Namensraum getrennt von Fabrik-Regeln `lang/R<NN>`. (3) **Spec↔Test-Traceability**: sprach-neutraler Vertrag (`docs/architecture/traceability-subsystem.md`) + idiomatisches Tagging je Pack (`## Spec-Tagging`) + abgeleitete Map; `tester` rechnet hartes Coverage-Gate (jede genannte AC + referenzierte BR ≥ 1 deckender Test).
 
 **Noch zu erarbeiten (vor Scaffold):**
 1. **Agenten im Detail** — je Agent (`requirement, coder, reviewer, tester, retro, train`): genaue Aufgabe, Input/Output-Format, Tools, Lese-Pflichten (Profil/Lessons), harte Grenzen — generisch & sprach-neutral.

@@ -20,3 +20,9 @@ Expertise für statisches HTML5. Geladen bei `profile.language: html`. Regel-IDs
 ## Test-Approach
 - Markup validiert (keine offenen Tags); Seite lädt; A11y-Basis (Landmarks, alt, Tab-Reihenfolge).
 - WCAG 2.2 AA: Fokus-Indikator sichtbar (2.4.11), Touch-Targets ≥ 24 px (2.5.8), Login ohne reinen Cognitive-Test (3.3.8).
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Kontext:** statische HTML-Projekte testen i.d.R. via Playwright oder besitzen nur Build/Smoke. Bei reinem Smoke greift das Coverage-Gate nur für AC, die als Smoke-Probe formuliert sind.
+- **Idiom (Playwright):** kanonisches Titel-Token wie im js-Pack: `test('@trace landing#AC1 — Seite lädt', …)`.
+- **Extraktions-Rezept:** wie js-Pack (Core-Regex über Test-Titel).
