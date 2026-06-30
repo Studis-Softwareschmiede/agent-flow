@@ -121,3 +121,9 @@ print('Migration ' + VERSION + ' applied.');
 - Migration läuft sauber **und** idempotent: `mongosh --file 001_init.js` zweimal ausführen → beide Läufe `exit 0`; Marker `db.getCollection('_schema_migrations').findOne({_id: '001'})` existiert genau einmal.
 - Schema-Validation-Probe: Insert eines invaliden Dokuments (fehlendes Pflichtfeld) → Serverfehler mit Validation-Failure erwartet (im Node-Driver: `MongoServerError`).
 - Connection-Pool-Probe: MongoClient-Singleton nachweisen (keine mehrfache Instanziierung im App-Code).
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Idiom (Jest/Vitest + mongodb-memory-server):** kanonisches Token im `it()`/`test()`-Titel: `it('@trace event-store#AC1,AC3 — ungültiges Dokument wird abgewiesen', …)`. In-Memory-MongoDB via `mongodb-memory-server` für schnelle Unit-Tests ohne Netz-Abhängigkeit.
+- **Extraktions-Rezept:** Test-Titel einsammeln (`vitest list --json`, Jest-AST oder `grep -RoE` über `**/*.spec.ts`/`**/*.test.ts`), dann Core-Regex `@trace\s+([a-z0-9][a-z0-9-]*)#((?:AC\d+|BR-\d+)(?:,(?:AC\d+|BR-\d+))*)`.
+- **Fallback:** kanonisches Token in der Test-Description; Core-Regex.

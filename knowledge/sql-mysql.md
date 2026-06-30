@@ -160,3 +160,10 @@ COMMIT;
 - Verify: `SHOW CREATE TABLE <name>` zeigt `ENGINE=InnoDB` + `utf8mb4`.
 - Smoke-INSERT mit Emoji (`🍺`) in VARCHAR-Spalte — muss ohne Error gespeichert und identisch zurückgeliefert werden.
 - Verify `@@sql_mode` enthält `STRICT_TRANS_TABLES` nach Migration.
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Kontext:** MySQL/MariaDB-Logik wird typischerweise via **App-Layer-Tests** geprüft (TS/Java — kein weit verbreiteter SQL-nativer TAP-Runner für MySQL/MariaDB). Der Trace-Tag sitzt im App-Layer-Test.
+- **Idiom (App-Layer, TS/Java):** Token im `it()`/`test()`-Titel (Vitest/Jest) oder JUnit-`@Tag` wie im ts-/java-Pack: `it('@trace user-reg#AC1 — Email-Unique-Constraint wirft Fehler', …)`. DB-Verbindung via `mysql2`-Driver oder JDBC/Testcontainers; Token bleibt im App-Test.
+- **Extraktions-Rezept:** Core-Regex `@trace\s+([a-z0-9][a-z0-9-]*)#((?:AC\d+|BR-\d+)(?:,(?:AC\d+|BR-\d+))*)` über App-Test-Titel (`grep -RoE` / `vitest list --json`).
+- **Fallback:** kanonisches Token in der Test-Description; Core-Regex.

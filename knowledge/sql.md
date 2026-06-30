@@ -79,3 +79,11 @@ CREATE INDEX IF NOT EXISTS items_user_id_idx ON public.items(user_id);
 
 ## Test-Approach
 - Migration läuft sauber **und** idempotent (zweimal anwenden, zweiter Lauf exit 0); RLS-Probe mit zweitem User; Smoke-Query pro Schema.
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Kontext:** DB-seitige Logik (RLS-Policies, Migrations, Functions) wird entweder via **pgTAP** (SQL-native) oder — häufiger — via **App-Layer-Tests** (TS/Java gegen echte/Container-DB) geprüft. Der Trace-Tag sitzt dort, wo der Test physisch liegt.
+- **Idiom (pgTAP — SQL-native):** Token als drittes Argument (Testname) in pgTAP-Funktionen: `SELECT ok(…, '@trace rls-policy#AC1 — Tenant sieht nur eigene Rows');`. Extraktion: `grep -RoE` über `*.sql`-Testdateien + Core-Regex.
+- **Idiom (App-Layer, TS/Java):** Token im `it()`/`test()`-Titel (Vitest/Jest) oder JUnit-`@Tag` wie im ts-/java-Pack — DB-Verbindung via `pg`-Driver, JPA oder Testcontainers; Token bleibt im App-Test.
+- **Extraktions-Rezept:** Core-Regex `@trace\s+([a-z0-9][a-z0-9-]*)#((?:AC\d+|BR-\d+)(?:,(?:AC\d+|BR-\d+))*)` — über pgTAP-SQL-Dateien (`grep`) oder App-Test-Titel (je nach gewähltem Idiom).
+- **Fallback:** kanonisches Token in pgTAP-Testname oder App-Test-Description; Core-Regex.

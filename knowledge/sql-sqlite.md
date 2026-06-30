@@ -104,3 +104,10 @@ CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 - `PRAGMA foreign_keys;` → muss `1` zurückgeben (Verbindungssetup prüfen).
 - `PRAGMA journal_mode;` → muss `wal` zurückgeben.
 - Table-Rebuild-Migrationen: Zeilencount vor und nach dem Rebuild vergleichen (kein Datenverlust).
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Kontext:** SQLite wird fast ausschliesslich via **App-Layer** getestet (TS/JS: `better-sqlite3`, `@databases/sqlite`; Java: JDBC/sqlite-jdbc). Kein SQL-nativer TAP-Runner üblich. Der Trace-Tag sitzt im App-Layer-Test; In-Memory-DB (`:memory:`) empfohlen für schnelle Unit-Tests.
+- **Idiom (App-Layer, TS/JS/Java):** Token im `it()`/`test()`-Titel (Vitest/Jest/node:test) oder JUnit-`@Tag`: `it('@trace schema-migration#AC1 — FK-Constraint verhindert Waise', …)`.
+- **Extraktions-Rezept:** Core-Regex `@trace\s+([a-z0-9][a-z0-9-]*)#((?:AC\d+|BR-\d+)(?:,(?:AC\d+|BR-\d+))*)` über App-Test-Titel (`grep -RoE` / `vitest list --json`).
+- **Fallback:** kanonisches Token in der Test-Description; Core-Regex.

@@ -39,3 +39,10 @@ Expertise für TypeScript. Geladen bei `profile.language: ts`. Regel-IDs: `ts/R<
 - **Type-Check Pflicht:** `tsc --noEmit` muss grün — kein TS-Code geht durch, wenn der Compiler rot ist.
 - **Unit-Tests:** Framework-/Build-Tool-spezifisch — `vitest` (Vite-Projekte), `jest` (Bestand-Setups), `node --test` (Pure-Node ab Node 20). Siehe `knowledge/build/<build>.md` Test-Approach und ggf. Framework-Pack.
 - **Lint:** ESLint mit `@typescript-eslint/recommended` als Floor; `eslint-plugin-import` für Import-Ordnung; ggf. Prettier für Formatting (out-of-scope dieses Packs).
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Idiom (Vitest/Jest/node:test):** kanonisches Token im `it()`/`test()`-Titel — analog js-Pack, gilt durchgehend für `.ts`-Testdateien: `it('@trace user-login#AC1,AC3 — rejects empty password', () => { … })`. Bei `test.each` das Token in den gemeinsamen Beschreibungs-String einbetten: `it.each(cases)('@trace user-login#AC1 — rejects %s', …)`. Vitest: filterbar via `vitest run -t "@trace user-login#AC1"`.
+- **Idiom (Playwright — e2e):** Titel-Token wie oben: `test('@trace user-login#AC1 — Login-Flow durchläuft', …)` (optional native `{ tag: [...] }`, maßgeblich bleibt das Titel-Token).
+- **Extraktions-Rezept:** Test-Titel einsammeln (`vitest list --json`, Jest-AST oder `grep -RoE` über `**/*.spec.ts`/`**/*.test.ts`), dann Core-Regex `@trace\s+([a-z0-9][a-z0-9-]*)#((?:AC\d+|BR-\d+)(?:,(?:AC\d+|BR-\d+))*)`.
+- **Fallback:** kanonisches Token in der Test-Description; Core-Regex.
