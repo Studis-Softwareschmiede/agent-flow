@@ -1,0 +1,18 @@
+id: F-007
+title: Spec-Status-Lebenszyklus konsolidieren (3 Werte, approved entfernen)
+goal: 'Eine Wahrheit über alle Stellen: status kennt genau draft|active|superseded;
+  approved (Hand-Drift, kein Producer) wird entfernt und per Lint-Gate selbst-korrigierend
+  abgewiesen.'
+status: Backlog
+priority: P2
+spec: docs/specs/spec-status-lifecycle.md
+definition_of_done: null
+labels:
+- docs
+depends: null
+owner: null
+stories:
+- S-008
+progress: 0/1 done
+created_at: '2026-06-30T19:59:55Z'
+updated_at: '2026-06-30T20:02:09Z'
