@@ -155,6 +155,8 @@ docs/
 
 **Bestehende Apps / Reverse-Engineering (entschieden: eigener Schritt):** `/init` (Repo adoptieren) bietet einen **einmaligen, mensch-validierten** Schritt „**Spec aus Code ableiten**": liest den Code → erzeugt `docs/concept.md` + `architecture.md` + `specs/` als Entwurf → Mensch reviewt/korrigiert → committen. Erst danach ist die App **portierbar** und unter Drift-Gate. (Macht auch die bestehenden Brewing-Apps dokumentier-/portierbar.)
 
+**Reconcile (rückwärtige Aufholung, Konzept akzeptiert — noch nicht gebaut):** Ein Button im „Spezifikation"-Reiter (dev-gui) startet den Fabrik-Befehl `/agent-flow:reconcile`, der die Doku eines Projekts wieder in Deckung bringt — **Stufe 1 (Form):** Specs ohne aktuellen `spec_format: use-case-2.0` werden in die neueste Vorlage konvertiert (läuft immer); **Stufe 2 (Inhalt, nur bei leerem Kanban):** Code ist maßgebend → Doku wird automatisch nachgezogen. Beide Stufen legen genau **einen Diff** zur Freigabe vor; ein knappes `docs/spec-audit.md` protokolliert die Änderungen. Vertrag: `docs/architecture/reconcile-subsystem.md`.
+
 **Sprach-Port (A → B):** neues Repo → `docs/` seeden → `profile.md` auf Sprache B → Board aus den Specs neu generieren → `/flow`. Der `coder` baut alles **aus den Specs**; der Alt-Code wird nicht gelesen.
 
 **Traceability:** Spec-ID → Board-Item → Commit/PR → **Test** (`@trace <slug>#AC/BR` im Testcode) —
