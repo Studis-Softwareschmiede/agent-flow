@@ -46,3 +46,9 @@ Expertise für Java. Geladen bei `profile.language: java`. Regel-IDs: `java/R<NN
 ## Test-Approach
 - Build (Maven/Gradle) grün; Unit-Tests; Smoke-Run.
 - **Assertion-Argument-Reihenfolge:** `assertEquals(expected, actual)` — erwarteter Wert **zuerst**, tatsächlicher danach (analog `assertSame`/`assertArrayEquals`). Vertauschte Reihenfolge verfälscht die `expected:<…> but was:<…>`-Fehlermeldung und führt bei Debugging in die Irre. (Sonar `java:S3415`)
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Idiom (JUnit 5):** ein `@Tag` je Kriterium auf der Testmethode/-klasse (`@Tag` erlaubt kein Komma → pro Kriterium ein Tag): `@Tag("trace:user-login#AC1")`, `@Tag("trace:user-login#BR-002")`. Zugleich filterbar via `mvn test -Dgroups="trace:user-login#AC1"` / Gradle `includeTags`.
+- **Extraktions-Rezept (Regex):** `@Tag\("trace:([a-z0-9][a-z0-9-]*)#(AC\d+|BR-\d+)"\)` → (spec-slug, criterion)-Paare.
+- **Fallback ohne JUnit 5:** kanonisches Token in `@DisplayName("… @trace user-login#AC1,AC3")`; Core-Regex aus dem Subsystem-Doc.

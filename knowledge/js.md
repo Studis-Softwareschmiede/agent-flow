@@ -42,3 +42,9 @@ Node.js unterscheidet **vier offizielle Deprecation-Typen** (stabil über v20 LT
 | **End-of-Life** | Funktionalität ist entfernt oder wird es bald; die API funktioniert nicht mehr (oder nur noch befristet). | Sofortige Migration erforderlich, bevor auf die betreffende Node-Version upgegraded wird. Reviewer → **Critical**. |
 
 **Merkhilfe Eskalationsstufe:** Documentation-only < Application < Runtime < End-of-Life.
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Idiom (Vitest/Jest/node:test):** kanonisches Token im `it()`/`test()`-Titel (Komma-Liste erlaubt): `it('@trace user-login#AC1,AC3 — rejects empty password', () => { … })`. Vitest zusätzlich filterbar via `-t "@trace user-login#AC1"`.
+- **Idiom (Playwright):** Titel-Token wie oben (optional native `{ tag: [...] }`, maßgeblich bleibt das Titel-Token).
+- **Extraktions-Rezept:** Test-Titel einsammeln (`vitest list --json`, Jest-AST oder `grep -RoE`), dann Core-Regex `@trace\s+([a-z0-9][a-z0-9-]*)#((?:AC\d+|BR-\d+)(?:,(?:AC\d+|BR-\d+))*)`.
