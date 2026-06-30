@@ -22,3 +22,10 @@ Expertise für Angular. Geladen bei `profile.language: angular`. Regel-IDs: `ang
 
 ## Test-Approach
 - `ng build`; `ng test` (oder Smoke); Lint sauber.
+
+## Spec-Tagging
+Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
+- **Idiom (Jasmine/Jest — Unit + Integration):** kanonisches Token im `it()`-Titel: `it('@trace user-login#AC1 — rejects empty password', () => { … })`. Hinweis: `fit`/`fdescribe` sind Jasmine-Fokus-Mechanismen und dienen NICHT als Trace-Mechanismus — nicht für Tags verwenden.
+- **Idiom (Playwright/Cypress — e2e):** Token im Test-Titel analog js-Pack: `test('@trace user-login#AC1 — Login-Flow durchläuft', …)`.
+- **Extraktions-Rezept:** `grep -RoE` über `*.spec.ts`/`*.e2e.ts`, dann Core-Regex `@trace\s+([a-z0-9][a-z0-9-]*)#((?:AC\d+|BR-\d+)(?:,(?:AC\d+|BR-\d+))*)`.
+- **Fallback:** kanonisches Token in der Test-Description; Core-Regex.
