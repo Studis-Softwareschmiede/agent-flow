@@ -1,7 +1,7 @@
 ---
 id: metrics-retro-effectiveness
 title: Retro-Effektivität messen (Defektrate je Regel-ID, LEARNINGS quantitativ)
-status: approved
+status: active
 version: 1
 ---
 

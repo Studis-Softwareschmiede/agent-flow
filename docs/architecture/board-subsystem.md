@@ -339,8 +339,10 @@ Regel „`/flow` ist einziger Schreiber von Board-Status", nur auf die CLI gehob
 | metrics (`items.jsonl`) | parallel zum Board | unverändert — `size_est`/`ep_est`/`ep_act` bleiben in `.claude/metrics/` |
 
 Wichtig: **AC bleiben in `docs/specs/`** (Drift-Gate, Spec-Status `draft|active|superseded`
-unverändert). Wir verschieben *nicht* die Akzeptanzkriterien ins Board — nur die
-Queue/Status/Hierarchie.
+unverändert — genau diese drei Werte sind gültig; `approved` ist **kein** gültiger Status
+(historischer Hand-Drift, Synonym für `active`; `board-lint.sh` meldet ihn als
+`FEHLER SPEC-STATUS-INVALID`, siehe `docs/specs/spec-status-lifecycle.md`)). Wir verschieben
+*nicht* die Akzeptanzkriterien ins Board — nur die Queue/Status/Hierarchie.
 
 ---
 
