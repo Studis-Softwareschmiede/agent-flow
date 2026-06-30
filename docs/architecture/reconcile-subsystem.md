@@ -1,8 +1,8 @@
 # Reconcile-Subsystem — Doku wieder mit der Realität in Deckung bringen
 
-> **Status:** Konzept akzeptiert (Stufe 1). Quer-Achse wie `traceability-subsystem.md` / `model-tier-subsystem.md`.
-> **Noch nicht gebaut** — dieses Dokument zurrt den Vertrag fest; die Umsetzung läuft später als Board-Stories
-> durch den normalen Prozess. Sprach-**neutral**.
+> **Status:** akzeptiert + **gebaut** (Stufe 1 + Stufe 2, agent-flow-Teil — Stories S-009..S-012). Quer-Achse wie
+> `traceability-subsystem.md` / `model-tier-subsystem.md`. Skill `/agent-flow:reconcile` (`skills/reconcile/SKILL.md`).
+> Offen (Cross-Repo, SR3): der Auslöser-Button im dev-gui-„Spezifikation"-Reiter (dev-gui Story S-201). Sprach-**neutral**.
 
 ## 1. Zweck & Problem
 
@@ -45,7 +45,10 @@ Gleicht den **Inhalt** der Doku gegen den **Code** ab.
 
 - **Vorbedingung (hart):** To Do · In Progress · Blocked · In Review **alle leer**. Erst dann ist alles
   Gewollte gebaut → der Code ist „fertig" und damit **maßgebend**. Bei offenem Board: Stufe 2 wird
-  **übersprungen** mit Hinweis „erst Board leerräumen" (Stufe 1 läuft trotzdem).
+  **übersprungen** mit Hinweis „erst Board leerräumen" (Stufe 1 läuft trotzdem). Fehlt das Board-Skelett
+  komplett (kein `board.yaml`), ist die Vorbedingung **nicht prüfbar** — Stufe 2 wird ebenfalls konservativ
+  **übersprungen** mit eigenem Hinweis („kein Board-Skelett vorhanden, Vorbedingung nicht prüfbar"); kein
+  impliziter Inhalts-Abgleich, wenn nicht feststeht, ob noch etwas offen ist (Stufe 1 läuft auch hier trotzdem).
 - **Erkennen (abgeleitet).** `reviewer` im Audit-Modus (Bestand, kein Diff, kein Gate) vergleicht beobachtbares
   Verhalten im Code gegen `concept.md` + `architecture.md` + `specs/*.md`. **Drift-Heuristik = identisch zum
   Drift-Gate** (Endpunkte/UI/I-O/Fehler-Statuscodes/Datenfelder/NFR-Limits; reiner Refactor zählt nicht).

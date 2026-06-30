@@ -43,7 +43,7 @@ spec_format: use-case-2.0
 - **AC5** — Stufe 1 legt ihr Ergebnis als **ein** Diff zur Freigabe vor (nichts landet ungesehen) **und** protokolliert die konvertierten Specs als Block in `docs/spec-audit.md` (→ AC10/AC11).
 
 ### Stufe 2 (Inhalt)
-- **AC6** — **Harte Vorbedingung:** Stufe 2 läuft **nur**, wenn die Spalten **To Do · In Progress · Blocked · In Review alle leer** sind. Ist eine davon belegt, wird Stufe 2 **übersprungen** mit dem Hinweis „erst Board leerräumen"; Stufe 1 läuft unabhängig davon. *(deckt A1)*
+- **AC6** — **Harte Vorbedingung:** Stufe 2 läuft **nur**, wenn die Spalten **To Do · In Progress · Blocked · In Review alle leer** sind. Ist eine davon belegt, wird Stufe 2 **übersprungen** mit dem Hinweis „erst Board leerräumen"; Stufe 1 läuft unabhängig davon. *(deckt A1)* Fehlt das Board-Skelett komplett (kein `board.yaml`, z.B. frisch geclontes/noch nicht initialisiertes Projekt), ist die Vorbedingung **nicht prüfbar**; Stufe 2 wird in diesem Fall ebenfalls (konservativ) **übersprungen** mit dem Hinweis „kein Board-Skelett vorhanden, Vorbedingung nicht prüfbar" — kein impliziter Inhalts-Abgleich, wenn nicht feststeht, ob noch etwas offen ist. Stufe 1 läuft auch hier unabhängig davon. *(deckt E3)*
 - **AC7** — Die Inhalts-Drift wird von `reviewer` im **Audit-Modus** abgeleitet (Eingabe = Bestand, **kein** Diff, **kein** Gate — er berichtet nur). Die **Drift-Heuristik ist identisch zum Drift-Gate**: Endpunkte/UI/I-O/Fehler-Statuscodes/Datenfelder/NFR-Limits; **reiner Refactor zählt nicht**. Verglichen wird beobachtbares Code-Verhalten gegen `concept.md` + `architecture.md` + `specs/*.md`.
 - **AC8** — **Code ist maßgebend:** die Doku wird **automatisch** an den Code angeglichen, fehlende Docs werden angelegt. Es gibt **kein Einzel-Nachfragen pro Abweichung** (kein per-Drift-Prompt) — der Mensch-Gate ist der finale Diff-Blick, nicht eine Entscheidung je Drift.
 - **AC9** — Stufe 2 legt alle Nachzieh-Änderungen als **ein** Diff zur Freigabe vor **und** protokolliert die nachgezogenen Dokumente als Block in `docs/spec-audit.md` (→ AC10/AC11).
@@ -67,6 +67,7 @@ spec_format: use-case-2.0
 - **E1:** Einzel-Spec-Konvertierung scheitert → Gesamtlauf läuft weiter; betroffene Spec bleibt unverändert, Vermerk im Diff/Bericht.
 - **E2:** Lauf ohne jede Drift → kein Diff, kein Logbuch-Block (kein Rauschen).
 - Offenes Board bei Stufe 2 → Skip mit Hinweis (AC6), niemals stiller Inhalts-Abgleich von Halbfertigem (Vertrag §7).
+- **E3:** Board-Skelett fehlt komplett bei Stufe 2 (`board.yaml` nicht vorhanden) → Vorbedingung nicht prüfbar, Stufe 2 wird konservativ übersprungen mit eigenem Hinweis (AC6) — kein Absturz des Gesamtlaufs, Stufe 1 läuft unabhängig weiter.
 
 ## NFRs
 - **Sicherheit/Vorsicht:** Kein Landen ohne Diff-Freigabe (beide Stufen, Vertrag §7). Kein Inhalts-Abgleich bei offenem Board. Kein per-Drift-Nachfragen.
