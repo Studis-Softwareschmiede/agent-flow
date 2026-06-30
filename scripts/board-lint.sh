@@ -12,6 +12,8 @@
 #        AC9  (Pflichtfelder und Enum-Verletzungen mit Datei + Feldname)
 #        AC10 (ROLLUP-STALE: abgeleitete Felder veraltet — WARN, kein FEHLER)
 #        AC11 (deterministisch, FEHLER|WARN-Format, Exit-Code-Semantik)
+#        spec-status-lifecycle#AC4 (SPEC-STATUS-INVALID: referenzierte Spec-Datei
+#              traegt einen status-Wert ausserhalb {draft, active, superseded})
 #
 # Ausgabe je Verstoss: FEHLER|WARN <regel-id> <datei> <feld/detail>
 # Exit-Code: 1 bei mindestens einem FEHLER, 0 bei nur Warnungen oder gruen.
@@ -31,6 +33,9 @@
 #   ROLLUP-STALE         — stories[]/progress eines Features veraltet (V10, WARN)
 #   STORY-UNSPEC         — importierte Story (github_issue gesetzt) hat spec oder implements
 #                          nicht gesetzt — WARN, kein FEHLER (V3, Owner zieht nach im Cut-PR)
+#   SPEC-STATUS-INVALID  — referenzierte, existierende Spec-Datei hat Frontmatter-status:
+#                          ausserhalb {draft, active, superseded}
+#                          (aus Spec docs/specs/spec-status-lifecycle.md, AC4)
 
 set -euo pipefail
 
@@ -617,6 +622,65 @@ for sid, entry in stories.items():
             continue  # Format-Fehler wird von ENUM-INVALID abgedeckt
         if ac_str not in acs:
             messages.append((rel(path), f"FEHLER AC-MISSING {rel(path)} implements[]={ac_str!r} nicht in {spec_rel!r}"))
+
+# -----------------------------------------------------------------------
+# SPEC-STATUS-INVALID — Frontmatter status: einer referenzierten, existierenden
+# Spec-Datei ausserhalb {draft, active, superseded}
+# (Spec docs/specs/spec-status-lifecycle.md AC4)
+# -----------------------------------------------------------------------
+VALID_SPEC_STATUS = {"draft", "active", "superseded"}
+FRONTMATTER_BLOCK = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+FRONTMATTER_STATUS = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
+
+spec_status_cache = {}  # spec_path -> status string or None (kein Frontmatter/status)
+
+def get_spec_status(spec_rel_path):
+    """Liest den Frontmatter-status:-Wert einer Spec-Datei (erster Frontmatter-Block).
+    Gibt None zurueck, wenn die Datei fehlt oder keinen status-Schluessel traegt."""
+    if spec_rel_path in spec_status_cache:
+        return spec_status_cache[spec_rel_path]
+    abs_path = os.path.join(repo_root, spec_rel_path)
+    if not os.path.isfile(abs_path):
+        spec_status_cache[spec_rel_path] = None
+        return None
+    try:
+        with open(abs_path, encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception:
+        spec_status_cache[spec_rel_path] = None
+        return None
+    fm_match = FRONTMATTER_BLOCK.match(content)
+    if not fm_match:
+        spec_status_cache[spec_rel_path] = None
+        return None
+    status_match = FRONTMATTER_STATUS.search(fm_match.group(1))
+    if not status_match:
+        spec_status_cache[spec_rel_path] = None
+        return None
+    # Trailing YAML-Inline-Kommentar (z.B. "active   # in Kraft") abtrennen,
+    # bevor der Wert gegen das Enum geprueft wird (coder/L25).
+    status_val = status_match.group(1).split("#", 1)[0].strip()
+    spec_status_cache[spec_rel_path] = status_val
+    return status_val
+
+reported_spec_status = set()  # Dedup: ein Befund je referenzierter Spec-Datei
+for sid, entry in stories.items():
+    data = entry["data"]
+    path = entry["path"]
+    spec_val = data.get("spec")
+    if spec_val is None or str(spec_val).strip() == "":
+        continue
+    spec_rel = str(spec_val).strip()
+    abs_path = os.path.join(repo_root, spec_rel)
+    if not os.path.isfile(abs_path):
+        # Fehlende Spec-Datei -> bereits als SPEC-MISSING gemeldet, keine Doppelmeldung
+        continue
+    if spec_rel in reported_spec_status:
+        continue
+    status_val = get_spec_status(spec_rel)
+    if status_val is not None and status_val not in VALID_SPEC_STATUS:
+        reported_spec_status.add(spec_rel)
+        messages.append((rel(path), f"FEHLER SPEC-STATUS-INVALID {spec_rel} status={status_val}"))
 
 # -----------------------------------------------------------------------
 # AC10 — ROLLUP-STALE: abgeleitete Felder stories[]/progress veraltet (WARN)

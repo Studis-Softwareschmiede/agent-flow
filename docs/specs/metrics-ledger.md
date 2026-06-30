@@ -1,7 +1,7 @@
 ---
 id: metrics-ledger
 title: Metrik-Ledger + Erfassung in /flow (Phase 0, Fundament)
-status: approved
+status: active
 version: 1
 ---
 

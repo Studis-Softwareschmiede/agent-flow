@@ -1,7 +1,7 @@
 ---
 id: metrics-token-collect
 title: Token/Zeit out-of-band erfassen (best-effort, Eich-Datenquelle)
-status: approved
+status: active
 version: 1
 ---
 

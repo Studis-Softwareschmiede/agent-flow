@@ -1,7 +1,7 @@
 ---
 id: <feature-slug>          # stabile Spec-ID, kebab-case, z.B. "user-login"
 title: <Feature-Titel>
-status: draft               # draft | active | superseded
+status: draft               # draft | active | superseded — genau diese drei Werte gültig; "approved" ist KEIN gültiger Status (Synonym-Drift für "active", siehe docs/specs/spec-status-lifecycle.md)
 version: 1
 ---
 
