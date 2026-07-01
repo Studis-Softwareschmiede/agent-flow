@@ -1,13 +1,13 @@
 ---
 name: reconcile
-description: Startet /agent-flow:reconcile — bringt die docs/ eines Projekts wieder mit der Realität in Deckung (rückwärtige Aufholung, Gegenstück zur vorwärtigen Drift-Disziplin). Stufe 1 (Form, läuft IMMER) hebt jede Spec mit veraltetem/fehlendem spec_format-Stempel automatisch auf die aktuelle Vorlage. Stufe 2 (Inhalt, nur bei leerem Kanban) lässt reviewer im Audit-Modus die Inhalts-Drift zwischen Code und Doku (concept/architecture/specs) ermitteln und zieht die Doku automatisch nach (Code ist maßgebend, kein Einzel-Nachfragen). Beide Stufen liefern zusammen genau EINEN Diff/PR zur Freigabe, protokolliert als EIN Block in docs/spec-audit.md. Kein eigener reconcile-Agent — Orchestrierung lebt komplett in diesem Skill. Aufruf: /agent-flow:reconcile.
+description: Startet /agent-flow:reconcile — bringt die docs/ eines Projekts wieder mit der Realität in Deckung (rückwärtige Aufholung, Gegenstück zur vorwärtigen Drift-Disziplin). Stufe 1 (Form, läuft IMMER) hebt jede Spec mit veraltetem/fehlendem spec_format-Stempel automatisch auf die aktuelle Vorlage. Stufe 2 (Inhalt, nur bei leerem Kanban) lässt reviewer im Audit-Modus die Inhalts-Drift zwischen Code und Doku (concept/architecture/specs) ermitteln und zieht die Doku automatisch nach (Code ist maßgebend, kein Einzel-Nachfragen). Beide Stufen liefern zusammen genau EINEN Diff/PR zur Freigabe. Jeder Lauf protokolliert genau EINEN Block in docs/spec-audit.md — mit Dokument-Zeilen bei Änderungen, oder als expliziter --no-op-Block mit kanonischer "keine Änderung nötig"-Zeile, wenn weder Stufe 1 noch Stufe 2 etwas geändert haben (kein Lauf bleibt unprotokolliert). Kein eigener reconcile-Agent — Orchestrierung lebt komplett in diesem Skill. Aufruf: /agent-flow:reconcile.
 ---
 
 # /agent-flow:reconcile
 
 Bringt die `docs/` des **aktuellen** Projekt-Repos (cwd) wieder mit der Realität in Deckung — on-demand, in zwei Stufen. **Dieser Skill ist der einzige Schreiber** der Reconcile-Änderungen; es gibt **keinen** separaten `reconcile`-Agent (Vertrag `docs/architecture/reconcile-subsystem.md` §7, Spec `docs/specs/reconcile.md` AC1).
 
-Bindende Quellen: `docs/specs/reconcile.md` (AC1–AC11) + `docs/architecture/reconcile-subsystem.md` (FINAL). **Dieser Skill implementiert Stufe 1 (AC1–AC5) UND Stufe 2 (AC6–AC9, Inhalts-Abgleich) vollständig.** Beide Stufen laufen in **derselben** Session; das Ergebnis (falls beide oder nur eine Stufe Änderungen erzeugt) wird **gemeinsam** als **ein** Diff/PR vorgelegt (§4) und **ein** Logbuch-Block geschrieben (§3) — „Pro Lauf ein Block" (AC10) bezieht sich auf den **gesamten** Reconcile-Lauf, nicht auf die einzelne Stufe.
+Bindende Quellen: `docs/specs/reconcile.md` (AC1–AC12) + `docs/architecture/reconcile-subsystem.md` (FINAL). **Dieser Skill implementiert Stufe 1 (AC1–AC5) UND Stufe 2 (AC6–AC9, Inhalts-Abgleich) vollständig.** Beide Stufen laufen in **derselben** Session; das Ergebnis (falls beide oder nur eine Stufe Änderungen erzeugt) wird **gemeinsam** als **ein** Diff/PR vorgelegt (§4) und **ein** Logbuch-Block geschrieben (§3) — „Pro Lauf ein Block" (AC10) bezieht sich auf den **gesamten** Reconcile-Lauf, nicht auf die einzelne Stufe. **Jeder** Lauf schreibt genau diesen einen Block — auch wenn weder Stufe 1 noch Stufe 2 etwas geändert haben (No-Op, AC12): dann trägt der Block die kanonische „keine Änderung nötig"-Zeile statt Dokument-Zeilen (§3).
 
 ## 0. Setup
 - `.claude/profile.md` lesen → `merge_policy` (`pr`|`direct`), `default_branch`.
@@ -90,14 +90,21 @@ Spec <pfad> neu angelegt          (Dokument existierte nicht)
 ```
 Wie bei §1c wird hier **noch nicht** geschrieben — siehe §3.
 
-## 3. Logbuch — EIN Block für den gesamten Lauf (AC5/AC9/AC10/AC11)
-Kombiniere die Stufe-1-Liste (§1c) und die Stufe-2-Liste (§2d) zu **einer** Zeilenmenge (Stufe-1-Zeilen zuerst, danach Stufe-2-Zeilen — feste, nachvollziehbare Reihenfolge) und rufe **einmal** auf:
+## 3. Logbuch — EIN Block für den gesamten Lauf, IMMER (AC5/AC9/AC10/AC11/AC12)
+Kombiniere die Stufe-1-Liste (§1c) und die Stufe-2-Liste (§2d) zu **einer** Zeilenmenge (Stufe-1-Zeilen zuerst, danach Stufe-2-Zeilen — feste, nachvollziehbare Reihenfolge).
+
+**Hat die kombinierte Liste ≥ 1 Zeile** (mindestens Stufe 1 oder Stufe 2 hat etwas geändert), rufe **einmal** auf:
 ```
 scripts/spec-audit-append.sh \
   "<Stufe-1-Zeile-1>" … \
   "<Stufe-2-Zeile-1>" …
 ```
-Ist die kombinierte Liste leer (weder Stufe 1 noch Stufe 2 hatten etwas zu protokollieren), wird `spec-audit-append.sh` **nicht** aufgerufen — kein leerer Block (AC11).
+
+**Ist die kombinierte Liste leer** (weder Stufe 1 noch Stufe 2 hatten etwas zu protokollieren — der reine No-Op-Fall), rufe **stattdessen** den expliziten No-Op-Modus auf:
+```
+scripts/spec-audit-append.sh --no-op
+```
+Das schreibt einen validen Block mit **genau einer** kanonischen „keine Änderung nötig"-Zeile (AC12) — **niemals** wird `spec-audit-append.sh` ganz ausgelassen. Jeder Reconcile-Lauf hinterlässt so **immer** genau einen Logbuch-Block, egal ob mit Änderungs-Zeilen oder als No-Op (AC10/AC12) — „gelaufen, nichts nötig" bleibt von „nie gelaufen" unterscheidbar.
 
 ## 4. Freigabe — EIN Diff für den gesamten Lauf (AC1/AC5/AC9)
 Nur falls §1b und/oder §2c mindestens eine Datei tatsächlich geändert/angelegt haben (sonst: nichts zu landen, Lauf endet hier mit „keine Drift gefunden").
