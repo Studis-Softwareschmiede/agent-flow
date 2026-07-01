@@ -2,7 +2,7 @@
 id: reconcile
 title: Reconcile — Doku per /agent-flow:reconcile wieder mit der Realität in Deckung bringen
 status: draft
-version: 1
+version: 2
 spec_format: use-case-2.0
 ---
 
@@ -19,7 +19,7 @@ spec_format: use-case-2.0
 1. Der Mensch löst `/agent-flow:reconcile` aus (im Projekt-Terminal, angestoßen durch den dev-gui-Button oder direkt).
 2. **Stufe 1 (Form)** läuft immer: Specs mit veraltetem/fehlendem `spec_format` werden in die aktuelle Vorlage konvertiert und neu gestempelt.
 3. Ist das Kanban leer, läuft **Stufe 2 (Inhalt)**: `reviewer` im Audit-Modus liefert die Inhalts-Drift, die Doku wird automatisch an den Code angeglichen.
-4. Beide Stufen schreiben ihre getroffenen Änderungen als Block ins Logbuch `docs/spec-audit.md`.
+4. Der Lauf schreibt **genau einen** Block ins Logbuch `docs/spec-audit.md` — bei Änderungen je eine Zeile pro berührtem Dokument, bei einem Lauf ohne jede Änderung eine kanonische „keine Änderung nötig"-Zeile (AC10–AC12).
 5. Das Ergebnis wird als **ein** Diff (PR/Diff je `merge_policy`) zur Freigabe vorgelegt; nichts landet ungesehen.
 
 ## Alternative Flows
@@ -27,7 +27,7 @@ spec_format: use-case-2.0
 - Ist mindestens eine Spalte (To Do · In Progress · Blocked · In Review) **nicht** leer, wird Stufe 2 **übersprungen** mit Hinweis „erst Board leerräumen". Stufe 1 läuft trotzdem.
 
 ### A2: Keine Drift gefunden
-- Findet eine Stufe nichts zu ändern, erzeugt sie keinen Diff-Rauschen und keinen leeren Logbuch-Block (siehe AC11/E2).
+- Findet der Lauf nichts zu ändern, entsteht **kein** Diff/PR (kein Rauschen im Code-Repo) — aber **trotzdem genau ein** Logbuch-Block mit einer kanonischen „keine Änderung nötig"-Zeile, damit „gelaufen, nichts nötig" von „nie gelaufen" unterscheidbar bleibt (siehe AC12/E2).
 
 ### E1: Konvertierung schlägt für eine Spec fehl
 - Schlägt die Stufe-1-Umschreibung einer einzelnen Spec fehl, bricht der Gesamtlauf nicht ab; die betroffene Spec bleibt unverändert und wird im Logbuch/Diff-Bericht als nicht-konvertiert vermerkt.
@@ -49,8 +49,11 @@ spec_format: use-case-2.0
 - **AC9** — Stufe 2 legt alle Nachzieh-Änderungen als **ein** Diff zur Freigabe vor **und** protokolliert die nachgezogenen Dokumente als Block in `docs/spec-audit.md` (→ AC10/AC11).
 
 ### Logbuch `docs/spec-audit.md`
-- **AC10** — Pro Lauf wird **ein** knapper Block nach `docs/spec-audit.md` geschrieben: Kopf = **Datum**, darunter **je eine Zeile pro berührtem Dokument** (z.B. „Spec X auf use-case-2.0 konvertiert" / „Konzept Y nachgezogen"). Der **neueste** Block steht **oben**. Die Datei liegt im Ziel-Repo neben `docs/`; existiert sie nicht, wird sie angelegt.
-- **AC11** — Der Block enthält **nur** die getroffenen Änderungen (durable Historie): **keine** Tabelle, **keine** Begründung, **keine** Fundstellen, **nicht** die ephemere Roh-Drift-Liste. Eine Stufe **ohne** Änderung erzeugt **keine** Zeile (und damit ggf. keinen Block) — kein leerer Block. *(deckt A2/E2)*
+- **AC10** — Pro Lauf wird **genau ein** knapper Block nach `docs/spec-audit.md` geschrieben — **immer, auch bei einem Lauf ohne jede Änderung** (No-Op): Kopf = **Datum**, darunter bei Änderungen **je eine Zeile pro berührtem Dokument** (z.B. „Spec X auf use-case-2.0 konvertiert" / „Konzept Y nachgezogen"). Der **neueste** Block steht **oben**. Die Datei liegt im Ziel-Repo neben `docs/`; existiert sie nicht, wird sie angelegt.
+- **AC11** — Der Block enthält **nur** die getroffenen Änderungen (durable Historie): **keine** Tabelle, **keine** Begründung, **keine** Fundstellen, **nicht** die ephemere Roh-Drift-Liste. Ein Block ist **nie zeilenlos**: bei Änderungen trägt er ≥ 1 Dokument-Zeile, bei einem No-Op-Lauf **genau eine** kanonische „keine Änderung nötig"-Zeile (→ AC12). Eine einzelne **Stufe** ohne Änderung trägt keine eigene Zeile bei — die No-Op-Zeile entsteht nur, wenn **weder** Stufe 1 **noch** Stufe 2 etwas geändert haben (Block-Ebene = ganzer Lauf, nicht je Stufe).
+
+### Immer ein Block — auch bei No-Op
+- **AC12** — **Jeder** Reconcile-Lauf schreibt **genau einen** Block, auch wenn nichts geändert wurde — so ist „gelaufen, nichts nötig" von „nie gelaufen" unterscheidbar. Umsetzung: hat der Lauf ≥ 1 Änderung, ruft der Skill `scripts/spec-audit-append.sh` mit den Dokument-Zeilen auf (wie bisher, AC10/AC11); hat er **keine**, ruft er es im **expliziten No-Op-Modus** (`--no-op`) auf, der einen validen Block mit **genau einer** kanonischen No-Op-Zeile schreibt (Marker-Präfix „keine Änderung nötig", z.B. „keine Änderung nötig — Doku deckungsgleich mit Vorlage und Code"). Änderungs-Zeilen und `--no-op` **schließen sich gegenseitig aus** (entweder das eine oder das andere, nie beides). **Schutz-Invariante (bestehendes Verhalten bleibt):** ein Aufruf **ohne** Zeilen **und ohne** `--no-op` schreibt weiterhin **nichts** — versehentliche Leer-Aufrufe erzeugen keinen Block; der No-Op-Block entsteht **ausschließlich** durch das explizite Flag. *(deckt A2/E2)*
 
 > **Traceability:** Jeder Test trägt das kanonische Trace-Tag `@trace reconcile#AC<n>`
 > gemäss `knowledge/<lang>.md` → `## Spec-Tagging`. Der `tester` rechnet das Coverage-Gate
@@ -60,18 +63,19 @@ spec_format: use-case-2.0
 - **Skill-Befehl:** `/agent-flow:reconcile` (Arbeitstitel laut Vertrag §2). Auslöser dünn (dev-gui POST `/api/command`), gesamte Logik in agent-flow.
 - **Kanban-Abfrage (Stufe-2-Gate):** „leer" = die vier aktiven Spalten (To Do, In Progress, Blocked, In Review) enthalten **null** Items; abgefragt über das File-Board (`scripts/board`).
 - **Audit-Schnittstelle:** Dispatch von `reviewer` im Audit-Modus (`agents/reviewer.md` „Audit-Modus") = Repo statt Diff, Output = priorisierter Fund-Report, **kein** Gate.
-- **Logbuch-Format:** `docs/spec-audit.md`, Block = Datums-Kopf + 1 Zeile/Dokument, neueste oben, append-prepend (oben einfügen). **Schreib-Mechanismus:** `scripts/spec-audit-append.sh <Zeile> [<Zeile> …]` (Lines auch via Stdin `-`) — idempotent (legt die Datei aus `templates/_docs/spec-audit.md` an, falls sie fehlt), schreibt **nichts**, wenn keine Zeile übergeben wird (AC11).
+- **Logbuch-Format:** `docs/spec-audit.md`, Block = Datums-Kopf + **≥ 1 Zeile** (1/Dokument bei Änderung **oder** genau die eine kanonische No-Op-Zeile), neueste oben, append-prepend (oben einfügen). **Schreib-Mechanismus:** `scripts/spec-audit-append.sh <Zeile> [<Zeile> …]` (Lines auch via Stdin `-`) **oder** `scripts/spec-audit-append.sh --no-op` (schreibt einen Block mit der kanonischen No-Op-Zeile). Idempotent (legt die Datei aus `templates/_docs/spec-audit.md` an, falls sie fehlt). **Schutz-Invariante (AC12):** ohne Zeilen **und** ohne `--no-op` wird **nichts** geschrieben (versehentlicher Leer-Aufruf bleibt folgenlos).
 - **Doc-Schreiber:** ausschließlich der `/agent-flow:reconcile`-Skill (kein anderer Touchpoint schreibt Reconcile-Änderungen).
 
 ## Edge-Cases & Fehlerverhalten
 - **E1:** Einzel-Spec-Konvertierung scheitert → Gesamtlauf läuft weiter; betroffene Spec bleibt unverändert, Vermerk im Diff/Bericht.
-- **E2:** Lauf ohne jede Drift → kein Diff, kein Logbuch-Block (kein Rauschen).
+- **E2:** Lauf ohne jede Drift → **kein** Diff/PR (kein Rauschen im Code-Repo), aber **ein** Logbuch-Block mit kanonischer „keine Änderung nötig"-Zeile (AC12). Jeder Lauf ist im Logbuch belegt; nur der Code-Diff bleibt rauschfrei.
 - Offenes Board bei Stufe 2 → Skip mit Hinweis (AC6), niemals stiller Inhalts-Abgleich von Halbfertigem (Vertrag §7).
 - **E3:** Board-Skelett fehlt komplett bei Stufe 2 (`board.yaml` nicht vorhanden) → Vorbedingung nicht prüfbar, Stufe 2 wird konservativ übersprungen mit eigenem Hinweis (AC6) — kein Absturz des Gesamtlaufs, Stufe 1 läuft unabhängig weiter.
 
 ## NFRs
 - **Sicherheit/Vorsicht:** Kein Landen ohne Diff-Freigabe (beide Stufen, Vertrag §7). Kein Inhalts-Abgleich bei offenem Board. Kein per-Drift-Nachfragen.
 - Stufe 1 ist jederzeit sicher (rein doku-intern, kein Code-Bezug).
+- **Nachvollziehbarkeit:** Jeder Lauf hinterlässt genau eine Spur im Logbuch (auch No-Op) — ein reconcile-Lauf bleibt nie „unsichtbar", „gelaufen ohne Änderung" ist von „nie gelaufen" unterscheidbar (AC12).
 
 ## Nicht-Ziele
 - **Kein** eigener `reconcile`-Agent (Vertrag §7).
