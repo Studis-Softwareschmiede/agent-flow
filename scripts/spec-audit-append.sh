@@ -1,18 +1,33 @@
 #!/usr/bin/env bash
 # scripts/spec-audit-append.sh — Schreib-Mechanismus für das Reconcile-Logbuch docs/spec-audit.md
 #
-# Spec: docs/specs/reconcile.md AC10, AC11. Vertrag: docs/architecture/reconcile-subsystem.md §4.
+# Spec: docs/specs/reconcile.md AC10, AC11, AC12. Vertrag: docs/architecture/reconcile-subsystem.md §4.
 # Aufrufer: /agent-flow:reconcile-Skill (Stufe 1 + Stufe 2 — einziger Schreiber, AC1/AC9).
 #
 # Pro Lauf EIN Block: Kopf = Datum (`## YYYY-MM-DD`, UTC), darunter je eine Markdown-Bullet-Zeile
 # pro berührtem Dokument. Neuester Block steht oben (append-prepend) — direkt unter dem
 # statischen Datei-Kopf (Titel + Blockquote aus templates/_docs/spec-audit.md), vor allen
-# bisherigen Blöcken. Ohne übergebene Zeilen wird NICHTS geschrieben — kein leerer Block,
-# kein Rauschen (AC11/A2/E2).
+# bisherigen Blöcken.
+#
+# Zwei Aufruf-Formen (AC12, schließen sich gegenseitig aus):
+#   (a) Änderungs-Zeilen — eine Zeile pro berührtem Dokument (wie bisher, AC10/AC11).
+#   (b) `--no-op` — expliziter No-Op-Modus: schreibt einen validen Block mit GENAU EINER
+#       kanonischen "keine Änderung nötig"-Zeile, für einen Lauf ohne jede Drift/Änderung
+#       (A2/E2). Der No-Op-Block macht "gelaufen, nichts nötig" von "nie gelaufen"
+#       unterscheidbar (AC12).
+#
+# Schutz-Invariante (AC12, bestehendes Verhalten bleibt): ein Aufruf OHNE Zeilen UND OHNE
+# `--no-op` schreibt weiterhin NICHTS — kein leerer Block, kein Rauschen bei versehentlichen
+# Leer-Aufrufen (AC11/A2/E2). Der No-Op-Block entsteht AUSSCHLIESSLICH durch das explizite
+# `--no-op`-Flag.
+#
+# Werden `--no-op` UND Änderungs-Zeilen gleichzeitig übergeben, ist das ein Aufruffehler
+# (die beiden Modi schließen sich laut AC12 gegenseitig aus): Exit 1, NICHTS geschrieben.
 #
 # Usage:
 #   scripts/spec-audit-append.sh "<Zeile 1>" ["<Zeile 2>" ...]
 #   printf '%s\n' "<Zeile 1>" "<Zeile 2>" | scripts/spec-audit-append.sh -   (Zeilen aus stdin)
+#   scripts/spec-audit-append.sh --no-op                                    (No-Op-Block, AC12)
 #
 # Beispiel:
 #   scripts/spec-audit-append.sh \
@@ -28,12 +43,28 @@
 # Graceful Degradation analog db-subsystem §14 Amendment).
 #
 # Requires: bash >= 4.0, python3.
-# Exit 0 bei leerer Eingabe (kein Schreiben — gewollt, AC11). Exit ≠ 0 nur bei echtem
-# Schreibfehler (Zielverzeichnis nicht beschreibbar o.ä.).
+# Exit 0 bei leerer Eingabe ohne --no-op (kein Schreiben — gewollt, AC11/AC12). Exit 1 bei
+# gleichzeitig übergebenen Änderungs-Zeilen UND --no-op (Aufruffehler, AC12). Exit ≠ 0 sonst
+# nur bei echtem Schreibfehler (Zielverzeichnis nicht beschreibbar o.ä.).
 
 set -euo pipefail
 
 SPEC_AUDIT_FILE="${SPEC_AUDIT_FILE:-docs/spec-audit.md}"
+NO_OP_LINE="keine Änderung nötig — Doku deckungsgleich mit Vorlage und Code"
+
+# ─── --no-op-Flag herausfiltern (AC12) ──────────────────────────────────────
+# Kann an beliebiger Position stehen (typische Aufrufform ist der Alleingang
+# `spec-audit-append.sh --no-op`, aber wir filtern robust aus allen Positionen).
+NO_OP=0
+FILTERED_ARGS=()
+for raw_arg in "$@"; do
+  if [[ "$raw_arg" == "--no-op" ]]; then
+    NO_OP=1
+  else
+    FILTERED_ARGS+=("$raw_arg")
+  fi
+done
+set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
 
 # ─── Zeilen einsammeln ──────────────────────────────────────────────────────
 # coder/L26: ein CLI-/stdin-Argument kann interne \n enthalten (z.B. mehrzeiliger
@@ -57,8 +88,18 @@ else
   done
 fi
 
+# ─── --no-op vs. Änderungs-Zeilen: gegenseitiger Ausschluss (AC12) ─────────
+if [[ "$NO_OP" -eq 1 && "${#LINES[@]}" -gt 0 ]]; then
+  echo "[spec-audit-append] Fehler: --no-op und Änderungs-Zeilen gleichzeitig übergeben — schließen sich aus (AC12), nichts geschrieben" >&2
+  exit 1
+fi
+
+if [[ "$NO_OP" -eq 1 ]]; then
+  LINES=("$NO_OP_LINE")
+fi
+
 if [[ "${#LINES[@]}" -eq 0 ]]; then
-  echo "[spec-audit-append] kein berührtes Dokument übergeben — kein Block geschrieben (AC11)" >&2
+  echo "[spec-audit-append] kein berührtes Dokument übergeben und kein --no-op — kein Block geschrieben (AC11/AC12)" >&2
   exit 0
 fi
 
