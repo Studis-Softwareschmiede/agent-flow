@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "calibrated_at": "2026-06-30",
+  "calibrated_at": "2026-07-01",
   "n_items": 23,
   "ep_per_token": 3e-06,
   "cache_kappa": 0.1,
