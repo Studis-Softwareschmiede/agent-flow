@@ -1,17 +1,17 @@
 ---
 name: reconcile
-description: Startet /agent-flow:reconcile — bringt die docs/ eines Projekts wieder mit der Realität in Deckung (rückwärtige Aufholung, Gegenstück zur vorwärtigen Drift-Disziplin). Stufe 1 (Form, läuft IMMER) hebt jede Spec mit veraltetem/fehlendem spec_format-Stempel automatisch auf die aktuelle Vorlage. Stufe 2 (Inhalt, nur bei leerem Kanban) lässt reviewer im Audit-Modus die Inhalts-Drift zwischen Code und Doku (concept/architecture/specs) ermitteln und zieht die Doku automatisch nach (Code ist maßgebend, kein Einzel-Nachfragen). Beide Stufen liefern zusammen genau EINEN Diff/PR zur Freigabe. Jeder Lauf protokolliert genau EINEN Block in docs/spec-audit.md — mit Dokument-Zeilen bei Änderungen, oder als expliziter --no-op-Block mit kanonischer "keine Änderung nötig"-Zeile, wenn weder Stufe 1 noch Stufe 2 etwas geändert haben (kein Lauf bleibt unprotokolliert). Kein eigener reconcile-Agent — Orchestrierung lebt komplett in diesem Skill. Aufruf: /agent-flow:reconcile.
+description: Startet /agent-flow:reconcile — bringt die docs/ eines Projekts wieder mit der Realität in Deckung (rückwärtige Aufholung, Gegenstück zur vorwärtigen Drift-Disziplin). Stufe 1 (Form, läuft IMMER) hebt jede Spec mit veraltetem/fehlendem spec_format-Stempel automatisch auf die aktuelle Vorlage. Stufe 2 (Inhalt, nur bei leerem Kanban) lässt reviewer im Audit-Modus die Inhalts-Drift zwischen Code und Doku (concept/architecture/specs) ermitteln und zieht die Doku automatisch nach (Code ist maßgebend, kein Einzel-Nachfragen). Beide Stufen liefern zusammen genau EINEN PR zur Freigabe (AC13) — unabhängig von merge_policy; ohne Remote/Auth: committeter lokaler Branch bzw. Working-Tree-Diff als Fallback (AC14); bei reinem No-Op ohne Änderungen entsteht kein PR (AC15). Jeder Lauf protokolliert genau EINEN Block in docs/spec-audit.md — mit Dokument-Zeilen bei Änderungen, oder als expliziter --no-op-Block mit kanonischer "keine Änderung nötig"-Zeile, wenn weder Stufe 1 noch Stufe 2 etwas geändert haben (kein Lauf bleibt unprotokolliert). Kein eigener reconcile-Agent — Orchestrierung lebt komplett in diesem Skill. Aufruf: /agent-flow:reconcile.
 ---
 
 # /agent-flow:reconcile
 
 Bringt die `docs/` des **aktuellen** Projekt-Repos (cwd) wieder mit der Realität in Deckung — on-demand, in zwei Stufen. **Dieser Skill ist der einzige Schreiber** der Reconcile-Änderungen; es gibt **keinen** separaten `reconcile`-Agent (Vertrag `docs/architecture/reconcile-subsystem.md` §7, Spec `docs/specs/reconcile.md` AC1).
 
-Bindende Quellen: `docs/specs/reconcile.md` (AC1–AC12) + `docs/architecture/reconcile-subsystem.md` (FINAL). **Dieser Skill implementiert Stufe 1 (AC1–AC5) UND Stufe 2 (AC6–AC9, Inhalts-Abgleich) vollständig.** Beide Stufen laufen in **derselben** Session; das Ergebnis (falls beide oder nur eine Stufe Änderungen erzeugt) wird **gemeinsam** als **ein** Diff/PR vorgelegt (§4) und **ein** Logbuch-Block geschrieben (§3) — „Pro Lauf ein Block" (AC10) bezieht sich auf den **gesamten** Reconcile-Lauf, nicht auf die einzelne Stufe. **Jeder** Lauf schreibt genau diesen einen Block — auch wenn weder Stufe 1 noch Stufe 2 etwas geändert haben (No-Op, AC12): dann trägt der Block die kanonische „keine Änderung nötig"-Zeile statt Dokument-Zeilen (§3).
+Bindende Quellen: `docs/specs/reconcile.md` (AC1–AC15) + `docs/architecture/reconcile-subsystem.md` (FINAL). **Dieser Skill implementiert Stufe 1 (AC1–AC5) UND Stufe 2 (AC6–AC9, Inhalts-Abgleich) vollständig.** Beide Stufen laufen in **derselben** Session; das Ergebnis (falls beide oder nur eine Stufe Änderungen erzeugt) wird **gemeinsam** als **ein** PR vorgelegt (§4) — **immer**, unabhängig von der Projekt-`merge_policy` (auch bei `direct`, AC13/AC14/AC15) — und **ein** Logbuch-Block geschrieben (§3) — „Pro Lauf ein Block" (AC10) bezieht sich auf den **gesamten** Reconcile-Lauf, nicht auf die einzelne Stufe. **Jeder** Lauf schreibt genau diesen einen Block — auch wenn weder Stufe 1 noch Stufe 2 etwas geändert haben (No-Op, AC12): dann trägt der Block die kanonische „keine Änderung nötig"-Zeile statt Dokument-Zeilen (§3).
 
 ## 0. Setup
-- `.claude/profile.md` lesen → `merge_policy` (`pr`|`direct`), `default_branch`.
-- Bei `merge_policy: pr`: Auth sicherstellen — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gh-auth.sh"`.
+- `.claude/profile.md` lesen → `default_branch`. `merge_policy` verzweigt die Freigabe **nicht mehr** (AC13) — reconcile landet immer als PR, egal ob das Projekt `pr` oder `direct` fährt.
+- Auth **immer** sicherstellen — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gh-auth.sh"` (unabhängig von `merge_policy`, da immer ein PR folgt, AC13). Schlägt das fehl: Stufe 1/2 laufen trotzdem unverändert weiter — der Fallback greift erst in §4 beim tatsächlichen PR-Öffnen (AC14).
 - `git status` — Working-Tree sollte sauber sein, bevor Stufe 1 schreibt (sonst vermischen sich fremde Änderungen mit dem Reconcile-Diff). Ist der Tree nicht sauber: Hinweis ausgeben, User entscheiden lassen, ob fortgefahren wird.
 
 ## 1. Stufe 1 (Form) — läuft IMMER (AC2)
@@ -106,11 +106,22 @@ scripts/spec-audit-append.sh --no-op
 ```
 Das schreibt einen validen Block mit **genau einer** kanonischen „keine Änderung nötig"-Zeile (AC12) — **niemals** wird `spec-audit-append.sh` ganz ausgelassen. Jeder Reconcile-Lauf hinterlässt so **immer** genau einen Logbuch-Block, egal ob mit Änderungs-Zeilen oder als No-Op (AC10/AC12) — „gelaufen, nichts nötig" bleibt von „nie gelaufen" unterscheidbar.
 
-## 4. Freigabe — EIN Diff für den gesamten Lauf (AC1/AC5/AC9)
-Nur falls §1b und/oder §2c mindestens eine Datei tatsächlich geändert/angelegt haben (sonst: nichts zu landen, Lauf endet hier mit „keine Drift gefunden").
+## 4. Freigabe — EIN PR für den gesamten Lauf, IMMER (AC1/AC5/AC9/AC13/AC14/AC15)
 
-- **`merge_policy: pr`:** neuer Branch `reconcile/<YYYY-MM-DD>` ab `default_branch`; **ein** Commit mit **allen** berührten Dateien aus Stufe 1 + Stufe 2 + dem `docs/spec-audit.md`-Block (`git add docs/specs/<konvertierte-pfade> <stufe-2-pfade> docs/spec-audit.md`); Push; `gh pr create` gegen `default_branch` mit Body: Liste der Stufe-1-Konvertierungen (alt-Version → neu-Version) + ggf. Nicht-konvertiert-Liste (§1b.5) + Liste der Stufe-2-Nachzieh-Änderungen (Fund → Doku-Stelle). **Kein Self-Merge** — Freigabe ist Mensch-Gate (analog `train`/`retro`-PR-Mechanik).
-- **`merge_policy: direct`:** **kein** Commit — alle Änderungen (Stufe 1 + Stufe 2) bleiben unstaged im Working-Tree als reiner Diff zur Durchsicht (`git diff`). Output nennt explizit, dass nichts committet wurde und der User den Diff selbst prüft/committet.
+**Kein-PR-Guard zuerst (AC15 — kein leerer No-Op-PR):** Haben **weder** §1b **noch** §2c mindestens eine Datei tatsächlich geändert/angelegt, entsteht **kein** PR und **kein** Branch — der Lauf endet hier mit „keine Drift — kein PR" (der `--no-op`-Block aus §3 bleibt als reiner Working-Tree-Eintrag stehen, AC12 bleibt davon unberührt). **Nur** wenn §1b und/oder §2c ≥ 1 Datei substanziell geändert/angelegt haben, geht es mit den folgenden Schritten weiter.
+
+Reconcile landet sein Gesamt-Ergebnis **immer** als **ein** PR — **unabhängig** von `merge_policy` (auch bei `direct`, AC13). Der frühere `merge_policy: direct`-Sonderfall (unstaged Working-Tree-Diff, kein Commit) entfällt für reconcile ersatzlos.
+
+1. **Branch + Commit:** neuer Branch `reconcile/<YYYY-MM-DD>` ab `default_branch` (`git checkout -b reconcile/<YYYY-MM-DD> <default_branch>`; existiert der Branchname bereits — z.B. zweiter Lauf am selben Tag — Suffix `-2`, `-3`, … anhängen). **Ein** Commit mit **allen** berührten Dateien aus Stufe 1 + Stufe 2 + dem `docs/spec-audit.md`-Block (`git add docs/specs/<konvertierte-pfade> <stufe-2-pfade> docs/spec-audit.md && git commit -m "..."`).
+   - **Scheitert bereits Branchen/Committen** (z.B. Working-Tree-Konflikt) → Fallback **(b)** unten: Änderungen bleiben als reiner Working-Tree-Diff erhalten.
+2. **Push:** `git push -u origin reconcile/<YYYY-MM-DD>`.
+   - **Scheitert der Push** (kein Remote konfiguriert, `gh`-Auth aus §0 fehlgeschlagen, Push abgelehnt) → Fallback **(a)** unten: der committete lokale Branch bleibt erhalten.
+3. **PR:** `gh pr create` gegen `default_branch` mit Body: Liste der Stufe-1-Konvertierungen (alt-Version → neu-Version) + ggf. Nicht-konvertiert-Liste (§1b.5) + Liste der Stufe-2-Nachzieh-Änderungen (Fund → Doku-Stelle). **Kein Self-Merge** — Freigabe ist ausschließlich Mensch-Gate (analog `train`/`retro`-PR-Mechanik).
+
+**Fallback ohne Remote/Auth (AC14) — kein stiller Fehlschlag, kein Datenverlust:**
+- **(a) Branch + Commit gelungen, Push/PR gescheitert:** der committete lokale Branch `reconcile/<YYYY-MM-DD>` bleibt erhalten (kein Rollback). Ausgabe: klare Meldung *warum* kein PR entstand (kein Remote konfiguriert / `gh`-Auth fehlgeschlagen / Push abgelehnt) **und** *wie der Mensch nachzieht* (Remote setzen bzw. `bash scripts/ensure-gh-auth.sh` prüfen, dann `git push -u origin reconcile/<YYYY-MM-DD>` und `gh pr create` manuell ausführen).
+- **(b) schon Branchen/Committen gescheitert:** die Änderungen (Stufe 1 + Stufe 2) bleiben unstaged im Working-Tree als reiner Diff erhalten (`git diff`). Ausgabe: klare Meldung + Hinweis, dass der User den Diff selbst prüft/committet/branched.
+- In beiden Fällen endet der Lauf mit **definiertem** Status — nie mit einem stillschweigend verschluckten Fehler.
 
 ## Output
 ```
@@ -119,12 +130,12 @@ Stufe 1: <N> Spec(s) konvertiert, <M> nicht-konvertiert (E1)
   Nicht-konvertiert: <pfad> (<grund>), …
 Stufe 2: <übersprungen — Board nicht leer | übersprungen — kein Board-Skelett | <K> Dokument(e) nachgezogen | keine Inhalts-Drift gefunden>
   Nachgezogen: <pfad> (<Fund-Kurzbeschreibung>), …
-Diff: <PR-Link | "Working-Tree-Diff, nicht committet (merge_policy: direct)" | "keine Drift gefunden — nichts zu tun">
+Diff: <PR-Link | "Kein PR — Fallback: committeter lokaler Branch reconcile/<YYYY-MM-DD> (Grund: <kein Remote|Auth fehlgeschlagen|Push abgelehnt>; Nachziehen: <Remote setzen bzw. Auth prüfen, dann push+PR manuell>)" | "Kein PR — Fallback: Working-Tree-Diff, nicht committet (Grund: <Branchen/Committen gescheitert>; Nachziehen: Diff selbst prüfen/committen)" | "keine Drift — kein PR">
 ```
 
 ## Grenzen (HART)
 - Editiert **ausschließlich** Doku: `docs/specs/*.md` (Stufe 1 + Stufe 2), `concept.md`/`CONCEPT.md`, `architecture.md`/`docs/architecture/*.md` (Stufe 2) + `docs/spec-audit.md` (Logbuch) — **kein** App-Code, **keine** Board-Status-Änderung.
 - **Kein** eigener `reconcile`-Agent. **Kein** Task-Dispatch für das Schreiben der Konvertierung (Stufe 1) oder des Nachzugs (Stufe 2) — die Skill-Session restrukturiert/schreibt selbst (AC1, Vertrag §7). Der **einzige** Task-Dispatch ist der `reviewer`-Audit-Dispatch in §2b (reines **Erkennen**, kein Schreiben).
-- **Kein** Self-Merge des eigenen PRs (`merge_policy: pr`) — Mensch-Gate Pflicht.
+- **Kein** Self-Merge des eigenen PRs — immer Mensch-Gate, unabhängig von `merge_policy` (AC13).
 - Stufe 2 läuft **ausschließlich** bei `empty` aus §2a (AC6, hart) — bei `not-empty` oder `no-board` **kein** Audit-Dispatch, **kein** Doku-Nachzug.
 - **Kein** Einzel-Nachfragen pro Drift-Fund (AC8) — der Mensch-Gate ist ausschließlich der finale Diff-Blick in §4.
