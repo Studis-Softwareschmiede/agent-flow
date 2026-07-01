@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** 2026-06-15 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-07-01 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -108,3 +108,32 @@ Reasoning-Profil hat — `frontier` ist daher kein pauschales „besser als max-
 opt-in Frontier-Wahl. Verfügbarkeit als `model`-Override empirisch bestätigt (2026-06-10).
 Spec der Einbindung: `docs/specs/frontier-cost-mode.md`. *(Der frühere Scope-Cut-Hinweis ist mit
 dieser Einbindung aufgelöst.)*
+
+## Kuration 2026-07-01 (reiner Frischelauf, kein Klassen-/Tier-Delta)
+
+**Soll-Ist-Abgleich gegen alle drei primary_sources** (Models overview, Model deprecations,
+Pricing — Stand 2026-07-01): kein V3-Trigger zutreffend.
+
+- **(a) Neue Klasse/Tier:** keine. `claude-mythos-5`/`claude-mythos-preview` sind laut Models
+  overview zwar sichtbar, aber explizit „not generally available" / „invitation-only" ([Project
+  Glasswing](https://anthropic.com/glasswing)) — keine breit verfügbare Klasse neben
+  `haiku`/`sonnet`/`opus`/`fable`, daher keine Matrix-Relevanz.
+- **(b) Deprecation/Umbenennung einer verwendeten Klasse:** keine. Alle vier in der Matrix
+  verwendeten Klassen-Namen (`haiku`, `sonnet`, `opus`, `fable`) sind weiterhin aktiv geführte
+  Klassen; lediglich Punktversionen wechseln (Opus 4.8 aktiv, Opus 4.1 deprecated → Retirement
+  5. Aug 2026 laut [Model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations#model-status) —
+  betrifft nur eine alte Punktversion der Klasse `opus`, nicht die Klasse selbst → kein Trigger
+  nach AC4).
+- **(c) Tier-Rebalancing:** keines. Preis-Ordnung laut
+  [Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing) unverändert
+  `haiku` ($1/$5 MTok) < `sonnet` ($3/$15 Standard ab 1.9.2026, $2/$10 introduktorisch bis
+  31.8.2026) < `opus` ($5/$25 MTok) < `fable` ($10/$50 MTok) — die Klassen-Reihenfolge I2
+  (`low-cost ≤ balanced ≤ max-quality`) bleibt konsistent mit der Matrix.
+
+**Invarianten geprüft:** I1 (balanced == Agent-Frontmatter, unverändert), I2 (Klassen-Ordnung
+`haiku ≤ sonnet ≤ opus ≤ fable` weiterhin preislich/leistungsmäßig konsistent), I3 (Rollen-Zeilen
+unverändert vollständig — kein neuer dispatchbarer Agent seit 2026-06-15 bekannt). Keine
+Invariante verletzt.
+
+`last_curated` auf 2026-07-01 aktualisiert (Frischesignal, AC5/AC9); Matrix inhaltlich
+unverändert.
