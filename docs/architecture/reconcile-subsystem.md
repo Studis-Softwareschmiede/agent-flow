@@ -38,7 +38,7 @@ Bringt jede Spec auf die **neueste Vorlagen-Version**. Sicher jederzeit, weil re
   eigene Revisions-Achse. So bleiben Versionen über die offizielle Nummerierung unterscheidbar.
 - **Vergleich + Konvertierung.** Specs mit älterem **oder fehlendem** `spec_format` werden **automatisch** in
   die aktuelle Vorlage umgeschrieben (ein Agent restrukturiert) und neu gestempelt.
-- **Freigabe.** Das Ergebnis wird als **ein** Diff zur Freigabe vorgelegt — nichts landet ungesehen.
+- **Freigabe.** Das Ergebnis wird zusammen mit Stufe 2 als **ein PR** zur Freigabe vorgelegt (siehe „Freigabe — immer ein PR" unten) — nichts landet ungesehen.
 
 ### Stufe 2 — Inhalt (NUR bei leerem Kanban)
 Gleicht den **Inhalt** der Doku gegen den **Code** ab.
@@ -54,8 +54,23 @@ Gleicht den **Inhalt** der Doku gegen den **Code** ab.
   Drift-Gate** (Endpunkte/UI/I-O/Fehler-Statuscodes/Datenfelder/NFR-Limits; reiner Refactor zählt nicht).
 - **Nachziehen (automatisch).** Code ist Wahrheit → die Doku wird **automatisch** an den Code angeglichen,
   fehlende Docs werden angelegt. **Kein Einzel-Nachfragen pro Abweichung.**
-- **Freigabe.** Alles als **ein** Diff zur Freigabe — der Mensch-Gate ist der finale Diff-Blick, nicht eine
-  Entscheidung je Drift.
+- **Freigabe.** Alles zusammen mit Stufe 1 als **ein PR** zur Freigabe — der Mensch-Gate ist der finale
+  Diff-Blick im PR, nicht eine Entscheidung je Drift.
+
+### Freigabe — immer ein PR (unabhängig von `merge_policy`)
+Reconcile landet sein **Gesamt-Ergebnis** (Stufe 1 + Stufe 2 + `docs/spec-audit.md`-Block) **immer als genau
+einen PR** — auch bei `merge_policy: direct`. Der Reconcile-Diff ist ein **Review-Artefakt**, kein
+Direkt-Push-Fall; deshalb entfällt der frühere `direct`-Sonderfall (unstaged Working-Tree-Diff, kein Commit)
+für reconcile ersatzlos. Mechanik (identisch zum bisherigen `pr`-Pfad, analog `train`/`retro`): Branch
+`reconcile/<YYYY-MM-DD>` ab `default_branch` · **ein** Commit mit allen berührten Dateien + Logbuch-Block ·
+Push · `gh pr create` gegen `default_branch` · **kein** Self-Merge (Mensch-Gate). Auth vor dem PR über
+`${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gh-auth.sh`.
+
+- **Kein Remote / keine Auth** → kein stiller Fehlschlag: committeter lokaler Branch (bzw. Working-Tree-Diff,
+  falls schon das Branchen/Committen scheitert) bleibt erhalten + klare Nachzieh-Meldung.
+- **No-Op-Lauf** (weder Stufe 1 noch Stufe 2 hat etwas geändert) → **kein** PR, **kein** Branch; nur der
+  `--no-op`-Logbuch-Block wird im Working-Tree geschrieben (Buchhaltung, kein Review-Artefakt). Ein PR entsteht
+  ausschließlich bei ≥ 1 substanziell geänderter/angelegter Doku-Datei.
 
 ## 4. Logbuch — `docs/spec-audit.md` (ein Dokument pro Projekt)
 
@@ -75,7 +90,7 @@ Roh-Drift-Liste (die ist ephemer). Liegt im Ziel-Repo neben `docs/`.
 
 - **dev-gui** — der Button (Muster wie „Board abarbeiten"/„Änderung erfassen").
 - **`/agent-flow:reconcile`** (neu) — orchestriert Stufe 1 + Stufe 2; einziger Schreiber der Doc-Änderungen
-  (als PR/Diff je Projekt-`merge_policy`).
+  (immer als **ein PR**, unabhängig von der Projekt-`merge_policy` — der Reconcile-Diff ist ein Review-Artefakt).
 - **`reviewer`** — Audit-Modus liefert die Inhalts-Drift (Stufe 2); setzt **kein** Gate, berichtet nur.
 - **`requirement` / konvertierender Agent** — Stufe-1-Umschreibung in die neue Vorlage.
 - **`templates/_docs/specs/_template.md`** — bekommt das `spec_format`-Feld + nennt die aktuelle Version;
@@ -84,7 +99,8 @@ Roh-Drift-Liste (die ist ephemer). Liegt im Ziel-Repo neben `docs/`.
 
 ## 7. Bewusst NICHT
 
-- **Kein Landen ohne Diff-Freigabe** — beide Stufen legen genau einen Diff vor; nichts landet ungesehen.
+- **Kein Landen ohne Freigabe** — das Gesamt-Ergebnis geht **immer** durch genau einen PR mit Mensch-Gate;
+  nichts landet ungesehen, nie per Self-Merge, nie per Direkt-Push (auch nicht bei `merge_policy: direct`).
 - **Kein Inhalts-Abgleich (Stufe 2) bei offenem Board** — sonst würde halbfertige Arbeit zur Wahrheit erklärt.
 - **Kein eigener interner Revisions-Zähler** — wir folgen der Standard-Version (`use-case-2.x`).
 - **Kein per-Drift-Nachfragen in Stufe 2** — Code ist maßgebend, der Mensch prüft das Gesamt-Ergebnis.
