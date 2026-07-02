@@ -27,8 +27,8 @@
 
 | Rolle | `low-cost` | `balanced` | `max-quality` | `frontier` |
 |---|---|---|---|---|
-| architekt   | sonnet | opus   | opus   | **fable**  |
-| requirement | sonnet | opus   | opus   | **fable**  |
+| architekt   | opus   | opus   | opus   | **fable**  |
+| requirement | opus   | opus   | opus   | **fable**  |
 | retro       | sonnet | opus   | opus   | opus   |
 | teamLeader  | sonnet | opus   | opus   | opus   |
 | reviewer    | sonnet | sonnet | opus   | **fable**  |
@@ -36,7 +36,7 @@
 | dba         | haiku  | sonnet | opus   | opus   |
 | estimator   | haiku  | sonnet | opus   | opus   |
 | coder       | haiku  | sonnet | opus   | **fable**  |
-| designer    | haiku  | sonnet | opus   | opus   |
+| designer    | opus   | opus   | opus   | opus   |
 | train       | sonnet | sonnet | opus   | opus   |
 | cicd        | haiku  | sonnet | sonnet | sonnet |
 
@@ -50,6 +50,32 @@ nicht pauschal besser. Spec: `docs/specs/frontier-cost-mode.md` (V3/AC3).
 `balanced` gibt der Skill **keinen** `model`-Override mit — der Agent läuft auf seinem Frontmatter-Wert.
 In `low-cost`/`max-quality`/`frontier` schlägt der Skill die Rolle in dieser Tabelle nach und übergibt den
 Treffer als `model`-Override beim Task-Dispatch (Präzedenz: **Override > Frontmatter > Session-Erbe**).
+
+## Design-Rollen-Pinning (Phasen-Prinzip)
+
+**Design-Rollen sind gepinnt — Owner-Entscheidung 2026-07-02, Begründung: Upstream-Fehler
+multiplizieren sich downstream.** Eine ungenaue Spec/Architektur/Datenmodell/Design-System vererbt
+Fehler an alle nachgelagerten Rollen (coder/tester/reviewer); ein Fehler in einer Umsetzungs-Rolle
+bleibt dagegen lokal und ist im nächsten Loop korrigierbar. Deshalb laufen die Design-Rollen
+**unabhängig vom aktiven Cost-Mode** durchgängig auf `opus` (`max-quality`-Niveau); nur `frontier`
+bleibt als bewusstes Opt-in davon unberührt (D1).
+
+**Design-Rollen-Menge (abschließend):** `{ requirement, architekt, designer, dba(Design-Modus) }`.
+
+- `requirement`, `architekt`, `designer`: das Pinning steckt direkt in den Matrix-Zeilen oben
+  (`opus` in `low-cost`/`balanced`/`max-quality`; `frontier`-Spalte unverändert).
+- `dba` **im Design-Modus** (Datenmodell-Entwurf, `docs/data-model.md`): die Matrix-Zeile `dba`
+  bleibt unverändert — sie deckt den **Review-Modus**, der weiter dem Cost-Mode folgt (Edge-Case
+  E2 der Spec). Der Design-Modus-Dispatch erhält stattdessen an der Dispatch-Stelle selbst einen
+  `model: opus`-Override, unabhängig vom aktiven Cost-Mode — dokumentiert in
+  `skills/from-notes/SKILL.md` (§0/Stufe b).
+
+**Curator-Hinweis (`/train model-tiers`):** Der Curator darf dieses Pinning **nicht**
+wegkuratieren — `requirement`/`architekt`/`designer` bleiben in `low-cost`/`balanced`/`max-quality`
+auf `opus`, unabhängig von etwaigen empirischen Kosten-Vorschlägen eines Curator-Laufs. Ein
+Curator-Vorschlag, der eine dieser Zellen unter `opus` senkt, ist gegen diese Spec
+(`docs/specs/model-phase-pinning.md`) zu verwerfen. Spec: `docs/specs/model-phase-pinning.md`
+(AC1–AC5).
 
 ## Auflösung des aktiven Modus (Präzedenz, höchste zuerst)
 
