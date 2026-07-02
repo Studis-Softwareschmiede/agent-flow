@@ -153,7 +153,9 @@ REQUIRED_IMPORTED = ["id", "parent", "title", "status", "priority", "created_at"
 # Felder, die bei importierten Stories als WARN STORY-UNSPEC gemeldet werden (nicht als FEHLER)
 IMPORTED_OPTIONAL_WARN = {"spec", "implements"}
 
-ENUM_STATUS = {"To Do", "In Progress", "Blocked", "In Review", "Done"}
+# Terminale Menge = {Done, Verworfen}; Verworfen (Won't-Do/Obsolete) ist terminal,
+# aber nie erfolgreich (kein done_at, zaehlt nicht in done/total) — s. story-status-verworfen.
+ENUM_STATUS = {"To Do", "In Progress", "Blocked", "In Review", "Done", "Verworfen"}
 ENUM_PRIORITY = {"P0", "P1", "P2", "P3"}
 ENUM_SIZE_EST = {"S", "M", "L", "XL"}
 ENUM_CONFIDENCE = {"high", "medium", "low"}

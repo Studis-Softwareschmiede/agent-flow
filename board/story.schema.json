@@ -24,8 +24,8 @@
     },
     "status": {
       "type": "string",
-      "enum": ["To Do", "In Progress", "Blocked", "In Review", "Done"],
-      "description": "Story-Lebenszyklus-Status. Einziger Schreiber: /flow."
+      "enum": ["To Do", "In Progress", "Blocked", "In Review", "Done", "Verworfen"],
+      "description": "Story-Lebenszyklus-Status. Einziger Schreiber: /flow. Terminale Menge = {Done, Verworfen}; Verworfen (Won't-Do/Obsolete) ist terminal, aber nie erfolgreich (kein done_at, zaehlt nicht in done/total)."
     },
     "priority": {
       "type": "string",

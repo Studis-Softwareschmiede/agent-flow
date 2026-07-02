@@ -523,8 +523,8 @@ cmd_set() {
         esac
       elif [[ "$id" =~ ^S-[0-9]{3,}$ ]]; then
         case "$wert" in
-          "To Do"|"In Progress"|Blocked|"In Review"|Done) ;;
-          *) die "set: status muss 'To Do'|'In Progress'|Blocked|'In Review'|Done sein für Stories, war '$wert'" ;;
+          "To Do"|"In Progress"|Blocked|"In Review"|Done|Verworfen) ;;
+          *) die "set: status muss 'To Do'|'In Progress'|Blocked|'In Review'|Done|Verworfen sein für Stories, war '$wert'" ;;
         esac
       fi
       ;;
@@ -752,8 +752,8 @@ PYEOF
 # Verb: next — Queue-Logik (AC6, board-cli-Spec V6 + board-subsystem §7)
 #
 # Algorithmus:
-#   1. Kandidaten = alle Stories mit status == "To Do"
-#   2. Filter: alle depends-Stories haben status == "Done" (offene → überspringen)
+#   1. Kandidaten = alle Stories mit status == "To Do" (Verworfen nie enthalten, AC4)
+#   2. Filter: alle depends-Stories terminal (status ∈ {Done, Verworfen}, AC3; offene → überspringen)
 #   3. Sortierung: Story-priority (P0<P1<P2<P3) → Parent-Feature-priority → id (aufsteigend)
 #   4. Ergebnis = erstes Element als JSON (id, spec, implements, parent, priority, labels)
 #      Keine bereite Story → leere Ausgabe, Exit 0
@@ -836,13 +836,14 @@ for path in feature_files:
         features[fid] = data
 
 # --- Schritt 1: Kandidaten = To-Do-Stories ---
+# Nur "To Do" ist Kandidat; "Verworfen" (terminal, Won't-Do) wird NIE aufgegriffen (AC4).
 candidates = [
     (sid, data)
     for sid, data in stories.items()
     if str(data.get("status", "")).strip() == "To Do"
 ]
 
-# --- Schritt 2: Filter — alle depends Done ---
+# --- Schritt 2: Filter — alle depends terminal ({Done, Verworfen}) ---
 ready = []
 for sid, data in candidates:
     deps = data.get("depends")
@@ -852,10 +853,13 @@ for sid, data in candidates:
         deps = [deps]
     deps = [str(d).strip() for d in deps if str(d).strip()]
 
+    # Depends-Gate: terminale Menge = {Done, Verworfen} erfuellt das Gate
+    # (Verworfen = terminal, s. story-status-verworfen AC3). Ein Dependent wird
+    # dadurch nicht dauerhaft blockiert, wenn seine Vorbedingung verworfen wurde.
     all_done = True
     for dep_id in deps:
         dep_data = stories.get(dep_id, {})
-        if str(dep_data.get("status", "")).strip() != "Done":
+        if str(dep_data.get("status", "")).strip() not in ("Done", "Verworfen"):
             all_done = False
             break
 
@@ -1037,9 +1041,13 @@ done_count  = status_counter.get("Done", 0)
 ip_count    = status_counter.get("In Progress", 0)
 review_count = status_counter.get("In Review", 0)
 blocked_count = status_counter.get("Blocked", 0)
+verworfen_count = status_counter.get("Verworfen", 0)
 todo_count  = status_counter.get("To Do", 0)
 
-# Format: "<done>/<total> done [· <n> in progress] [· <n> in review] [· <n> blocked]"
+# Format: "<done>/<total> done [· <n> in progress] [· <n> in review] [· <n> blocked] [· <n> verworfen]"
+# done/total zaehlt NUR erfolgreich abgeschlossene (Done); Verworfen wird separat
+# als Suffix ausgewiesen (nur wenn N>0) und nicht in done gemischt (AC5).
+# Der "<done>/<total> done"-Praefix bleibt formatstabil (ROLLUP-STALE-Praefix-Check).
 parts = [f"{done_count}/{total} done"]
 if ip_count > 0:
     parts.append(f"{ip_count} in progress")
@@ -1047,8 +1055,16 @@ if review_count > 0:
     parts.append(f"{review_count} in review")
 if blocked_count > 0:
     parts.append(f"{blocked_count} blocked")
+if verworfen_count > 0:
+    parts.append(f"{verworfen_count} verworfen")
 
 progress_str = " · ".join(parts) if total > 0 else "0/0 done"
+
+# Feature-Vollstaendigkeit (terminale Menge {Done, Verworfen}) ist erreicht, wenn
+# done + verworfen == total. Der progress-String ist das Signal, aus dem der Owner
+# (bzw. der dev-gui-Aggregator) den Feature-Rollup-Status Done ableitet (board-subsystem §5);
+# rollup schreibt selbst keinen Feature-Status. Der done/total-Zaehler behaelt die Bedeutung
+# "erfolgreich abgeschlossen / gesamt"; Verworfen zaehlt terminal, aber nie als erfolgreich (AC5).
 
 # --- Nur abgeleitete Felder + updated_at überschreiben ---
 feat_data = normalize_all(feat_data)
