@@ -1,7 +1,7 @@
 ---
 id: story-status-verworfen
 title: Story-Status „Verworfen" (Won't-Do/Obsolete) — Enum-Erweiterung + terminale Semantik
-status: draft
+status: active
 version: 1
 spec_format: use-case-2.0
 ---

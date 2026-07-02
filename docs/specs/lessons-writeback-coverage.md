@@ -1,7 +1,7 @@
 ---
 id: lessons-writeback-coverage
 title: Lessons-Write-back für alle Loop-Rollen — tester, dba (Review), cicd + requirement, estimator, architekt, designer schreiben Tier-1-Lessons
-status: draft
+status: active
 version: 2
 spec_format: use-case-2.0
 ---

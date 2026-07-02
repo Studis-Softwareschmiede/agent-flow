@@ -1,7 +1,7 @@
 ---
 id: obsidian-sync
 title: Obsidian-Sync — wiederholter Abgleich Notiz ↔ Konzept/Spec (kein Blind-Overwrite)
-status: draft
+status: active
 version: 1
 spec_format: use-case-2.0
 ---

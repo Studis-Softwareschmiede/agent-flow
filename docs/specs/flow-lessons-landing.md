@@ -1,7 +1,7 @@
 ---
 id: flow-lessons-landing
 title: Lessons überleben das Worktree-Landen — cicd trägt .claude/lessons/*.md IMMER mit
-status: draft
+status: active
 version: 1
 spec_format: use-case-2.0
 ---
