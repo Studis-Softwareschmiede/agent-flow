@@ -1,21 +1,30 @@
 ---
 name: from-notes
-description: Speist einen Obsidian-Notiz-Ordner als dritten Requirement-Weg in den Fabrik-Pfad Konzept -> Spezifikation -> Story ein. Orchestriert drei Stufen IN REIHE — (a) Notiz-Korpus -> docs/concept.md, (b) Konzept -> docs/specs/<feature>.md (+ architekt/dba wo nötig), (c) Spec(s) -> Board-Items/Stories über den bestehenden requirement-Agenten. Ein Fragenkatalog-Gate pro Stufe (genau EIN gesammelter Katalog, am Stück beantwortet; leer -> Auto-Durchlauf), Commit pro Stufe in harter Reihenfolge. Authoring-only — schreibt NUR docs/, das Profilfeld obsidian_source und Board-Items (To Do); KEIN App-Code, KEIN /flow-Start, KEIN Merge/Deploy, KEIN Schreiben in den Notiz-Ordner. Im Ziel-Projekt-Repo ausführen. Aufruf: /agent-flow:from-notes [--cost <mode>] [<ordnerpfad>].
+description: Speist einen Obsidian-Notiz-Ordner als dritten Requirement-Weg in den Fabrik-Pfad Konzept -> Spezifikation -> Story ein. Orchestriert drei Stufen IN REIHE — (a) Notiz-Korpus -> docs/concept.md, (b) Konzept -> docs/specs/<feature>.md (+ architekt/dba wo nötig), (c) Spec(s) -> Board-Items/Stories über den bestehenden requirement-Agenten. Ein Fragenkatalog-Gate pro Stufe (genau EIN gesammelter Katalog, am Stück beantwortet; leer -> Auto-Durchlauf), Commit pro Stufe in harter Reihenfolge. Zweiter Modus --sync (Re-Sync, Spec obsidian-sync): gleicht den aktuellen Notiz-Stand gegen docs/concept.md + docs/specs/* ab, meldet Divergenzen als priorisierten Bericht und legt sie als genau EINEN Fragenkatalog (stage sync, je Divergenz uebernehmen/behalten/manuell) vor — schreibt NUR die als uebernehmen gewaehlten Aenderungen, nie automatisch (invertierte Reconcile-Autoritaet); teilt Reader + Katalog-Gate mit dem Ingest und laesst den Reconcile-Vertrag unangetastet (kein Reconcile-Stufe-0). Authoring-only — schreibt NUR docs/, das Profilfeld obsidian_source und Board-Items (To Do); KEIN App-Code, KEIN /flow-Start, KEIN Merge/Deploy, KEIN Schreiben in den Notiz-Ordner. Im Ziel-Projekt-Repo ausführen. Aufruf: /agent-flow:from-notes [--cost <mode>] [--sync] [<ordnerpfad>].
 ---
 
-# /agent-flow:from-notes [--cost <mode>] [<ordnerpfad>]
+# /agent-flow:from-notes [--cost <mode>] [--sync] [<ordnerpfad>]
 
 Speist einen **Obsidian-Notiz-Ordner** (mehrere freie `.md`-Notizen aus der Ideen-/Konzeptphase) als **dritten** Requirement-Weg (neben `new-project`/`init` und `requirement`) in den bestehenden Fabrik-Pfad **Konzept → Spezifikation → Story** ein. cwd = Ziel-Projekt-Repo.
 
 **Dieser Skill ist der einzige Schreiber** der Doc-/Board-/Profil-Änderungen dieses Flusses und orchestriert **drei Stufen in Reihe** — er baut **keinen** eigenen Zerlege-, Schätz- oder Übersetzungs-Baustein neu, sondern **wiederverwendet** die bestehenden Bausteine (Reader, Fragenkatalog-Gate, `requirement`/`architekt`/`dba`).
 
-Bindende Quellen: `docs/specs/obsidian-ingest.md` (AC11–AC14, sowie AC1–AC10 der wiederverwendeten Bausteine) + `docs/architecture/obsidian-ingest-subsystem.md` (§3 Drei-Stufen-Pipeline, §4 `obsidian_source`, §6 dev-gui-Schnittstelle). Der Re-Sync-Modus (`--sync`) ist **nicht** Teil dieses Items — er lebt in `[[obsidian-sync]]` (Schwester-Spec, teilt Reader + Katalog-Gate).
+Bindende Quellen: `docs/specs/obsidian-ingest.md` (AC11–AC14, sowie AC1–AC10 der wiederverwendeten Bausteine) + `docs/architecture/obsidian-ingest-subsystem.md` (§3 Drei-Stufen-Pipeline, §4 `obsidian_source`, §5 Re-Sync, §6 dev-gui-Schnittstelle). Der **Re-Sync-Modus** (`--sync`) ist ein **eigener Modus dieses Skills** (Spec `docs/specs/obsidian-sync.md`, AC1–AC6, §5 unten); er teilt Reader + Katalog-Gate mit dem Ingest und lässt den Reconcile-Vertrag (`docs/architecture/reconcile-subsystem.md`) **unangetastet**.
 
 > **Authoring-only (AC14, hart).** Die Pipeline schreibt **ausschließlich** durable Docs (`docs/`), das Profilfeld `obsidian_source` und Board-Items (Status **To Do**). **Kein** App-Code, **kein** `/flow`-Start, **kein** Merge/Deploy und **kein** Schreiben in den Notiz-Ordner (der Vault ist rein lesende externe Quelle, AC6). Item-Status bleibt allein `/flow`-Hoheit.
 
+## Modus-Wahl — Ingest (Default) vs. Re-Sync (`--sync`) (obsidian-sync AC1)
+
+Der Skill hat **zwei Modi**:
+
+- **ohne `--sync`** → **Ingest** (Default): Stufen a→b→c (§0–§4). Notiz **erzeugt** initial Konzept/Spec/Stories.
+- **mit `--sync`** → **Re-Sync** (§5, Spec `docs/specs/obsidian-sync.md`): gleicht den **aktuellen Notiz-Stand** gegen den **aktuellen `docs/concept.md` + `docs/specs/*`-Stand** ab, **meldet** Divergenzen und legt sie als **genau EINEN** Fragenkatalog (`stage:"sync"`) vor — schreibt Konzept/Spec **nie** automatisch (invertierte Reconcile-Autorität, obsidian-sync AC3).
+
+Das `--sync`-Token wird — wie `--cost` — **vor** der Ordnerpfad-Auswertung herausgeparst und gehört **nicht** zum Ordnerpfad. Beide Modi teilen sich denselben **Reader** (§0b) und dasselbe **Fragenkatalog-Gate**; der Re-Sync ist ein **eigener Modus** und lässt den **Reconcile-Vertrag** (`docs/architecture/reconcile-subsystem.md`) **unangetastet** — er ist **kein** Reconcile-„Stufe 0" (obsidian-sync AC1). Bei `--sync` gelten **§0** (Setup) und **§0a/§0b** (Ordner + Reader, rein lesend) sinngemäß; die Ingest-Stufen **§1–§3 laufen dann nicht**, stattdessen **§5**.
+
 ## 0. Setup
 
-- **Cost-Mode auflösen:** Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced` (Kurzformen `low`/`max`/`front` normalisieren; `front`→`frontier`). Beim Task-Dispatch der Agenten (`requirement`/`architekt`/`dba` in Stufe b/c) den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Zeile = Rolle) mitgeben; bei `balanced` **keinen** Override (Agent-Frontmatter gilt). Das `--cost`-Token gehört NICHT zum Ordnerpfad — vor der Argument-Auswertung herausparsen.
+- **Cost-Mode auflösen:** Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced` (Kurzformen `low`/`max`/`front` normalisieren; `front`→`frontier`). Beim Task-Dispatch der Agenten (`requirement`/`architekt`/`dba` in Stufe b/c) den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Zeile = Rolle) mitgeben; bei `balanced` **keinen** Override (Agent-Frontmatter gilt). Das `--cost`-Token gehört NICHT zum Ordnerpfad — vor der Argument-Auswertung herausparsen. Ebenso das **`--sync`**-Token (Modus-Wahl, siehe *Modus-Wahl* oben): vor der Ordnerpfad-Auswertung herausparsen; ist es gesetzt → **Re-Sync-Modus** (§5), sonst Ingest.
 - **Auth herstellen:** `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"` (mintet App-Token, loggt `gh` ein — für Stufe c, die über `requirement` Board-Items anlegt). NICHT `gh auth login --web`.
 - **Profil lesen:** `.claude/profile.md` → `default_branch`, `cost_mode`, `obsidian_source` (falls gesetzt).
 - **Working-Tree sollte sauber sein**, bevor Stufe a schreibt (sonst vermischen sich fremde Änderungen mit dem Stufen-Commit). Ist der Tree nicht sauber: Hinweis ausgeben, User entscheiden lassen, ob fortgefahren wird.
@@ -116,6 +125,72 @@ Stufe c: <m> Board-Item(s) (To Do) via requirement — Katalog c: <…> — comm
 Bereit für /agent-flow:flow.
 ```
 
+## 5. Re-Sync-Modus (`--sync`) — Notiz ↔ Konzept/Spec abgleichen (obsidian-sync AC1–AC6)
+
+**Nur bei `--sync`** (statt der Ingest-Stufen §1–§3). Bindende Quelle: `docs/specs/obsidian-sync.md` (AC1–AC6) + `docs/architecture/obsidian-ingest-subsystem.md` §5. Dieser Modus **erkennt und meldet** Widersprüche zwischen dem **aktuellen Notiz-Stand** und dem **aktuellen `docs/concept.md` + `docs/specs/*`-Stand** und legt sie dem User **zur Entscheidung** vor — er **überschreibt Konzept/Spec nie automatisch** (invertierte Reconcile-Autorität, AC3). Er teilt Reader (§0b) + Fragenkatalog-Gate mit dem Ingest, ist aber ein **eigener Modus** und lässt den **Reconcile-Vertrag** (`docs/architecture/reconcile-subsystem.md`) **unangetastet** (AC1) — **kein** Reconcile-„Stufe 0".
+
+### 5.1 Vergleichsseiten beschaffen (AC1, rein lesend)
+
+1. **Ordner auflösen** (Precedence wie §0a: Argument > `obsidian_source`): der Re-Sync läuft im Normalfall **ohne** Ordner-Argument → `obsidian_source` aus `.claude/profile.md`. Fehlt `obsidian_source` **und** kein Argument → **klarer Abbruch** „kein Notiz-Ordner am Projekt vermerkt" (AC6, *deckt E1*). Ende — **kein** Leerlauf, **keine** Doku-Änderung. Der Re-Sync schreibt `obsidian_source` **nicht** neu (nur der Ingest bei explizitem Argument, §0a).
+2. **Notiz-Korpus lesen (linke Vergleichsseite)** — derselbe Reader wie §0b (kein Neubau, AC1):
+   ```bash
+   bash "$CLAUDE_PLUGIN_ROOT/scripts/obsidian-corpus-read.sh" "<aufgelöster-ordnerpfad>" > "$CORPUS_FILE"
+   ```
+   - **Exit 2** (Ordner unlesbar / keine `.md`) → **klarer Abbruch** mit der Reader-Meldung (AC6, *deckt E1*), **niemals** eine Doku-Änderung. Ende.
+   - **Exit 0** → `$CORPUS_FILE` (`mktemp`, **nie** committet — AC6) hält den Korpus; die Herkunfts-Marker `===== NOTE: <pfad> =====` liefern das `notiz_fundstelle`-/`quelle`-Feld.
+3. **Doku-Stand lesen (rechte Vergleichsseite)** — der **aktuelle** `docs/concept.md` **+ alle** `docs/specs/*`, **rein lesend**.
+
+### 5.2 Divergenzen erkennen + priorisierter Bericht (AC2 — reiner Bericht, kein Gate)
+
+Beide Seiten abgleichen und **Divergenzen** sammeln. Je Fund **genau diese Felder** (Bericht-Format, Vertrag der Spec):
+
+- **`notiz_fundstelle`** — relativer Notiz-Pfad (Herkunfts-Marker) + Kontext,
+- **`doku_ziel`** — betroffenes Doku-**Dokument + Sektion** (z.B. `docs/concept.md §Ziele`, `docs/specs/<feature>.md §AC3`),
+- **`divergenz_art`** — Art der Divergenz, z.B. *Notiz widerspricht Konzept-Aussage* · *Notiz enthält Neues, das die Spec nicht abbildet* · *Doku enthält, was die Notiz nicht mehr trägt*,
+- **`richtungsvorschlag`** — unverbindlicher Vorschlag, welche Richtung plausibel ist.
+
+Der Bericht ist **priorisiert** (klarste/wichtigste Widersprüche zuerst) und **rein informativ**: **kein** Gate, **keine** automatischen Board-Items, **kein** `/flow`-Start (AC2/AC6). Widerspricht ein Notiz-Stand **mehreren** Doku-Stellen → **mehrere Funde**, aber in **einem** Bericht/Katalog (nie verstreute Einzel-Prompts).
+
+### 5.3 Deckungsgleich → Ende ohne Katalog/Änderung (AC5, *deckt A1*)
+
+Findet 5.2 **keine** Divergenz → **kein** Fragenkatalog, **keine** Doku-Änderung. Klare **„deckungsgleich"**-Meldung ausgeben und **enden** (Rauscharmut, AC5). Der Notiz-Ordner bleibt unangetastet.
+
+### 5.4 Genau EIN Fragenkatalog, gerichteter Entscheid (AC4)
+
+Bei ≥1 Divergenz **alle** als **genau EINEN** Fragenkatalog aufbauen — gleiches maschinenlesbares Rückgabeformat wie `[[obsidian-ingest]]` AC9 (`board/fragenkatalog.schema.json`), je Frage: `stage:"sync"`, `id`-Muster `sync-<n>` (katalog-eindeutig), `frage` (die Divergenz in Alltagssprache), `quelle` = `notiz_fundstelle` + `doku_ziel`, und `optionen:["uebernehmen","behalten","manuell"]` (je Divergenz **eine** Frage mit genau diesen drei Richtungen). Den Katalog durch den **wiederverwendeten** Gate-Validator prüfen:
+   ```bash
+   printf '%s' "$KATALOG_SYNC_JSON" | bash "$CLAUDE_PLUGIN_ROOT/scripts/obsidian-fragenkatalog-validate.sh"
+   ```
+   - **`valid`** → dem User **am Stück** vorlegen (Terminal: `AskUserQuestion`, ein Prompt für alle Divergenzen; dev-gui rendert denselben JSON-Katalog und reicht die Antworten über die `id`-Zuordnung zurück). **Nie** Einzel-Prompt je Fund verstreut (AC4/Edge).
+   - **`empty`** darf hier **nicht** auftreten (bei ≥1 Divergenz ist der Katalog nicht leer); erscheint es doch → es lag Deckungsgleichheit vor → 5.3.
+   - **Exit 1/2** (Vertragsverletzung / Aufrufproblem) → den selbst erzeugten Katalog korrigieren und erneut validieren (nie einen ungültigen Katalog vorlegen).
+
+### 5.5 Selektiv schreiben — nur „übernehmen" (AC3/AC4, *deckt A2*)
+
+Erst **nach** vollständiger Beantwortung, **je Divergenz** streng nach Entscheid:
+
+- **`uebernehmen`** → die Notiz-Aussage in das jeweilige `doku_ziel` (`docs/concept.md` bzw. `docs/specs/<feature>.md`) **schreiben**.
+- **`behalten`** → **nichts** ändern; die bestehende `concept.md`/Spec bleibt unverändert (*deckt A2*).
+- **`manuell`** → **nichts** automatisch ändern; als offener Punkt dem User überlassen.
+
+**Schreib-Umfang (hart, AC3/AC4):** ausschließlich `docs/concept.md` / `docs/specs/*` und **ausschließlich** die als „übernehmen" gewählten Divergenzen — **nie** automatisch, **nie** in den Notiz-Ordner (AC6). Jede geschriebene Änderung ist auf eine `notiz_fundstelle` + einen expliziten User-Entscheid rückführbar (NFR Nachvollziehbarkeit). Gibt es ≥1 „übernehmen", fahren die Änderungen in **einen** durable Commit (`docs/`); Branch-Protection → docs-only-PR + Self-Merge (analog Ingest §1.4).
+
+### 5.6 Kein Folge-Automatismus (AC6)
+
+Der Re-Sync startet **kein** `/flow` und legt **keine** Stories automatisch an — neue Stories entstehen bewusst nur über den Ingest-Stufe-c- bzw. den regulären `requirement`-Fluss. Der Notiz-Ordner wird **nie** beschrieben, verschoben oder ge-`add`et.
+
+### 5.7 Output (Re-Sync)
+
+```
+Obsidian-Re-Sync (from-notes --sync) — Ordner: <aufgelöster-pfad> (Quelle: obsidian_source)
+Korpus: <n> Notiz(en) gelesen · Vergleich gegen docs/concept.md + docs/specs/*
+Divergenzen: <k gefunden | 0 -> deckungsgleich, keine Änderung>
+  [P<i>] <notiz_fundstelle> -> <doku_ziel> : <divergenz_art> (Vorschlag: <richtungsvorschlag>)
+Katalog sync: <k Frage(n) beantwortet | -> deckungsgleich, kein Katalog>
+Geschrieben: <übernommene Divergenz(en) in docs/… -> commit <sha|PR> | keine (alles behalten/manuell)>
+Kein /flow-Start, keine Story-Anlage, kein Schreiben in den Notiz-Ordner.
+```
+
 ## Grenzen (HART)
 
 - **Authoring-only (AC14):** editiert/erzeugt **ausschließlich** `docs/`, `.claude/profile.md` (nur `obsidian_source`) und Board-Items (**To Do**) — **kein** App-Code, **kein** `/flow`-Start, **kein** Merge/Deploy, **kein** Item-Status jenseits „To Do" (das ist `/flow`-Hoheit).
@@ -123,4 +198,4 @@ Bereit für /agent-flow:flow.
 - **Kein zweiter Zerlege-/Schätz-/Übersetzungs-Pfad (AC11/AC13):** Reader (S-021), Fragenkatalog-Gate (S-022), Spec-Vertrag/Vorlage, `requirement` (Zerlegung + Schätzung), `architekt`/`dba` (tiefes Detail) werden **wiederverwendet**, nicht dupliziert.
 - **Commit pro Stufe, harte Reihenfolge (AC12):** jede Stufe wird **einzeln** committet, **nachdem** ihr Fragenkatalog beantwortet (oder leer) ist — **nicht** am Ende in einem Rutsch. b startet erst nach committetem a, c erst nach committetem b. Zwischenstände sind durable, der Lauf ist jederzeit fortsetzbar.
 - **Genau EIN gesammelter Katalog pro Stufe (AC7), leer → Auto-Durchlauf (AC8):** nie einzeln pro Unklarheit sofort erfragen; nie einen leeren Katalog vorlegen. Das Vorlege-Verhalten entscheidet ausschließlich das stdout-Token des Gate-Validators (`empty` vs. `valid`).
-- **`--sync` ist NICHT Teil dieses Items** — der Re-Sync-Modus lebt in `[[obsidian-sync]]` (eigene Story) und wird hier nicht implementiert.
+- **Re-Sync (`--sync`) — kein Blind-Overwrite, invertierte Reconcile-Autorität (obsidian-sync AC1/AC3/AC6):** der Re-Sync-Modus (§5) überschreibt Konzept/Spec **nie** automatisch; jede Divergenz ist ein per-Fund-User-Entscheid (`uebernehmen`/`behalten`/`manuell`), und **nur** `uebernehmen` schreibt — ausschließlich nach `docs/concept.md`/`docs/specs/*`, nie in den Notiz-Ordner. Er ist ein **eigener Modus** desselben Skills, teilt Reader + Katalog-Gate mit dem Ingest und lässt den **Reconcile-Vertrag unangetastet** (kein Reconcile-„Stufe 0"). **Kein** `/flow`-Start, **keine** automatische Story-Anlage. Bei Deckungsgleichheit: **kein** Katalog, **keine** Änderung, „deckungsgleich"-Meldung.
