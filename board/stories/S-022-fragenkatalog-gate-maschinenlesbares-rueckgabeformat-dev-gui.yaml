@@ -2,7 +2,7 @@ id: S-022
 parent: F-012
 title: 'Fragenkatalog-Gate + maschinenlesbares Rueckgabeformat (dev-gui-Schnittstelle):
   ein Katalog pro Stufe, Auto-Durchlauf bei Klarheit, Stufe-a niedrige Schwelle'
-status: In Progress
+status: In Review
 priority: P2
 spec: docs/specs/obsidian-ingest.md
 implements:
@@ -23,8 +23,8 @@ estimate_note: Heuristik score=7 (n_ac=4 [AC7-AC10], n_comp=3 [from-notes-Skill,
   md|balanced|M (ep=3.0, n=8>=3).
 confidence: medium
 branch: feat/S-022-fragenkatalog-gate
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/224
 blocked_reason: null
 created_at: '2026-07-02T05:26:42Z'
-updated_at: '2026-07-02T08:19:44Z'
+updated_at: '2026-07-02T08:30:21Z'
 done_at: null
