@@ -80,7 +80,19 @@ NOT-READY S-xxx — <konkreter Grund je verletzter Regel>
 ```
 Plus eine Summary-Zeile am Ende: `Summary: <n>/<total> To-Do-Stories ready`.
 
-**`--quiet`:** unterdrückt `(n/a)`-Zeilen; gibt weiterhin `READY`/`NOT-READY` und die Summary aus.
+**Aggregierter NOT-READY-Diagnose-Block** ([[empty-drain-diagnostics]] AC1/AC2): Nach den `READY`/`NOT-READY`-Einzelzeilen und vor der Summary gibt `board ready` — **nur wenn ≥1 To-Do-Story `NOT-READY` ist** — einen nach Grund-Kategorie gruppierten Aggregat-Block aus. Feste, deterministische Kategorien-Reihenfolge; jede Kategorie nur, wenn ≥1 Story betroffen ist. Stabiles Zeilen-Präfix `WAITING <kategorie> (<n>): S-xxx, S-yyy`:
+
+```
+WAITING spec-not-active (12): S-003, S-004, … — Specs: docs/specs/a.md, docs/specs/b.md
+WAITING spec-missing (1): S-007
+WAITING ac-missing (2): S-010, S-011
+WAITING depends-open (2): S-012, S-013
+WAITING blocked (1): S-020
+```
+
+Kategorien (feste Reihenfolge): `spec-not-active` (R2: Spec-Frontmatter `status != active` bzw. kein Frontmatter/unlesbar) — nennt **zusätzlich** die betroffenen Spec-Pfade (`— Specs: …`, dedupliziert + sortiert); `spec-missing` (R2: `spec` nicht gesetzt / Spec-Datei fehlt); `ac-missing` (R3: `implements` leer / AC fehlt in Spec / ungültiger Typ); `depends-open` (R4); `blocked` (R5). Story-IDs je Kategorie aufsteigend sortiert. Eine Story mit mehreren Blockern erscheint in **jeder** zutreffenden Kategorie (Gründe sind nicht exklusiv). Der Block ist token-frei/deterministisch (reines `python3` im CLI) und ändert den Exit-Code-Vertrag nicht. Bei ausschließlich readyen oder keinen To-Do-Stories entfällt der Block.
+
+**`--quiet`:** unterdrückt `(n/a)`-Zeilen; gibt weiterhin `READY`/`NOT-READY`, den Aggregat-Block und die Summary aus.
 
 **Exit-Code:** 0 wenn alle To-Do-Items ready sind (oder keine To-Do-Items vorhanden sind); 1 wenn mindestens eine To-Do-Story `NOT-READY` ist. Damit verwendbar als Gate vor einem autonomen `/flow`-Lauf.
 
@@ -99,7 +111,7 @@ Plus eine Summary-Zeile am Ende: `Summary: <n>/<total> To-Do-Stories ready`.
 - **AC9** — `board set <story> status …` ist nur aus dem `/flow`-Kontext erlaubt; ein anderer Aufrufer → kein Schreiben, Fehlermeldung, Exit ≠ 0; nicht-Status-Felder bleiben für `requirement` erlaubt. *(V9)*
 - **AC10** — Lesende Verben sind deterministisch ohne LLM; schreibende Verben sind atomar (kein halber Zustand) und schreiben bei ungültiger Eingabe nichts (Exit ≠ 0). *(V10)*
 - **AC11** — `board export-github` ist als Verb registriert und delegiert an [[board-github-export]]; das Verb existiert und liefert Hilfe. *(V11)*
-- **AC12** — `board ready` listet je To-Do-Story `READY S-xxx` oder `NOT-READY S-xxx — <Grund>` (Regeln R1–R5), gibt eine Summary aus und endet mit Exit 0 wenn alle To-Do-Items ready (oder keine vorhanden), Exit 1 wenn ≥1 NOT-READY. `--quiet` unterdrückt n/a-Zeilen. Fehlende/kaputte Felder → NOT-READY mit Grund, kein Crash. *(V12)*
+- **AC12** — `board ready` listet je To-Do-Story `READY S-xxx` oder `NOT-READY S-xxx — <Grund>` (Regeln R1–R5), gibt einen aggregierten NOT-READY-Diagnose-Block (gruppiert nach Grund-Kategorie mit stabilem `WAITING <kategorie> (<n>): …`-Präfix; nur bei ≥1 NOT-READY; `spec-not-active` nennt zusätzlich die Spec-Pfade — [[empty-drain-diagnostics]] AC1/AC2) sowie eine Summary aus und endet mit Exit 0 wenn alle To-Do-Items ready (oder keine vorhanden), Exit 1 wenn ≥1 NOT-READY. `--quiet` unterdrückt n/a-Zeilen. Fehlende/kaputte Felder → NOT-READY mit Grund, kein Crash. *(V12)*
 
 ## Verträge
 
@@ -152,3 +164,4 @@ board export-github                                 → siehe [[board-github-exp
 - [[board-schema]] — Dateiformat + Lint-Regeln, die dieses CLI ausführt.
 - `docs/architecture/board-subsystem.md` §7, §8, §11 — bindendes Detailkonzept.
 - [[board-github-export]] — Verhalten hinter `board export-github`.
+- [[empty-drain-diagnostics]] — aggregierter NOT-READY-Diagnose-Block der `board ready`-Ausgabe (V12/AC12).
