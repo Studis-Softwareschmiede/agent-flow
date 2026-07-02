@@ -2,7 +2,7 @@ id: S-025
 parent: F-011
 title: Tier-1-Write-back + Lessons-Read in requirement.md + estimator.md (Selbst-Lessons,
   kein coder.md)
-status: To Do
+status: Done
 priority: P2
 spec: docs/specs/lessons-writeback-coverage.md
 implements:
@@ -30,5 +30,5 @@ branch: null
 pr: null
 blocked_reason: null
 created_at: '2026-07-02T06:07:13Z'
-updated_at: '2026-07-02T06:07:28Z'
-done_at: null
+updated_at: '2026-07-02T09:20:37Z'
+done_at: '2026-07-02T09:20:37Z'
