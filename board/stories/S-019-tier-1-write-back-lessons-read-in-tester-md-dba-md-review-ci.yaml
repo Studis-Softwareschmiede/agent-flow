@@ -2,7 +2,7 @@ id: S-019
 parent: F-011
 title: Tier-1-Write-back + Lessons-Read in tester.md, dba.md (Review), cicd.md (AC1-AC11;
   4 weitere Rollen ausgegliedert in S-025/S-026)
-status: In Progress
+status: In Review
 priority: P2
 spec: docs/specs/lessons-writeback-coverage.md
 implements:
@@ -36,8 +36,8 @@ estimate_note: 'Scope UNVERAENDERT (3 Rollen tester/dba/cicd, AC1-AC11). Die vom
   (kein Task-Tool) nicht verfuegbar -> confidence low.'
 confidence: low
 branch: feat/S-019-lessons-writeback-coverage
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/222
 blocked_reason: null
 created_at: '2026-07-02T05:53:14Z'
-updated_at: '2026-07-02T08:05:06Z'
+updated_at: '2026-07-02T08:11:39Z'
 done_at: null
