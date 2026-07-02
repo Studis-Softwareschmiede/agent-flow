@@ -62,6 +62,7 @@ Genau **eine** Zeile, geschrieben wenn `/flow` das Item auf `Done` setzt (Rollup
 | `item` | string | Board-Item-ID als kanonischer String `S-###` (AC2, V2: kein int-Präfix-Strip; Alt-Zeilen mit int-Typ bleiben unangetastet) |
 | `size_est` | string | A-priori-Grössenklasse `S` \| `M` \| `L` \| `XL` (§7) |
 | `ep_est` | number \| null | prognostizierter Aufwand (aus `baseline.json`-Mapping; `null` solange keine Baseline existiert) |
+| `tok_est` | int \| null | A-priori-Token-Erwartung, aus der Story-YAML übernommen (von `requirement`/`estimator` gesetzt, s. `apriori-token-estimate`); `null` solange keine Baseline/Schätzung existiert |
 | `ep_act` | number | tatsächlicher Aufwand nach EP-Formel (§5) |
 | `iters` | int | Build-Loop-Iterationen bis PASS (max. der `iter`-Werte) |
 | `crit` | int | Σ Critical über alle Dispatches des Items |

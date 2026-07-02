@@ -402,6 +402,7 @@ item_data = {
     "dispo_forecast": None,
     "estimate_note": None,
     "confidence":    None,
+    "tok_est":       None,
     "branch":        None,
     "pr":            None,
     "blocked_reason": None,

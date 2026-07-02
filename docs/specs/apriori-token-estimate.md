@@ -16,19 +16,19 @@ Die dev-gui-Detailansicht zeigt „Tokens: keine Schätzung", weil nur der estim
 
 ## Acceptance-Kriterien
 
-- **AC1** — `agents/requirement.md`: Beim Anlegen jeder Story setzt requirement zusätzlich `tok_est` (erwartete Gesamt-Tokens des Flow-Durchlaufs) aus der Projekt-Baseline: Lookup `medians["<lang>|<cost_mode>|<size_est>"].tok` in `.claude/metrics/baseline.json`; fehlt der exakte Schnitt, Aggregation über `<lang>|<cost_mode>` (Median), fehlt auch das: `tok_est: null` MIT `estimate_note`-Ergänzung „keine Baseline-Tokens".
-- **AC2** — Board-Schema (`docs/specs/board-schema.md` + Story-Vorlage/Anlage-Pfad): Das Story-Feld `tok_est` ist als optionales Feld dokumentiert (Typ: Ganzzahl | null; Semantik: erwartete Gesamt-Tokens It-Durchlauf).
+- **AC1** — `agents/requirement.md`: Beim Anlegen jeder Story setzt requirement zusätzlich `tok_est` (erwartete Gesamt-Tokens des Flow-Durchlaufs) aus der Projekt-Baseline: Lookup `medians["<lang>|<cost_mode>|<size_est>"].tok_total` in `.claude/metrics/baseline.json` (Feldname präzisiert — `baseline.json.medians[key]` führt das Token-Aggregat als `tok_total`, nicht `tok`, s. `metrics-retro-aggregation` AC1/AC3); fehlt der exakte Schnitt, Aggregation über `<lang>|<cost_mode>` (Median), fehlt auch das: `tok_est: null` MIT `estimate_note`-Ergänzung „keine Baseline-Tokens".
+- **AC2** — Board-Schema (`docs/specs/board-schema.md` + Story-Vorlage/Anlage-Pfad): Das Story-Feld `tok_est` ist als optionales Feld dokumentiert (Typ: Ganzzahl | null; Semantik: erwartete Gesamt-Tokens It-Durchlauf; Persistenz analog `dispo_est` — via `board set` als Text geschrieben, s. board-schema Verträge).
 - **AC3** — `estimator` (L/XL-Pfad) bleibt unverändert maßgeblich, WENN er läuft: Sein Token-Erwartungswert überschreibt den requirement-A-priori-Wert (Präzedenz estimator > requirement-Baseline-Lookup); das ist an der estimator-Übernahme-Stelle in `skills/flow/SKILL.md` §1a dokumentiert.
 - **AC4** — `/flow` „Beim Done" (§2b): Die `items.jsonl`-Zeile übernimmt `tok_est` aus der Story-YAML (Feld `tok_est`, null-sicher) — damit können dev-gui-Detailansicht und Retro-Kalibrierung Soll/Ist der Tokens vergleichen, sobald `tok_total` (Ist) erfasst ist.
 - **AC5** — Rückwärtskompatibilität: Bestehende Stories ohne `tok_est` bleiben gültig (Lint meldet nichts; Aggregator/GUI zeigen weiterhin „keine Schätzung").
 
 ## Verträge
-- **`tok_est`:** Ganzzahl (Tokens) oder null; A-priori-Wert, Herkunft in `estimate_note` einzeilig vermerkt („tok_est aus baseline <key>").
+- **`tok_est`:** Ganzzahl (Tokens) oder null; A-priori-Wert, Herkunft in `estimate_note` einzeilig vermerkt („tok_est aus baseline <key>"). Persistenz in der Story-YAML analog `dispo_est` (als Text via `board set`, Sicht — SoT bleibt `estimate_note`/Baseline-Lookup).
 - **Präzedenz:** estimator-Wert > requirement-Baseline-Lookup > null.
 
 ## Edge-Cases & Fehlerverhalten
 - **E1:** Projekt ohne `baseline.json` (frisches Repo) → `tok_est: null` + Vermerk, kein Fehler.
-- **E2:** Baseline vorhanden, aber ohne `tok`-Werte (alle Ist-Tokens null — heutiger Zustand vor `[[metrics-repo-anchor]]`) → wie E1 behandeln.
+- **E2:** Baseline vorhanden, aber ohne `tok_total`-Werte (alle Ist-Tokens null — heutiger Zustand vor `[[metrics-repo-anchor]]`) → wie E1 behandeln.
 
 ## NFRs
 - Reine Agent-/Skill-/Doku-Textänderung; Lookup ist deterministisch, keine zusätzlichen LLM-Aufrufe.
@@ -39,5 +39,5 @@ Die dev-gui-Detailansicht zeigt „Tokens: keine Schätzung", weil nur der estim
 - Keine dev-gui-Änderung (die Anzeige liest vorhandene Felder; leere Werte bleiben zulässig).
 
 ## Abhängigkeiten
-- `[[metrics-repo-anchor]]` (liefert künftig echte `tok_total`-Ist-Werte, aus denen die Baseline `tok`-Mediane lernt — ohne sie bleibt AC1 praktisch bei E2).
+- `[[metrics-repo-anchor]]` (liefert künftig echte `tok_total`-Ist-Werte, aus denen die Baseline die `tok_total`-Mediane lernt — ohne sie bleibt AC1 praktisch bei E2).
 - `[[estimator]]`, `[[board-schema]]`.

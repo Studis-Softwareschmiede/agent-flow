@@ -57,8 +57,8 @@ Du bist der **requirement**-Agent der Softwareschmiede — Front of Funnel. Du v
      SPEC: docs/specs/<feature>.md (AC<…>)
      COST_MODE: <aktiver Cost-Mode>
      ```
-     Empfang aus estimator-Output: `dispo_est` (float|null), `confidence`, `estimate_note`.
-     Schlägt Parsen fehl → `dispo_est = null`, `confidence = "low"`, `estimate_note = "estimator-Dispatch fehlgeschlagen"`.
+     Empfang aus estimator-Output: `dispo_est` (float|null), `tok_est` (int|null), `confidence`, `estimate_note`.
+     Schlägt Parsen fehl → `dispo_est = null`, `tok_est = null`, `confidence = "low"`, `estimate_note = "estimator-Dispatch fehlgeschlagen"`.
    - **`S`/`M`:** kein estimator (token-frei). `dispo_est` über `baseline.json`-Lookup bestimmen:
      Lese `.claude/metrics/baseline.json` (falls vorhanden). Lookup-Reihenfolge (identisch zu V3/AC3):
      1. Exakter Schnitt: `medians["<lang>|<cost_mode>|<size_est>"]` → `dispo_est = medians[key].ep`
@@ -68,17 +68,27 @@ Du bist der **requirement**-Agent der Softwareschmiede — Front of Funnel. Du v
      `confidence = "low"` bei Cold-Start (`dispo_est = null`) oder dünnem Schnitt (`n < 3`), sonst `"medium"`.
      `estimate_note` = kurze Begründung (z.B. "S/M-Heuristik; baseline.json nicht vorhanden — Cold-Start").
 
+   **Schritt B2 — `tok_est`-Baseline-Lookup** (Spec `apriori-token-estimate` AC1/AC3 — bei **jeder** neu angelegten Story, unabhängig von `size_est`):
+
+   - **`L`/`XL`** (estimator wurde in Schritt B dispatcht): `tok_est` = der `tok_est`-Wert aus dem estimator-Output (Schritt B, direkt übernehmen, kann `null` sein). **Präzedenz: estimator-Wert > Baseline-Lookup** (`apriori-token-estimate` AC3/Verträge) — für `L`/`XL` entfällt der Baseline-Lookup unten vollständig, analog zum bestehenden `dispo_est`-Skip.
+   - **`S`/`M`** (kein estimator): Lese `.claude/metrics/baseline.json` (falls vorhanden). Lookup-Reihenfolge (`apriori-token-estimate` AC1):
+     1. Exakter Schnitt: `medians["<lang>|<cost_mode>|<size_est>"]` → `tok_est = medians[key].tok_total`
+     2. Fehlt exakter Schnitt: aggregiere alle Einträge mit passendem `<lang>|<cost_mode>` → Median der `.tok_total`-Werte.
+     3. Fehlt auch das, oder alle `.tok_total`-Werte `null`/leer, oder keine `baseline.json` vorhanden → `tok_est = null` (E1/E2, erwarteter Zustand) — `estimate_note` einzeilig um „keine Baseline-Tokens" ergänzen.
+     Wurde ein Wert gefunden (Schritt 1 oder 2): `estimate_note` einzeilig um „tok_est aus baseline <key>" ergänzen (Herkunfts-Vermerk, Verträge).
+
    **Schritt C — Persistenz in Story-YAML** (Spec AC7/V7 — Single-Writer Soll):
 
-   Schreibe `size_est`, `dispo_est`, `confidence`, `estimate_note` via `board set` in die Story-YAML (alle mit `|| true` — Fehler blockieren die Anlage nicht):
+   Schreibe `size_est`, `dispo_est`, `tok_est`, `confidence`, `estimate_note` via `board set` in die Story-YAML (alle mit `|| true` — Fehler blockieren die Anlage nicht):
    ```bash
    board set <story-id> size_est   "$size_est"        || true
    board set <story-id> dispo_est  "$dispo_est"       || true
+   board set <story-id> tok_est    "$tok_est"         || true
    board set <story-id> confidence "$confidence"      || true
    board set <story-id> estimate_note "$estimate_note" || true
    ```
 
-   **Fehlerpfad (K3):** Schlägt irgendeiner der Schritte fehl → `size_est = "M"`, `dispo_est = null`, `confidence = "low"`, `estimate_note = "Schätzung fehlgeschlagen"` (Fallback); Story-Anlage wird nicht blockiert.
+   **Fehlerpfad (K3):** Schlägt irgendeiner der Schritte fehl → `size_est = "M"`, `dispo_est = null`, `tok_est = null`, `confidence = "low"`, `estimate_note = "Schätzung fehlgeschlagen"` (Fallback); Story-Anlage wird nicht blockiert.
 
    **Nie ins Ledger schreiben:** requirement berührt `dispatches.jsonl` und `items.jsonl` nicht — das ist ausschliesslich `/flow` (Spec AC9/V9, Single-Writer metrics-subsystem K2).
 
@@ -91,7 +101,7 @@ Du bist der **requirement**-Agent der Softwareschmiede — Front of Funnel. Du v
 ```
 Specs: docs/specs/<…>.md (neu | aktualisiert)
 #<n> <title> — Spec <feature-slug> (AC<…>) — Priority <p> — depends: <…>
-  size_est: <S|M|L|XL>  dispo_est: <float|null>  confidence: <high|medium|low>
+  size_est: <S|M|L|XL>  dispo_est: <float|null>  tok_est: <int|null>  confidence: <high|medium|low>
 ```
 
 # Harte Grenzen
