@@ -10,6 +10,7 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 **Cost-Mode (Token-Hebel).** Jeder Agent-Dispatch dieses Laufs erhält einen **`model`-Override** gemäß dem aktiven Cost-Modus (in §0 aufgelöst). Aufruf optional mit `--cost <low-cost|balanced|max-quality|frontier>` (Kurz: `low`/`max`/`front`; `frontier` = opt-in, nie Default). Im Modus `balanced` wird **kein** Override gesetzt (Agent-Frontmatter gilt). Matrix + Auflösungsregeln: `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md`. **Design-Rollen-Pinning hat Vorrang vor der Modus-Spalte:** `requirement`/`architekt`/`designer`/`dba`(Design-Modus) laufen unabhängig vom Cost-Mode auf `opus` (Details + Begründung: `knowledge/model-tiers.md` „Design-Rollen-Pinning").
 
 ## 0. Setup
+- **`METRICS_ROOT` verankern (zuerst, vor jedem weiteren Schritt — Spec [`docs/specs/metrics-repo-anchor.md`](../../docs/specs/metrics-repo-anchor.md) AC1):** **genau einmal**, im Start-Arbeitsverzeichnis, **vor jedem Verzeichniswechsel und vor jeder Worktree-Erstellung**, ermitteln: `METRICS_ROOT="$(git rev-parse --show-toplevel)"`. Als unveränderliche, **absolute** Session-Variable für den gesamten Lauf merken — kein erneutes `rev-parse` später, auch nicht nachdem `/flow` (oder ein dispatchter coder) in einen Story-Worktree wechselt. **Plausibilitäts-Gate (AC4):** vor dem allerersten Metrik-Write prüfen, ob `${METRICS_ROOT}/board/board.yaml` existiert. Fehlt die Datei → die Metrik-Erfassung für diesen gesamten Lauf mit **einem** Hinweis überspringen (`⚠ METRICS_ROOT (<pfad>) enthält kein board/board.yaml — Metrik-Erfassung diese Session übersprungen.`, K3: Messen blockiert nie den Loop) — es wird **nie** in ein Repo ohne dieses Board geschrieben. **Edge-Case E1:** wird `/flow` selbst innerhalb eines Worktrees gestartet (paralleler Sessions-Sonderfall), liefert `rev-parse --show-toplevel` den Worktree-Pfad als `METRICS_ROOT` — das Gate findet dort `board/board.yaml` (der Worktree spiegelt das Repo), Schreiben ist akzeptiert; die Zeilen landen beim Landen der Story nicht automatisch auf `main` (Metriken „gehören" zu Hauptordner-Läufen — Drain/Nachtwächter erfüllen das im Regelfall).
 - `.claude/profile.md` lesen → Board-Referenz, `merge_policy` (`pr`|`direct`), Build/Test-Befehle, **`default_branch`**, **`cost_mode`** (Default `balanced`).
 - **Cost-Mode auflösen** (einmal, merken — gilt für ALLE Dispatches dieses Laufs): Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced`. Kurzformen normalisieren (`low`→`low-cost`, `max`/`high`→`max-quality`, `front`→`frontier`). Unbekannter Wert → `balanced` + einzeiliger Hinweis (**nie** auf `frontier` raten — opt-in). **Beim Task-Dispatch jedes Agenten** (coder/reviewer/dba/tester in §3–§4 sowie **cicd** beim SHIP-Dispatch in §5) den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Zeile = Rolle, Spalte = Modus) mitgeben; bei `balanced` **keinen** `model`-Parameter setzen (Frontmatter gilt). Einmal zu Beginn ausgeben: „⚙ Cost-Mode: <mode>".
 - **Arbeits-Repo Fork-sicher auflösen** (einmal, merken): Das Arbeits-Repo ist **`origin`**. ⚠️ `gh repo view` **ohne Argument** liefert bei einem Fork das **Upstream-Parent** (gh bevorzugt den `upstream`-Remote) — deshalb IMMER die origin-URL explizit übergeben:
@@ -121,7 +122,7 @@ board set <story-id> confidence "$confidence_from_estimator"       || true
 
 **Bei `L`/`XL`** (estimator wurde dispatcht): `ep_est = dispo_est_from_estimator` (direkt übernehmen, kann `null` sein — erwarteter Zustand bei Cold-Start oder Fehlerpfad). **Schritt C-Lookup unten entfällt** für L/XL (estimator ersetzt die Heuristik-Tabelle).
 
-**Bei `S`/`M`** (kein estimator): Lese `.claude/metrics/baseline.json` (falls vorhanden). Lookup-Reihenfolge:
+**Bei `S`/`M`** (kein estimator): Lese `${METRICS_ROOT}/.claude/metrics/baseline.json` (falls vorhanden — Spec [`docs/specs/metrics-repo-anchor.md`](../../docs/specs/metrics-repo-anchor.md) AC2, `${METRICS_ROOT}` aus §0, kein relativer Pfad). Lookup-Reihenfolge:
 
 1. Exakter Schnitt: `medians["<lang>|<cost_mode>|<size_est>"]` → `ep_est = medians[key].ep`
 2. Fehlt exakter Schnitt: aggregiere alle Einträge mit passendem `<lang>|<cost_mode>` unabhängig von Size → Median der `.ep`-Werte dieser Gruppe.
@@ -146,10 +147,10 @@ Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a 
 
 ## 2b. Metrik-Erfassung — Ledger-Touchpoints (Spec [`docs/architecture/metrics-subsystem.md`](../../docs/architecture/metrics-subsystem.md) §2–§4, [`docs/specs/metrics-recording-reliability.md`](../../docs/specs/metrics-recording-reliability.md))
 
-> **Einziger Schreiber:** Nur `/flow` schreibt `.claude/metrics/dispatches.jsonl` + `items.jsonl` — kein anderer Agent berührt diese Dateien (K2). Erfassung ist deterministische Arithmetik, **~0 zusätzliche LLM-Token**. Jeder Metrik-Fehler wird **still übergangen** (K3) — Messen blockiert nie den Loop und verändert kein Gate.
+> **Einziger Schreiber:** Nur `/flow` schreibt `${METRICS_ROOT}/.claude/metrics/dispatches.jsonl` + `items.jsonl` — kein anderer Agent berührt diese Dateien (K2). Erfassung ist deterministische Arithmetik, **~0 zusätzliche LLM-Token**. Jeder Metrik-Fehler wird **still übergangen** (K3) — Messen blockiert nie den Loop und verändert kein Gate.
 
 ### Ledger-Verzeichnis
-Bei Bedarf `.claude/metrics/` anlegen (falls nicht vorhanden). Schreiben **ausschließlich append-only** (`>>` / `jq -c . >> datei`). Historische Zeilen werden nie gelöscht oder umgeschrieben (Ausnahme: späterer `tok`-Patch durch `metrics-token-collect`).
+Alle Ledger leben **ausschließlich** unter `${METRICS_ROOT}/.claude/metrics/` (Spec [`docs/specs/metrics-repo-anchor.md`](../../docs/specs/metrics-repo-anchor.md) AC2 — `${METRICS_ROOT}` aus §0, kein relativer Pfad, kein erneutes `rev-parse`, kein `${CLAUDE_PLUGIN_ROOT}`-basierter Pfad). Bei Bedarf `${METRICS_ROOT}/.claude/metrics/` anlegen (falls nicht vorhanden). Schreiben **ausschließlich append-only** (`>>` / `jq -c . >> datei`). Historische Zeilen werden nie gelöscht oder umgeschrieben (Ausnahme: späterer `tok`-Patch durch `metrics-token-collect`).
 
 ### Vor jedem Agent-Dispatch (coder / reviewer / dba / tester / cicd / estimator)
 ```bash
@@ -183,13 +184,13 @@ Fehlender / nicht parsbarer Marker → Feld `null` / `0` / `[]`, **nie raten**. 
 ```bash
 # Nach jedem Dispatch — Beispiel coder, Iteration 1:
 METRIC_CRIT=0 METRIC_IMP=0 METRIC_RULE_HITS='[]' \
-bash "$REPO_ROOT/scripts/metrics-append-dispatch.sh" \
+bash "${METRICS_ROOT}/scripts/metrics-append-dispatch.sh" \
   "$STORY_ID" "coder" "$SEQ" "$ITER" "null" "$(($(date -u +%s) - T0))" "$COST_MODE" >&2 || true
 ```
 Für **reviewer/dba/tester** stattdessen den echten Gate-Wert übergeben (z.B. `"PASS"`, `"CHANGES-REQUIRED"`, `"FAIL"`, `"SKIPPED-*"`) und `METRIC_CRIT`/`METRIC_IMP`/`METRIC_RULE_HITS` aus dem Handoff befüllen.
 Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3).
 
-`STORY_ID` = kanonische Story-ID als String `S-###` (z.B. `"S-014"`, nicht `14`). `REPO_ROOT` = Pfad zum Plugin-Repo.
+`STORY_ID` = kanonische Story-ID als String `S-###` (z.B. `"S-014"`, nicht `14`). **Aufruf-Pfad zwingend über `${METRICS_ROOT}/scripts/…`** (Spec `metrics-repo-anchor` AC2) — das Skript leitet seinen eigenen Ledger-Pfad aus seinem Skript-Verzeichnis ab (`$SCRIPT_DIR/..`); nur der Aufruf über `${METRICS_ROOT}/scripts/metrics-append-dispatch.sh` garantiert, dass dieser interne Pfad mit dem Board-Repo übereinstimmt. **Nie** über einen Worktree-Pfad (`.claude/worktrees/<id>/scripts/…`) oder einen `${CLAUDE_PLUGIN_ROOT}`-Pfad aufrufen — beides ist die dokumentierte Drift-Quelle.
 
 ### Beim Done (Item → `Done`, nach Rollout-Gate: PASS) — eine Zeile nach `items.jsonl`
 
@@ -228,11 +229,11 @@ LOC=$(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+'
 LOC=$(( LOC + $(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0) ))
 FILES=$(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo 0)
 
-bash "$REPO_ROOT/scripts/metrics-append-item.sh" \
+bash "${METRICS_ROOT}/scripts/metrics-append-item.sh" \
   "$STORY_ID" "${SIZE_EST:-M}" "${EP_EST:-null}" "$LOC" "$FILES" \
   "${BLOCKED:-0}" "${LANG:-md}" "${COST_MODE:-balanced}" >&2 || true
 ```
-Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3).
+Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3). Auch hier: Aufruf ausschließlich über `${METRICS_ROOT}/scripts/…` (AC2, s.o.) — nie über einen Worktree- oder Plugin-Root-Pfad.
 
 ### Self-Check beim Done (V4, AC5)
 
@@ -240,14 +241,14 @@ Nach dem `metrics-append-item.sh`-Aufruf prüfen, ob die Zeile tatsächlich gesc
 
 ```bash
 # Prüfe ob items.jsonl-Zeile für STORY_ID existiert
-if grep -q "\"item\":\"${STORY_ID}\"" "$REPO_ROOT/.claude/metrics/items.jsonl" 2>/dev/null; then ITEMS_LINE=1; else ITEMS_LINE=0; fi
+if grep -q "\"item\":\"${STORY_ID}\"" "${METRICS_ROOT}/.claude/metrics/items.jsonl" 2>/dev/null; then ITEMS_LINE=1; else ITEMS_LINE=0; fi
 if [[ "$ITEMS_LINE" -eq 0 ]]; then
   echo "HINWEIS: Metrik für ${STORY_ID} nicht erfasst — items.jsonl-Zeile fehlt. Ledger unvollständig." >&2
 fi
 
 # Prüfe ob tok_total befüllt ist (nach metrics-collect.sh)
 if [[ "$ITEMS_LINE" -gt 0 ]]; then
-  TOK_VAL="$(grep "\"item\":\"${STORY_ID}\"" "$REPO_ROOT/.claude/metrics/items.jsonl" 2>/dev/null | tail -1 | jq -r '.tok_total // "null"' 2>/dev/null || echo "null")"
+  TOK_VAL="$(grep "\"item\":\"${STORY_ID}\"" "${METRICS_ROOT}/.claude/metrics/items.jsonl" 2>/dev/null | tail -1 | jq -r '.tok_total // "null"' 2>/dev/null || echo "null")"
   if [[ "$TOK_VAL" == "null" ]]; then
     echo "HINWEIS: tok_total für ${STORY_ID} nicht befüllt — Token-Pfad nicht auflösbar (Transcripts nicht gefunden oder CLAUDE_CONFIG_DIR falsch). EP-Metriken bleiben valide." >&2
   fi
@@ -280,22 +281,39 @@ Schlägt ein `board set`-Aufruf fehl → Story-Feld bleibt `null`, kein Abbruch 
 Nach dem Append der `items.jsonl`-Zeile (`tok_total` initial `null`) sofort:
 
 ```bash
-bash "$REPO_ROOT/scripts/metrics-collect.sh" "$STORY_ID" >&2 || true
+bash "${METRICS_ROOT}/scripts/metrics-collect.sh" "$STORY_ID" >&2 || true
 ```
 
 Das Script parst die Subagent-Transcript-JSONL, summiert echte Token je Dispatch
 und patcht die `tok`-Felder der betroffenen `dispatches.jsonl`-Zeilen + `tok_total`
 der `items.jsonl`-Zeile (nur `null`-Felder, bestehende Werte bleiben). Matching erfolgt
-über den String `S-###` im `item`-Feld (AC2). Schlägt das Script fehl oder findet es
+über den String `S-###` im `item`-Feld (AC2 von `metrics-token-collect`). Schlägt das Script fehl oder findet es
 keine Transcripts → Felder bleiben `null`, **kein Abbruch**, das Item bleibt `Done`
-(K3/K4, AC3/AC4). `REPO_ROOT` = Pfad zum Plugin-Repo (Verzeichnis, das `scripts/` enthält);
-bei Dogfooding-Lauf = cwd des agent-flow-Repos.
+(K3/K4, AC3/AC4 von `metrics-token-collect`). Ledger-Pfad: `${METRICS_ROOT}` (Spec
+`metrics-repo-anchor` AC2/AC3) — auch dieser Aufruf ausschließlich über
+`${METRICS_ROOT}/scripts/metrics-collect.sh`, nie über einen Worktree- oder
+Plugin-Root-Pfad.
 
-**Pfad-Auflösung (AC4, V3):** `metrics-collect.sh` liest Subagent-Transcripts aus
+**Pfad-Auflösung (AC4, V3 von `metrics-token-collect`):** `metrics-collect.sh` liest Subagent-Transcripts aus
 `$CLAUDE_CONFIG_DIR/.claude/projects/<escaped-cwd>/…` (falls `CLAUDE_CONFIG_DIR` gesetzt)
 bzw. `$HOME/.claude/projects/<escaped-cwd>/…`. Im GUI-/Container-Kontext muss
 `CLAUDE_CONFIG_DIR` auf das korrekte Basis-Verzeichnis zeigen (z.B. `/home/user`).
 Fehlt die Variable und greift `$HOME` nicht → `tok` bleibt `null`, kein Crash (K3/K4).
+
+**`<escaped-cwd>` — beide Fälle Hauptordner/Worktree (Spec `metrics-repo-anchor` AC3):**
+`<escaped-cwd>` ist der Pfad-Slug des tatsächlichen **Sitzungs-cwd der laufenden
+`/flow`-Session selbst** (nicht der Ledger-Pfad, nicht der cwd eines einzelnen
+dispatchten coder/reviewer) — Claude organisiert Transcripts pro Top-Level-Session
+unter deren eigenem Arbeitsverzeichnis, unabhängig davon, in welchem Story-Worktree
+ein dispatchter coder gearbeitet hat.
+- **Fall A (Normalfall — `/flow` im Hauptordner gestartet):** `<escaped-cwd>` =
+  escaped(`${METRICS_ROOT}`) — Ledger-Pfad und Transcript-Slug fallen zusammen.
+- **Fall B (E1 — `/flow` selbst in einem Worktree gestartet):** `<escaped-cwd>` =
+  escaped(Worktree-Pfad); da `rev-parse --show-toplevel` in diesem Sonderfall
+  ebenfalls den Worktree als `METRICS_ROOT` liefert (§0, E1), fallen auch hier
+  Ledger-Pfad und Transcript-Slug zusammen — beide zeigen auf den Worktree.
+Der Slug wird in keinem der beiden Fälle manuell konstruiert oder erraten — er
+ergibt sich aus dem tatsächlichen Prozess-cwd der `/flow`-Session zur Laufzeit.
 
 ### Datei-Hygiene (Spec V11 / subsystem §11)
 - `dispatches.jsonl` + `items.jsonl`: gitignored (`.gitignore`).
