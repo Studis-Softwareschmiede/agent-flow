@@ -1,0 +1,25 @@
+id: F-011
+title: Lessons-Write-back-Abdeckung — tester/dba(Review)/cicd schreiben Tier-1-Lessons
+goal: 'Nur coder und reviewer haben heute eine Tier-1-Write-back-Instruktion (systemische
+  Befunde als Regel in .claude/lessons/<rolle>.md). Die drei anderen regulär im /flow-Loop
+  dispatchten Rollen — tester, dba (Review-Modus), cicd — schreiben nie eine Lesson,
+  obwohl sie dieselben wiederkehrenden Muster sehen (Test-/Build-/Security-Fallen,
+  DB-dialekt-spezifische Coder-Fehler, Infra-/Deploy-Fallstricke). Diese Feature schliesst
+  die Producer-Luecke: jede Rolle bekommt einen zu reviewer.md §7 analogen Write-back-Schritt
+  und liest die fuer sie relevanten projekt-lokalen Lessons. Eigenstaendige Root Cause
+  gegenueber F-010 (dort: Lessons gehen beim Landen verloren; hier: manche Rollen
+  schreiben nie welche) — thematisch benachbart, aber kein Hard-Depend.'
+status: Backlog
+priority: P2
+spec: docs/specs/lessons-writeback-coverage.md
+definition_of_done: null
+labels:
+- process
+- docs
+depends: null
+owner: null
+stories:
+- S-019
+progress: 0/1 done
+created_at: '2026-07-02T05:53:09Z'
+updated_at: '2026-07-02T05:54:30Z'
