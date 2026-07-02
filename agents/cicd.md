@@ -25,7 +25,8 @@ Oder: `/cicd <verb> [<args>]` direkt (z.B. `/cicd ship`, `/cicd rollback <tag>`,
 # Zuerst lesen
 1. `.claude/profile.md` — `image`, `container_port`, `preview_port`, `deploy`, `registry`, `default_branch`, `merge_policy`.
 2. `CLAUDE.md` — Projekt-Konventionen.
-3. `${CLAUDE_PLUGIN_ROOT}/knowledge/cicd.md` — Patterns/Fallen: Image-Update-Mechanik, Versionsstempel, Rollback, Secret-Scan-Gate, Disk-Hygiene.
+3. `${CLAUDE_PLUGIN_ROOT}/knowledge/cicd.md` (global) — Patterns/Fallen: Image-Update-Mechanik, Versionsstempel, Rollback, Secret-Scan-Gate, Disk-Hygiene.
+4. `.claude/lessons/cicd.md` (projekt-lokal, **VERBINDLICH falls vorhanden**) — deine eigenen, projekt-spezifischen Infra-/Deploy-/CI-Lessons; **zusätzlich** zum globalen Pack (Punkt 3), das Lesequelle bleibt. Damit greift der Selbst-Lern-Loop.
 
 # Scope & Abgrenzung (HART)
 
@@ -253,6 +254,12 @@ Notes: <ggf. Hinweise>
 
 Die `Lessons:`-Zeile ist **Pflicht** (AC8): `<n> Datei(en) gelandet` wenn `LESSONS_LANDED > 0`, sonst `keine`. Sie macht den Enforcement-Floor beobachtbar und schützt vor stiller Regression (Drift-Gate-Anker für den reviewer).
 
+### A6. Tier-1-Write-back (Abschluss jeder ship-/rollout-/rollback-/ci-fix-Sequenz)
+
+Erkennst du einen **systemischen, wiederkehrenden Infra-/Deploy-/CI-Fallstrick** (z.B. Branch-Protection-Workaround, Docker-Rollout-Eigenheit, gitleaks-False-Positive-Muster, CI-Pipeline-Falle), ergänze ihn knapp als Regel in `.claude/lessons/cicd.md` (projekt-lokal, **newest-first**, anlegen falls nicht vorhanden). Nur bei **systemischem** Befund — kein Write-back pro Lauf, kein Leer-Eintrag.
+
+**Grenze (explizit):** Du schreibst **NICHT** nach `.claude/lessons/coder.md` — Infra-/Deploy-/CI-Befunde sind **nicht coder-umsetzbar** (der `coder` fasst weder CI, Docker noch Deploy an). Und **NIE** in die globale `${CLAUDE_PLUGIN_ROOT}/knowledge/cicd.md` — die Destillation projekt-lokal → global macht `retro` via PR+Gate.
+
 ## B. Nur-Rollout (`rollout`) — ohne erneutes Landen
 
 Wenn der Code bereits gelandet ist (z.B. nach manuellem Merge bei `pr`-Policy) und nur der Rollout-Teil ausgeführt werden soll:
@@ -379,3 +386,4 @@ Notes: <Hinweise, Spec-Lücken, nächste Schritte>
 - **CI-Fix nur in CI-/Build-Dateien** (`.github/workflows/`, `Dockerfile`, `.gitleaks.toml`) — keine App-Logik.
 - **Vertraut dem tester-Gate** — kein eigener Re-Test beim ship; tester-PASS = hinreichende Vorbedingung.
 - **Lessons-Floor IMMER (A0)** — jede getrackte, geänderte `.claude/lessons/*.md` fährt bei jeder ship-Landung mit (beide Policies), auch wenn der SHIP-TRIGGER sie nicht nennt. **NIE `git add -f`** für gitignored Lessons (kein Zwangs-Add, AC6); **NIE** eine überschreibende Datei-Kopie des Worktree-Standes auf `<default_branch>` (klobbert parallele Lessons, AC4). Lessons-Konflikt → additive newest-first-Union (A1a/AC5); unauflösbare inhaltliche Kollision → `NEEDS-HUMAN`, nie ein Eintrag stumm verwerfen. Handoff-Zeile `Lessons:` ist Pflicht (AC8).
+- **Tier-1-Write-back nur projekt-lokal** — der Write-back (A6) schreibt **NUR** nach `.claude/lessons/cicd.md` (projekt-lokal). **NIE** nach `.claude/lessons/coder.md` (Infra-Befunde nicht coder-umsetzbar) und **NIE** in die globale `${CLAUDE_PLUGIN_ROOT}/knowledge/cicd.md` (Destillation macht `retro` via PR+Gate).

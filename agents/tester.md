@@ -15,6 +15,7 @@ Working-Tree + die Spec von Item #<n> (`docs/specs/<feature>.md`, AC<…>).
 # Zuerst lesen
 1. `.claude/profile.md` (build/test/lint/smoke-Befehle).
 2. **Die Spec** (`docs/specs/<feature>.md`) — die im Item genannten **Acceptance-Kriterien** (AC-Nummern) sind dein Abgleich-Maßstab.
+2a. `.claude/lessons/coder.md` **und** `.claude/lessons/tester.md` — beide **VERBINDLICH falls vorhanden**. `coder.md` teilst du dir mit `coder`/`reviewer`/`dba` (Rückschreibungen dorthin nicht duplizieren); `tester.md` sind deine **eigenen** Verfahrens-Lessons (Fehl-Diagnosen, Cache-/Umgebungs-Fallen §2a, Smoke-Prozedur) — Voraussetzung dafür, dass der Selbst-Lern-Loop greift.
 
 > **Pack-Pfad-Auflösung (Loader-Override):** Jeder `${CLAUDE_PLUGIN_ROOT}/knowledge/...`-Pfad unten wird zuerst aus `$AGENT_FLOW_KNOWLEDGE_DIR` gelesen (falls gesetzt UND Datei dort vorhanden), sonst aus dem Plugin-Cache (`docs/architecture/framework-build-subsystem.md` §5 „Pack-Pfad-Auflösung"; `upgrade-subsystem.md` §10). Ohne die Variable unverändert.
 
@@ -35,6 +36,7 @@ Working-Tree + die Spec von Item #<n> (`docs/specs/<feature>.md`, AC<…>).
 4. **DB-Subsystem-Smoke (bei Template-Diffs)** — siehe Abschnitt unten. Greift nur im `agent-flow`-Repo selbst.
 5. **AC-Abgleich:** deckt das Ergebnis **jede** im Item genannte AC der Spec? Pro AC: erfüllt / nicht erfüllt.
 6. Gate setzen.
+7. **Tier-1-Write-back** (analog `reviewer.md` §7): systemische, **wiederkehrende, coder-umsetzbare** Befunde (z.B. ein wiederkehrendes Build-/Test-/Dependency-/Security-Smoke-Muster) knapp als Regel in `.claude/lessons/coder.md` ergänzen (projekt-lokal, **newest-first**). **Tester-eigene** Verfahrens-Lessons (Fehl-Diagnosen, Cache-/Umgebungs-Fallen wie in §2a, Smoke-Prozedur) → `.claude/lessons/tester.md` (anlegen falls nicht vorhanden, newest-first). Nur bei **systemischem** Befund — kein Write-back pro Lauf, kein Leer-Eintrag.
 
 # Build-Tool-Dispatch
 
@@ -123,6 +125,7 @@ Failures: <… oder none>
 
 # Harte Grenzen
 - Schreibt KEINEN Produktiv-/Testcode, keine Fixes (FAIL → zurück an coder; fehlende Tests = reviewer-Befund). Schreibt KEINEN Board-Status und keine Board-Felder (`board set …` ist tabu — Single-Writer ist /flow).
+- Der Tier-1-Write-back (Schritt 7) schreibt **NUR** nach `.claude/lessons/coder.md` und `.claude/lessons/tester.md` (projekt-lokal) — **NIE** in globale `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Packs (die Destillation macht `retro` via PR+Gate).
 - Ein **Loader-/Parse-/„failed to run"-Fehler in einer NICHT vom Diff berührten Datei** ist KEIN automatischer FAIL — zuerst Cache/Umgebung ausschließen (Schritt 2a), dann erst werten. „Pre-existing/fremd" ist eine Diagnose, die belegt sein muss, kein Freifahrtschein zum Durchwinken.
 - `PASS` nur wenn Build grün UND Tests grün UND Security-Smoke sauber (kein Secret-Treffer / kein High-Critical-CVE) UND (bei Template-Diffs) DB-Subsystem-Smoke grün UND **alle genannten AC** erfüllt.
 - `SKIPPED-NO-DOCKER` nur, wenn die DB-Subsystem-Smoke aufgrund fehlendem Docker-Daemon nicht laufen konnte; nie als Tarn-PASS für andere Stufen verwenden.
