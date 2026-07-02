@@ -951,6 +951,101 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test 15: story-status-verworfen AC7 + AC10 — "Verworfen"-Round-Trip
+#   (a) GitHub-Spalte "Verworfen"  → interner Status "Verworfen" (verlustfrei)
+#   (b) Kleinschreib-Variante "verworfen" → "Verworfen" (Naming-Vertrag, großes V)
+#   (c) kein Fallback-Verlust auf "To Do", keine STATUS-UNKNOWN-WARN
+# @trace story-status-verworfen#AC7
+# @trace story-status-verworfen#AC10
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- Test 15: 'Verworfen'-Round-Trip (AC7 + AC10) ---"
+
+VW_WORK_DIR="${TEST_WORK_DIR}/verworfen-test"
+mkdir -p "${VW_WORK_DIR}/docs/specs"
+cp "${TEST_WORK_DIR}/docs/specs/"*.md "${VW_WORK_DIR}/docs/specs/"
+
+VW_FIXTURE="${TEST_WORK_DIR}/verworfen-issues.json"
+cat > "$VW_FIXTURE" <<'JSONEOF'
+[
+  {
+    "number": 40,
+    "title": "Story mit Status Verworfen",
+    "body": "Spec: docs/specs/test-feature-a.md\nimplements: AC1\n",
+    "labels": ["backend"],
+    "status": "Verworfen",
+    "priority": "P2",
+    "url": "https://github.com/org/repo/issues/40"
+  },
+  {
+    "number": 41,
+    "title": "Story mit Status verworfen (klein)",
+    "body": "Spec: docs/specs/test-feature-a.md\nimplements: AC2\n",
+    "labels": ["backend"],
+    "status": "verworfen",
+    "priority": "P2",
+    "url": "https://github.com/org/repo/issues/41"
+  }
+]
+JSONEOF
+
+VW_EXIT=0
+set +e
+VW_OUTPUT="$(
+  cd "$VW_WORK_DIR" && \
+  bash "$EXPORT_SCRIPT" \
+    --mock-input "$VW_FIXTURE" \
+    --board-dir board \
+    --project-slug verworfen-test \
+    2>&1
+)"
+VW_EXIT=$?
+set -e
+
+echo "$VW_OUTPUT"
+
+if [[ $VW_EXIT -eq 0 ]]; then
+  pass "Test 15a: Export mit Status 'Verworfen' → Exit 0"
+else
+  fail "Test 15a: Export mit Status 'Verworfen' scheitert (Exit ${VW_EXIT})"
+fi
+
+# Kernassertion AC7 + AC10: beide Varianten → exakt "Verworfen" (großes V, kein Fallback)
+if python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+by_issue = {}
+for fn in os.listdir(stories_dir):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    by_issue[d.get('github_issue')] = d.get('status')
+assert by_issue.get(40) == 'Verworfen', f'Issue 40 (Verworfen): erwartet Verworfen, got {by_issue.get(40)!r}'
+assert by_issue.get(41) == 'Verworfen', f'Issue 41 (verworfen): erwartet Verworfen, got {by_issue.get(41)!r}'
+print('OK')
+" "${VW_WORK_DIR}/board/stories" 2>/dev/null | grep -q OK; then
+  pass "Test 15b: 'Verworfen'/'verworfen' → 'Verworfen' (verlustfrei, großes V — AC7+AC10)"
+else
+  fail "Test 15b: 'Verworfen'-Mapping fehlerhaft"
+  python3 -c "
+import yaml, os, sys
+stories_dir = sys.argv[1]
+for fn in sorted(os.listdir(stories_dir)):
+    if not fn.endswith('.yaml'): continue
+    with open(os.path.join(stories_dir, fn)) as f:
+        d = yaml.safe_load(f)
+    print(f'  github_issue={d.get(\"github_issue\")} status={d.get(\"status\")!r}')
+" "${VW_WORK_DIR}/board/stories"
+fi
+
+# Kein Fallback-Verlust: keine STATUS-UNKNOWN-WARN für "Verworfen"/"verworfen"
+if echo "$VW_OUTPUT" | grep -qi "Status 'Verworfen' unbekannt\|Status 'verworfen' unbekannt"; then
+  fail "Test 15c: STATUS-UNKNOWN-WARN für 'Verworfen' (darf nicht sein — kein Fallback-Verlust)"
+else
+  pass "Test 15c: Kein Fallback-Verlust (keine STATUS-UNKNOWN-WARN für 'Verworfen')"
+fi
+
+# ---------------------------------------------------------------------------
 # Ergebnis
 # ---------------------------------------------------------------------------
 echo ""
