@@ -1,0 +1,22 @@
+id: F-014
+title: Token-Effizienz — Phasen-Modelle + /flow Session-Rotation
+goal: Design-Rollen (requirement/architekt/designer/dba-Design) laufen unabhängig
+  vom Cost-Mode auf der Qualitäts-Stufe (opus); /flow beendet die Session nach einer
+  gelandeten Story (SR1-Batch zählt als eine Runde), Rotation übernimmt die äußere
+  Drain-Schleife. Owner-Entscheidung 2026-07-02 nach Token-Analyse (Session-Limit-Vorfall,
+  Kontext-Wachstum 3.6x in Mehr-Story-Session).
+status: Backlog
+priority: P1
+spec: null
+definition_of_done: null
+labels:
+- process
+- docs
+depends: null
+owner: null
+stories:
+- S-030
+- S-031
+progress: 0/2 done
+created_at: '2026-07-02T19:12:37Z'
+updated_at: '2026-07-02T19:12:37Z'
