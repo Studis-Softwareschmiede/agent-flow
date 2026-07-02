@@ -407,6 +407,10 @@ STATUS_MAP = {
     "Done":        "Done",
     "Closed":      "Done",
     "closed":      "Done",
+    # story-status-verworfen AC7: terminaler Status "Verworfen" verlustfrei
+    # (inkl. Kleinschreib-Variante) — kein Fallback auf "To Do".
+    "Verworfen":   "Verworfen",
+    "verworfen":   "Verworfen",
 }
 
 # Priority-Mapping (Label oder Projekt-Feld)
