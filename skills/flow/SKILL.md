@@ -339,7 +339,10 @@ MERGE_POLICY: <aus profile.merge_policy>
 IMAGE: <profile.image>:latest
 ```
 
+**Repo-versionierte Meta-Dateien fahren IMMER mit (Belt, Spec [`docs/specs/flow-lessons-landing.md`](../../docs/specs/flow-lessons-landing.md) AC3).** Der SHIP-TRIGGER instruiert cicd **nicht mehr**, „nur" die konkreten Implementierungs-/Test-Dateien zu landen. Jede im Story-Worktree geänderte, **getrackte** `.claude/lessons/*.md` fährt **immer** mit der Landung mit — auch wenn sie in der Dateiliste nicht namentlich auftaucht. Das ist der Gürtel zum Enforcement-Floor in `cicd` (Abschnitt A0/AC1/AC2, Hosenträger): coder/reviewer/tester prependen ihre Lessons in den Worktree, und ohne dieses Mitlanden gingen sie beim Worktree-Teardown (SR1) spurlos verloren. Die Garantie hängt **nicht** am Gedächtnis des Orchestrators — der Floor liegt in cicd; diese Zeile ist der explizite Belt.
+
 **Was cicd dabei tut (Abschnitt A in `agents/cicd.md`):**
+- **Getrackte `.claude/lessons/*.md`-Deltas im selben Commit/PR** — Enforcement-Floor (A0), immer mitgelandet; cicd meldet `Lessons: <n> Datei(en) gelandet | keine` (AC8). Konflikt am Datei-Anfang → additive newest-first-Union (A1a/AC5), kein Eintrag verloren/dupliziert. Gitignored (wie agent-flow selbst) → kein Zwangs-Add, kein Fehler (AC6).
 - **Code UND etwaige `docs/specs/`-Deltas im selben Commit/PR** — zusammen oder gar nicht (Drift-Gate-Prinzip, CONCEPT §4d).
 - **`direct`-Policy:** merge + push auf `$default_branch`.
 - **`pr`-Policy:** Branch pushen + PR öffnen (Fork-sicher: `gh pr create --repo "$repo" --base "$default_branch"` — `$repo` via origin-URL aufgelöst). cicd erstellt den PR, merged ihn NICHT selbst → Orchestrator/User mergt; anschliessend Rollout via `/cicd rollout` oder weiter-getriggertem `ship`.
@@ -412,6 +415,7 @@ Dann stoppen mit Zusammenfassung (gelandete Items + Test-URL + Version).
 - Stories mit **disjunkten** Dateien (kein gemeinsamer Hot-Spot aus §0a) laufen **parallel** in isolierten git-Worktrees (ein coder je Worktree, `coder/R03`).
 - Stories mit **geteilten Hot-Spot-Dateien** laufen **seriell** — Reihenfolge aus §0a-Plan.
 - **Landen ist immer seriell:** `main` ist die eine Senke; zwischen zwei PRs wird jeweils ein Rebase auf den aktuellen `main`-Stand durchgeführt (Post-Rebase-Verifikation: s. `flow/P2` in §5).
+- **Worktree-Teardown erst NACH bestätigter Landung (Reihenfolge-Garantie, Spec [`docs/specs/flow-lessons-landing.md`](../../docs/specs/flow-lessons-landing.md) AC7):** Ein isolierter Story-Worktree (`.claude/worktrees/<story-id>`) wird erst per `git worktree remove --force` entfernt, **nachdem** cicd die Landung bestätigt hat (`Rollout-Gate: PASS` bei `direct`, bzw. gemergter PR bei `pr`). Da cicd die getrackten `.claude/lessons/*.md`-Deltas als Teil des Landungs-Commits/PR führt (Enforcement-Floor A0, AC1/AC4) und der Teardown der Landung **nachgelagert** ist, kann `git worktree remove --force` keine noch nicht committete Lessons-Änderung mehr verschlucken. Kein Teardown vor bestätigter Landung — sonst geht das Lessons-Delta verloren, bevor es committet ist.
 - **Test-Isolation:** parallele Worktrees müssen aus Test-Auswahl UND Modul-Auflösung ausgeschlossen sein (jest: `testPathIgnorePatterns` + `modulePathIgnorePatterns` für `.claude/worktrees/`) — sonst Cache-Vergiftung oder rote Tests auf `main`. Details: §3 `flow/P1`.
 
 ### SR2 — Feature-Branch-Strategie (AC3)
