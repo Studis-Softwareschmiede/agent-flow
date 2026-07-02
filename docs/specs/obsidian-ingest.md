@@ -91,9 +91,12 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
   (Notiz-/Doku-Fundstelle) und **optional** `optionen[]` (vorgeschlagene Antwortoptionen). Im Terminal-Pfad wird
   **derselbe** Katalog interaktiv gestellt (`AskUserQuestion`). Das Format ist so beschrieben, dass dev-gui
   **ohne** Änderung an agent-flow andockt (siehe *Verträge*).
-- **AC10** — **Erst-Übersetzung besonders präzise:** In **Stufe a** (Notiz→Konzept) ist die Schwelle zum
-  Nachfragen **bewusst niedrig** — jede relevante Mehrdeutigkeit im Ideen-Text wird eher zur Frage als zur stillen
-  Annahme, damit sich Fehlinterpretationen nicht in Spec und Stories fortpflanzen.
+- **AC10** — **Erst-Übersetzung besonders präzise (fixture-geprüft):** In **Stufe a** (Notiz→Konzept) ist die
+  Schwelle zum Nachfragen **bewusst niedrig** — jede relevante Mehrdeutigkeit im Ideen-Text wird eher zur Frage als
+  zur stillen Annahme, damit sich Fehlinterpretationen nicht in Spec und Stories fortpflanzen. **Mechanisch
+  prüfbar:** ein Test-Fixture-Notizordner mit mindestens einer bewusst mehrdeutigen Aussage (z.B. zwei sich
+  widersprechende Aussagen zur Zielgruppe) MUSS in Stufe a mindestens einen Fragenkatalog-Eintrag erzeugen — ein
+  stiller Default/eine stille Annahme für diese Mehrdeutigkeit gilt als AC10-Verletzung.
 
 ### Drei-Stufen-Pipeline
 - **AC11** — Es existiert ein Fabrik-Befehl (Arbeitstitel `/agent-flow:from-notes <ordnerpfad>`), der die drei
