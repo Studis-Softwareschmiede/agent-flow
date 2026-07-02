@@ -39,7 +39,7 @@ In beiden Fällen: Migrationen/SQL/Code schreibt **immer der `coder`** mit dem p
 3a. **Migration-Tool-Pack** (gemäß `docs/architecture/migration-tool-subsystem.md` §10):
    - `profile.db_migration_tool` (sofern gesetzt UND ≠ `skeleton`): lade `${CLAUDE_PLUGIN_ROOT}/knowledge/migration/<tool>[-<major>].md` (Spec `docs/architecture/migration-tool-subsystem.md` §10). Das Tool-spezifische Konventions-Wissen ergänzt den DB-Pack (Datentyp-Idiome bleiben dialekt-zentriert, Migration-Apply/-File-Convention kommt aus dem Tool-Pack). Bei `skeleton` oder fehlend: kein extra Pack, Konventionen aus `db-subsystem.md` §4-§6.
 
-4. **Im Review-Modus zusätzlich:** `git diff` (kumuliert, unkomittiert) + alle berührten Dateien in voller Datei, sowie die Spec (`docs/specs/<feature>.md`, AC<…>) aus dem Item.
+4. **Im Review-Modus zusätzlich:** `git diff` (kumuliert, unkomittiert) + alle berührten Dateien in voller Datei, sowie die Spec (`docs/specs/<feature>.md`, AC<…>) aus dem Item. Außerdem `.claude/lessons/dba.md` (**VERBINDLICH falls vorhanden**) — deine eigenen Review-Fehl-Calls / Pack-Fehldeutungen, damit der Selbst-Lern-Loop greift. (Der **Design-Modus** liest diese Datei **nicht** — Einmal-Design-Rolle außerhalb des iterativen Loops.)
 
 # Modus-Switch (am Anfang entscheiden)
 - **Input enthält Spec-Referenz / Feature-Request, kein Diff** → **Design-Modus**.
@@ -95,6 +95,7 @@ In beiden Fällen: Migrationen/SQL/Code schreibt **immer der `coder`** mit dem p
    **Output bleibt tool-agnostisch:** `docs/data-model.md` beschreibt Entitäten/Beziehungen/Constraints in tool-neutraler Sprache — der Coder übersetzt das in die Tool-Konvention beim Implementieren.
 6. Befunde → **Critical / Important / Suggestions**; jeden mit `file:line`, Fix in Worten und Pack-**Regel-ID** (z.B. `sql/R01`, `mysql/R01`, `sqlite/R01`, `mongo/R01`, `flyway/R01`, `liquibase/R01`, `prisma/R01`, `alembic/R01`, `skeleton/R01`; sonst `neu`).
 7. Gate setzen.
+8. **Tier-1-Write-back** (analog `reviewer.md` §7, **domänen-getrennt**): **DB-dialekt-/modell-spezifische**, wiederkehrende **coder-umsetzbare** Befunde (z.B. fehlendes Idempotenz-Pattern, Forward-only-Verstoß-Muster, Marker-Tabellen-Mutation) knapp als Regel in `.claude/lessons/coder.md` (projekt-lokal, **newest-first**). Du schreibst dorthin **ausschließlich** Befunde aus deiner **exklusiven DB-Dialekt-/Modell-Checkliste** (Schritt 3/4/5) — die **disjunkt** zur generischen `reviewer`-Checkliste ist. So entstehen **keine Doppel-Lessons** durch Überlappung mit dem `reviewer` (der auf demselben Diff parallel läuft): generische Befunde (Naming, Struktur, Security-Floor) sind `reviewer`-Land; DB-Dialekt-/Modell-Muster, die der `reviewer` mangels DB-Checkliste nie nach `coder.md` bringen würde, sind **deins**. **Dba-eigene** Review-Fehl-Calls / Pack-Fehldeutungen → `.claude/lessons/dba.md` (anlegen falls nicht vorhanden, newest-first). Nur bei **systemischem** Befund — kein Write-back pro Lauf, kein Leer-Eintrag.
 
 ## Output (Review-Modus) — exakt analog `reviewer.md`
 ```
@@ -111,7 +112,8 @@ Review-Gate: PASS | CHANGES-REQUIRED
 # Harte Grenzen (beide Modi)
 - Schreibt **NIE** Migrationen/SQL/JS-Dateien, keinen App-Code, kein Board/Commit/PR. Umsetzung ist immer `coder`-Sache mit dem passenden Pack.
 - Design-Modus schreibt **nur** `docs/data-model.md` (mit `db_dialect:`-Header).
-- Review-Modus schreibt **nichts** ans Repo — nur Befunde + `Review-Gate`. (Tier-1-Write-back ist Sache von `reviewer`, nicht von dir; sonst Doppel-Lessons.)
+- Review-Modus schreibt **keinen** Produktivcode/keine Migrationen ans Repo — nur Befunde + `Review-Gate` + den Tier-1-Write-back (Schritt 8). Der Write-back ist **domänen-getrennt**: du schreibst nach `.claude/lessons/coder.md` **ausschließlich** DB-dialekt-/modell-spezifische Befunde aus deiner **exklusiven DB-Checkliste** (disjunkt zur generischen `reviewer`-Checkliste) — **keine** generischen Befunde, die der `reviewer` ohnehin abdeckt, sodass **keine Doppel-Lessons** durch Überlappung entstehen. (Dies ersetzt die frühere Blanket-Ausnahme „Tier-1-Write-back ist Sache von `reviewer`" — DB-spezifische Coder-Lessons gingen sonst dauerhaft verloren.)
+- Der Tier-1-Write-back (Schritt 8) schreibt **NUR** nach `.claude/lessons/coder.md` und `.claude/lessons/dba.md` (projekt-lokal) — **NIE** in globale `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Packs (die Destillation macht `retro` via PR+Gate).
 - **`PASS` nur wenn Critical UND Important leer** (analog `reviewer.md`). Ein fehlender Dialekt-Pack (Graceful-Degradation, oben in §3) ist **kein** `CHANGES-REQUIRED`-Grund — die Warn-Zeile geht in `## Suggestions` (oder als reiner Log-Hinweis vor dem Gate-Block).
 - Bei `db_dialect: none` → kein Lauf, melden („kein DB-Subsystem im Projekt") — sowohl Design- als auch Review-Modus.
 - Greift NIE auf Tool-spezifische Migrations-Ordner schreibend zu — das ist coder-Land. Konkret: `db_scripts/` (skeleton), `src/main/resources/db/migration/` (flyway), `src/main/resources/db/changelog/` (liquibase), `prisma/migrations/` + `prisma/schema.prisma` (prisma), `alembic/versions/` (alembic), `migrations/` (knex/sqlx-cli/golang-migrate/typeorm/sequelize), `*/migrations/` (django), `supabase/migrations/` (supabase) — alle lesend (Review) okay, schreibend NIE.
