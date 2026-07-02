@@ -35,7 +35,7 @@ Festlegen, wie ein Board als git-Dateien aussieht — ein menschenlesbares, diff
 `board/features/F-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.1: **Pflicht** `id` (`F-###`), `title`, `goal`, `status` (`Backlog|Planned|Active|Done|Archived`), `priority` (`P0|P1|P2|P3`), `created_at`, `updated_at`. **Optional** `spec`, `definition_of_done`, `labels[]`, `depends[]` (Feature-IDs), `owner`. **Abgeleitet (nicht von Hand)** `stories[]`, `progress`.
 
 ### V3 — Story-YAML
-`board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|In Review|Done`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `branch`, `pr`, `blocked_reason`, `done_at`.
+`board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|In Review|Done|Verworfen`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `branch`, `pr`, `blocked_reason`, `done_at`. Der Status `Verworfen` (Won't-Do/Obsolete) ist **terminal** wie `Done`, aber nicht *erfolgreich* — Semantik + terminale Wertung in `next`/`rollup`/`/flow` siehe [[story-status-verworfen]].
 
 **Sonderfall: importierte Stories** (Feld `github_issue` gesetzt): `spec` und `implements` dürfen bei einem GitHub-Export-Lauf fehlen/null sein, wenn kein `Spec:`/`implements:`-Marker im Issue-Body vorhanden war. `lint` meldet fehlende Werte dieser beiden Felder dann als **WARN STORY-UNSPEC** (nicht als FEHLER FIELD-REQUIRED). Der Owner zieht sie im Cut-PR nach (Drift-Gate greift zur Implementierungszeit via coder/reviewer). Native Stories (ohne `github_issue`) behalten `spec`/`implements` als harte Pflichtfelder (FIELD-REQUIRED bei Fehlen).
 
@@ -67,7 +67,7 @@ Fehlt ein Pflichtfeld (V2/V3) oder verletzt ein Feld die Typ-/Enum-Konformität 
 
 - **AC1** — `board/board.yaml` enthält `schema_version` (int), `project_slug` und je einen ID-Zähler `next_feature_id`/`next_story_id`; ohne `board.yaml` gilt das Board als nicht initialisiert. *(V1)*
 - **AC2** — Feature-YAML trägt alle Pflichtfelder aus board-subsystem §4.1 (`id,title,goal,status,priority,created_at,updated_at`) plus die optionalen/abgeleiteten Felder; `status`∈{Backlog,Planned,Active,Done,Archived}, `priority`∈{P0,P1,P2,P3}. *(V2)*
-- **AC3** — Story-YAML trägt alle Pflichtfelder aus board-subsystem §4.2 (`id,parent,title,status,priority,spec,implements,created_at,updated_at`) plus die optionalen Felder; `status`∈{To Do,In Progress,Blocked,In Review,Done}, `priority`∈{P0,P1,P2,P3}. Für **importierte Stories** (`github_issue` gesetzt) sind `spec`/`implements` bei Fehlen WARN STORY-UNSPEC (kein FEHLER), bis der Owner sie im Cut-PR nachzieht. *(V3)*
+- **AC3** — Story-YAML trägt alle Pflichtfelder aus board-subsystem §4.2 (`id,parent,title,status,priority,spec,implements,created_at,updated_at`) plus die optionalen Felder; `status`∈{To Do,In Progress,Blocked,In Review,Done,Verworfen}, `priority`∈{P0,P1,P2,P3}. `Verworfen` ist ein terminaler Status (Won't-Do/Obsolete, [[story-status-verworfen]]). Für **importierte Stories** (`github_issue` gesetzt) sind `spec`/`implements` bei Fehlen WARN STORY-UNSPEC (kein FEHLER), bis der Owner sie im Cut-PR nachzieht. *(V3)*
 - **AC4** — IDs matchen `^F-\d{3,}$`/`^S-\d{3,}$`, Enums tragen nur erlaubte Werte, `implements[]` sind `AC<n>`-Tokens, Zeitstempel ISO-8601-UTC; Abweichung → `lint`-Fehler. *(V4, V9)*
 - **AC5** — `lint` meldet doppelte Feature-/Story-IDs und einen Dateiname-Präfix, der nicht zur `id` im Body passt, als Fehler. *(V5)*
 - **AC6** — `lint` meldet eine Story mit fehlendem/leerem/unbekanntem `parent` als Fehler. *(V6)*
@@ -110,7 +110,8 @@ updated_at: 2026-06-14T00:00:00Z
 id: S-014
 parent: F-001            # PFLICHT, genau ein Feature
 title: IONOS-Adapter
-status: To Do            # To Do|In Progress|Blocked|In Review|Done (Schreiber: /flow)
+status: To Do            # To Do|In Progress|Blocked|In Review|Done|Verworfen (Schreiber: /flow)
+                         #   Verworfen = terminal (Won't-Do/Obsolete), nicht "erfolgreich" — s. story-status-verworfen
 priority: P0             # P0|P1|P2|P3
 spec: docs/specs/provisioning.md
 implements: [AC1, AC2, AC4]

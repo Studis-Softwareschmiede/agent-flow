@@ -129,8 +129,9 @@ Feature  F-002  „Key-Rotation"
 ║  id            S-014                 ← stabil, projektweit eindeutig        ║
 ║  parent        F-001                 ← PFLICHT: genau ein Feature           ║
 ║  title         IONOS-Adapter                                                ║
-║  status        To Do │ In Progress │ Blocked │ In Review │ Done             ║
+║  status        To Do │ In Progress │ Blocked │ In Review │ Done │ Verworfen ║
 ║                                       ← einziger Schreiber: /flow           ║
+║                                       ← Verworfen = terminal (Won't-Do), s. story-status-verworfen ║
 ║  priority      P0 │ P1 │ P2 │ P3     ← Reihenfolge innerhalb To-Do-Queue    ║
 ║  spec          docs/specs/provisioning.md   ← Source of Truth für AC        ║
 ║  implements    [AC1, AC2, AC4]       ← welche AC der Spec diese Story erfüllt║
@@ -159,7 +160,7 @@ Feature  F-002  „Key-Rotation"
 | `parent` | — | ✅ | Story → genau 1 Feature |
 | `title` | ✅ | ✅ | |
 | `goal` / `title`-Beschreibung | ✅ (goal) | — | Feature trägt das *Warum* |
-| `status` | ✅ (5: Backlog…Archived) | ✅ (5: To Do…Done) | **unterschiedliche** Lebenszyklen |
+| `status` | ✅ (5: Backlog…Archived) | ✅ (6: To Do…Done, Verworfen) | **unterschiedliche** Lebenszyklen |
 | `priority` | ✅ Roadmap | ✅ Queue | gleiche Skala P0–P3 |
 | `spec` | ✅ (optional) | ✅ (AC-Quelle) | Datei unter `docs/specs/` |
 | `implements` (AC-Liste) | — | ✅ | Drift-Gate-Bindung |
@@ -249,17 +250,29 @@ Backlog ──► Planned ──► Active ──► Done ──► Archived
 - `Active` = mindestens eine Story `In Progress`/done, nicht alle done.
 - `Done` = **alle** Stories `Done` (vom Board-Tool aus Rollup vorgeschlagen, vom Owner bestätigt).
 
-**Story** (identisch zu heute — `/flow` ist einziger Schreiber):
+**Story** (`/flow` ist einziger Schreiber der Loop-Übergänge; `Verworfen` ist eine
+manuelle Owner/GUI-Entscheidung, kein Loop-Ausgang):
 
 ```
-To Do ──► In Progress ──► In Review ──► Done
+To Do ──► In Progress ──► In Review ──► Done          (Done = terminal, erfolgreich)
               │   ▲            │
               ▼   │            ▼
            Blocked ◄───────────┘   (Spec-Lücke, Loop-Schutz N=3, DB-Smoke-FAIL, Rollout-FAIL)
+
+   ┌ (Owner/GUI, aus jedem nicht-terminalen Status) ──► Verworfen   (terminal, Won't-Do/Obsolete)
 ```
 
-Die Story-Übergänge und ihre Auslöser bleiben **1:1** wie in `skills/flow/SKILL.md`
+Die Loop-Übergänge und ihre Auslöser bleiben **1:1** wie in `skills/flow/SKILL.md`
 heute — es ändert sich nur das *Backend* (Datei statt `gh project item-edit`).
+
+**Terminale Menge = {Done, Verworfen}.** `Verworfen` (Won't-Do/Obsolete) heißt „wird
+bewusst nicht mehr umgesetzt, weil nicht mehr nötig" — abgegrenzt von `Done` (erfolgreich
+umgesetzt) und `Blocked` (temporär gehindert). Überall, wo das Subsystem `Done` als
+*abgeschlossen/terminal* wertet (Depends-Gate in `board next`, Rollup/Progress,
+Feature-Vollständigkeit, `reconcile`-Drain-Gate, `/flow`-Auswahl), gilt `Verworfen`
+**gleichwertig terminal** — aber nie als *erfolgreich*: `done_at` und der `done/total`-Zähler
+bleiben ausschließlich `Done` vorbehalten. Verhaltensvertrag: `docs/specs/story-status-verworfen.md`.
+`Verworfen` ist **Story-only**; der Feature-Enum (`Backlog…Archived`) bleibt unverändert.
 
 ---
 
