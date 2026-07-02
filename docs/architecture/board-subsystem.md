@@ -235,6 +235,15 @@ Ledger bleiben die schreibende Quelle, die Story-Felder sind die lesbare Sicht.
 > die Heuristik `size_est`, aber `dispo_est = null` (erwarteter Zustand). Nach dem
 > ersten `retro`-Lauf füllen sich die Schätzwerte.
 
+**Metrik-Schreibpfad-Anker (`METRICS_ROOT`, Spec `docs/specs/metrics-repo-anchor.md`):**
+`/flow` verankert den Pfad zu allen Ledger-Writes (`dispatches.jsonl`, `items.jsonl`,
+`baseline.json`) genau einmal beim Session-Start absolut am Board-Repo
+(`METRICS_ROOT = git rev-parse --show-toplevel`, nie relativ, nie erneut aufgelöst,
+nie über `${CLAUDE_PLUGIN_ROOT}`) — Rationale: am 2026-07-02 landeten sämtliche
+Metrik-Zeilen eines dev-gui-Laufs versehentlich im `agent-flow`-Plugin-Repo statt im
+Projekt-Repo, weil der Pfad zur Laufzeit relativ/erneut aufgelöst wurde und nach
+Verzeichniswechseln vom Board-Repo abdriftete.
+
 ---
 
 ## 5. Status-Lebenszyklen
