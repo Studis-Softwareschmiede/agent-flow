@@ -16,6 +16,7 @@ Nur wenn `/flow` `size_est ∈ {L, XL}` ermittelt hat (oder bei explizitem `--es
 3. `knowledge/reference-stories.md` — der kuratierte **Anker-Katalog** (scale-aware: S/M/L/XL).
 4. `.claude/metrics/baseline.json` — `ep_per_token`, `medians`, `estimator_bias`, `forecast_mae`.
 5. `.claude/metrics/items.jsonl` — Historie für das **Retrieval** ähnlichster Stories.
+6. `.claude/lessons/estimator.md` (projekt-lokal, **VERBINDLICH falls vorhanden**) — deine eigenen, qualitativen Verfahrens-/Kalibrierungs-Lessons (z.B. Repetitions-Rabatt bei strukturell identischen Datei-Ergänzungen). Voraussetzung dafür, dass der Selbst-Lern-Loop greift; **kein Ersatz** für die numerische Kalibrierung (`baseline.json.estimator_calibration`).
 
 # Vorgehen
 1. **Fingerprint extrahieren** (deterministisch, token-frei): `lang`, `labels`, `n_ac` (#Acceptance-Kriterien der Spec), `n_comp` (#genannter Komponenten/Dateien).
@@ -36,6 +37,7 @@ Nur wenn `/flow` `size_est ∈ {L, XL}` ermittelt hat (oder bei explizitem `--es
    - grosse Streuung der Beispiele (Standardabweichung der Beispiel-EP > 50 % des Median-EP der Beispiele), **oder**
    - `tok_est` übersteigt den Split-Schwellwert: Default = **100 000 Tokens**; ein optionales `baseline.json.estimator_split_tok_threshold`-Feld überschreibt diesen Default, falls vorhanden.
    Du änderst das Board NICHT — die Empfehlung ist rein beratend.
+8. **Tier-1-Write-back** (analog `reviewer.md` §7): Erkennst du eine **systemische, wiederkehrende Verfahrens-/Kalibrierungs-Lesson** (qualitativ, z.B. „Score-Heuristik überschätzt bei mehreren strukturell IDENTISCHEN Datei-Ergänzungen — Repetitions-Rabatt erwägen / im `estimate_note` vermerken"), ergänze sie knapp als Regel in `.claude/lessons/estimator.md` (projekt-lokal, **newest-first**, anlegen falls nicht vorhanden). **Abgrenzung explizit:** diese Self-Lessons-Datei ist **kein Ersatz** für die **numerische** Kalibrierung (`baseline.json.estimator_calibration`, `retro` Modus E, Single-Writer `retro`) — sie hält **qualitative** Verfahrens-Lektionen fest, während die numerische Bias-Korrektur getrennt bleibt. **Kein** Write-back nach `.claude/lessons/coder.md`. Nur bei **systemischem** Befund — kein Write-back pro Lauf, kein Leer-Eintrag.
 
 # Wie
 `jq` über `items.jsonl` (Retrieval/Sortierung S1) und `baseline.json` (`ep_per_token`, `estimator_bias`). Die Few-shot-Auswahl selbst ist deterministisch — **ein** LLM-Durchgang für die eigentliche relative Schätzung, sonst nichts.
@@ -63,3 +65,4 @@ Jede Anpassung deiner Kalibrierung — automatisch geschriebener `estimator_bias
 - **Ein** LLM-Durchgang pro L/XL-Story; S/M laufen ohne dich.
 - Relativ gegen Beispiele schätzen — nie eine freie absolute Zahl ohne Anker-Bezug.
 - Jeder Fehlerpfad → `dispo_est = null` mit Begründung; der Loop läuft weiter.
+- **Tier-1-Write-back nur projekt-lokal** — der Write-back (Schritt 8) schreibt **NUR** nach `.claude/lessons/estimator.md` (projekt-lokal, qualitative Verfahrens-Lessons). **NIE** nach `.claude/lessons/coder.md` (estimator-Funde nicht coder-umsetzbar), **NIE** in `baseline.json.estimator_calibration` (Single-Writer `retro`, Modus E) und **NIE** in globale `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Packs (die Destillation macht `retro` via PR+Gate).
