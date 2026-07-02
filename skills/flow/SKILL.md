@@ -29,7 +29,7 @@ Für jede Story: welche zentralen Dateien berührt sie (aus Spec-Lektüre + `imp
 Widersprechen sich Stories? (Eine baut um, was die andere voraussetzt; eine legt Felder an, die eine andere löscht.) → Reihenfolge nach `depends` + logischer Schichtung (Backend vor Frontend, Datenschicht vor UI).
 
 ### (c) depends-Reihenfolge (topologisch)
-`board next` respektiert `depends` bereits; `/flow` visualisiert trotzdem die Reihenfolge explizit, damit Parallelisierungs-Gruppen sichtbar sind. Eine Story startet erst, wenn ihre `depends` `Done` sind.
+`board next` respektiert `depends` bereits; `/flow` visualisiert trotzdem die Reihenfolge explizit, damit Parallelisierungs-Gruppen sichtbar sind. Eine Story startet erst, wenn ihre `depends` **terminal** sind — terminale Menge `{Done, Verworfen}` (eine verworfene Vorbedingung erfüllt das Depends-Gate ebenso wie eine erledigte; Spec `docs/specs/story-status-verworfen.md` AC3).
 
 **Ergebnis des Plans:** Eine kurze Ausgabe im Format:
 
@@ -49,6 +49,8 @@ Dieser Plan wird dem User ausgegeben und steuert die Dispatch-Reihenfolge in §3
 - `board next` → die nächste bereite Story als JSON (`id`, `spec`, `implements`, `parent`, `labels`, `priority`); Queue-Logik (Priority, Depends-Gate) lebt in der CLI.
 - Aus dem JSON die **Spec-Referenz** lesen: `spec: docs/specs/<feature>.md` + `implements: [AC…]` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Story-Titel).
 - Leere Ausgabe → nichts zu tun; weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
+
+> **Terminale Status — `Done` und `Verworfen` (Spec `docs/specs/story-status-verworfen.md` AC6).** Die terminale Menge ist `{Done, Verworfen}`. Stories mit Status `Verworfen` (bewusst nicht mehr umgesetzt — Scope gestrichen/überholt) sind **terminal** und werden vom `/flow`-Loop **nie** als offenes To-Do aufgegriffen — das folgt bereits aus `board next` (Kandidaten sind ausschließlich `To Do`, `Verworfen` ist ausgeschlossen; AC4). Für Fortschritts-/Rollup-Zwecke zählt `Verworfen` wie `Done` als **abgeschlossen/nicht-aktiv**, aber **nie als erfolgreich**: `done_at` und der `done/total`-Zähler bleiben ausschließlich `Done` vorbehalten (`board rollup` weist Verworfenes separat aus, AC5). **Kein `/flow`-Statusübergang erzeugt `Verworfen`** — das ist eine bewusste Owner-/GUI-Entscheidung (kein Loop-Ausgang; Single-Writer `BOARD_WRITER=flow` bleibt unverändert).
 
 ### 1a. A-priori-Grössenklasse + `ep_est` (Spec `metrics-estimation` AC1–AC3/AC8/AC10, §2b)
 

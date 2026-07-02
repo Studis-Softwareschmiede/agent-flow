@@ -9,6 +9,13 @@
 #         (`scripts/board` würde das für schreibende Verben tun, coder/L15) — er meldet die
 #         Vorbedingung sauber als "nicht erfüllbar/leer" statt mit Fehler abzubrechen.
 #
+# Covers (story-status-verworfen): AC8
+#   AC8 — Reconcile-Drain-Gate: Das Stufe-2-Gate betrachtet AUSSCHLIESSLICH die vier aktiven
+#         Spalten (To Do, In Progress, Blocked, In Review). `Verworfen` ist — wie `Done` —
+#         KEINE aktive Spalte und blockiert das Gate NICHT (terminale Menge {Done, Verworfen}).
+#         Verankert als getestete Invariante (Test 6, Regressionsschutz — keine Logik-Änderung
+#         am Gate, nur Kommentar + dieser Test).
+#
 # Self-Test für `scripts/reconcile-stage2-gate.sh` (Kanban-Vorbedingungs-Check des Reconcile-
 # Skills, Stufe 2). Verwendet /tmp-Fixtures + ein eigenes BOARD_DIR — berührt NIEMALS das
 # echte board/ des Repos.
@@ -154,6 +161,37 @@ if [[ "$T5_OUT" == "empty" ]]; then
   pass "Test 5 (AC6): nur 'Done'-Stories -> 'empty' (Done zählt nicht zu den vier aktiven Spalten)"
 else
   fail "Test 5: erwartet 'empty', bekam '${T5_OUT}'"
+fi
+
+# ===========================================================================
+# Test 6 (story-status-verworfen AC8): nur 'Verworfen'-Stories -> "empty"
+#   Verworfen ist — wie Done — KEINE aktive Spalte und blockiert das Drain-Gate NICHT
+#   (terminale Menge {Done, Verworfen}). Regressionsschutz: das Gate darf 'Verworfen' niemals
+#   in seine vier aktiven Spalten aufnehmen.
+# ===========================================================================
+T6_DIR="${TEST_WORK_DIR}/t6/board"
+init_board "$T6_DIR"
+write_story "${T6_DIR}/stories/S-001-x.yaml" "S-001" "Verworfen"
+T6_OUT="$(run_gate "$T6_DIR")"
+if [[ "$T6_OUT" == "empty" ]]; then
+  pass "Test 6 (story-status-verworfen AC8): nur 'Verworfen'-Stories -> 'empty' (Verworfen ist, wie Done, keine aktive Spalte)"
+else
+  fail "Test 6: erwartet 'empty', bekam '${T6_OUT}'"
+fi
+
+# ===========================================================================
+# Test 7 (story-status-verworfen AC8): gemischt Done + Verworfen -> "empty"
+#   Beide terminalen Werte zusammen dürfen das Gate nicht blockieren.
+# ===========================================================================
+T7_DIR="${TEST_WORK_DIR}/t7/board"
+init_board "$T7_DIR"
+write_story "${T7_DIR}/stories/S-001-x.yaml" "S-001" "Done"
+write_story "${T7_DIR}/stories/S-002-x.yaml" "S-002" "Verworfen"
+T7_OUT="$(run_gate "$T7_DIR")"
+if [[ "$T7_OUT" == "empty" ]]; then
+  pass "Test 7 (story-status-verworfen AC8): Done + Verworfen gemischt -> 'empty' (terminale Menge {Done, Verworfen})"
+else
+  fail "Test 7: erwartet 'empty', bekam '${T7_OUT}'"
 fi
 
 # ===========================================================================

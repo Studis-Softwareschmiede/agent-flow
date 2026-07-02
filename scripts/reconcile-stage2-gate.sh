@@ -6,7 +6,9 @@
 # Aufrufer: skills/reconcile/SKILL.md (Stufe 2, VOR jedem Audit-Dispatch).
 #
 # Prueft per `scripts/board list`, ob die vier aktiven Spalten (To Do, In Progress, Blocked,
-# In Review) ALLE leer sind. Reine Lese-/Report-Operation — KEIN Schreiben, KEIN hartes
+# In Review) ALLE leer sind. Die terminale Menge { Done, Verworfen } ist KEINE aktive Spalte
+# und blockiert das Gate NICHT (Spec docs/specs/story-status-verworfen.md AC8: Verworfen zaehlt,
+# wie Done, als geleert/terminal). Reine Lese-/Report-Operation — KEIN Schreiben, KEIN hartes
 # Fehler-Exit bei fehlendem Board (Review-Lehre S-011: `scripts/board` bricht bei FEHLENDEM
 # Board-Skelett fuer manche Verben hart ab — coder/L15 verlangt fuer LESENDE Pruefungen
 # graceful Handling statt Absturz; dieses Script faengt den `board list`-Fehlerfall fuer den
@@ -48,6 +50,12 @@ fi
 ERR_TMP="$(mktemp /tmp/reconcile-stage2-gate-err.XXXXXX)"
 trap 'rm -f "$ERR_TMP"' EXIT
 
+# Nur die vier AKTIVEN Spalten zaehlen. Die terminale Menge { Done, Verworfen } wird bewusst
+# NICHT gelistet: eine `Done`- ODER `Verworfen`-Story gilt als geleert/abgeschlossen und
+# blockiert das Drain-Gate nicht (Spec docs/specs/story-status-verworfen.md AC8 — Verworfen ist,
+# wie Done, keine aktive Spalte; terminale Menge = {Done, Verworfen}). Kein Logik-Zusatz noetig:
+# eine Story, die weder in einer dieser vier Spalten noch als `list --status` einer aktiven
+# Spalte auftaucht, wird schlicht nicht mitgezaehlt.
 COLUMNS=("To Do" "In Progress" "Blocked" "In Review")
 TOTAL=0
 BOARD_MISSING=0
