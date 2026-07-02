@@ -1,7 +1,7 @@
 id: S-018
 parent: F-010
 title: cicd trägt .claude/lessons/*.md IMMER mit + additiver newest-first Merge (Worktree-Landen)
-status: In Review
+status: Done
 priority: P1
 spec: docs/specs/flow-lessons-landing.md
 implements:
@@ -29,5 +29,5 @@ branch: feat/S-018-cicd-lessons-landing
 pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/221
 blocked_reason: null
 created_at: '2026-07-02T05:39:11Z'
-updated_at: '2026-07-02T08:04:55Z'
-done_at: null
+updated_at: '2026-07-02T09:01:42Z'
+done_at: '2026-07-02T09:01:42Z'
