@@ -48,7 +48,10 @@ Dieser Plan wird dem User ausgegeben und steuert die Dispatch-Reihenfolge in §3
 ## 1. Nächstes Item wählen
 - `board next` → die nächste bereite Story als JSON (`id`, `spec`, `implements`, `parent`, `labels`, `priority`); Queue-Logik (Priority, Depends-Gate) lebt in der CLI.
 - Aus dem JSON die **Spec-Referenz** lesen: `spec: docs/specs/<feature>.md` + `implements: [AC…]` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Story-Titel).
-- Leere Ausgabe → nichts zu tun; weiter zu **7. Abschluss-Deploy** (statt sofort stoppen).
+- **Leere Ausgabe → nie stumm (Spec [`docs/specs/empty-drain-diagnostics.md`](../../docs/specs/empty-drain-diagnostics.md) AC3/AC4):** statt sofort zu stoppen oder direkt zu §7 überzugehen, zuerst `board ready` aufrufen (Klartext, kein Agent-Dispatch, kein Board-Schreibvorgang — token-frei) und dessen Ausgabe auf `WAITING <kategorie> (<n>): …`-Zeilen (Aggregat-Block) prüfen:
+  - **≥1 `WAITING …`-Zeile vorhanden** (A1 — es gibt To-Do-Stories, aber keine ist ready): dem User explizit melden: `nichts abarbeitbar — Gründe:` gefolgt von den `WAITING …`-Zeilen im Klartext (AC4).
+  - **Keine `WAITING …`-Zeile** (E1 — keine To-Do-Stories oder alle bereits ready, nur die `Summary:`-Zeile): kein Aggregat zu melden, Verhalten unverändert.
+  - In beiden Fällen danach weiter zu **7. Abschluss-Deploy** (AC3 — der Diagnose-Schritt ersetzt den Übergang nicht, er geht ihm nur voraus).
 
 > **Terminale Status — `Done` und `Verworfen` (Spec `docs/specs/story-status-verworfen.md` AC6).** Die terminale Menge ist `{Done, Verworfen}`. Stories mit Status `Verworfen` (bewusst nicht mehr umgesetzt — Scope gestrichen/überholt) sind **terminal** und werden vom `/flow`-Loop **nie** als offenes To-Do aufgegriffen — das folgt bereits aus `board next` (Kandidaten sind ausschließlich `To Do`, `Verworfen` ist ausgeschlossen; AC4). Für Fortschritts-/Rollup-Zwecke zählt `Verworfen` wie `Done` als **abgeschlossen/nicht-aktiv**, aber **nie als erfolgreich**: `done_at` und der `done/total`-Zähler bleiben ausschließlich `Done` vorbehalten (`board rollup` weist Verworfenes separat aus, AC5). **Kein `/flow`-Statusübergang erzeugt `Verworfen`** — das ist eine bewusste Owner-/GUI-Entscheidung (kein Loop-Ausgang; Single-Writer `BOARD_WRITER=flow` bleibt unverändert).
 
