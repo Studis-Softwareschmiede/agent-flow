@@ -69,6 +69,11 @@ Ablauf         1. Anforderung lesen → Lücken/Mehrdeutigkeiten sammeln
                   referenzieren. Scope/Struktur → concept.md/architecture.md nachziehen.
                4. In TODOs zerlegen (jedes ≈ ein coder→reviewer→tester-Lauf); pro TODO ein
                   GitHub-Issue + Board (To Do), Body: Spec-Ref + implements AC<…> + Priority + Depends-on
+               5. Spec-Auto-Aktivierung (VERBINDLICH, spec-auto-activation): beim Anlegen der
+                  referenzierenden Story jede in DIESEM Lauf neu angelegte Spec im Frontmatter auf
+                  status: active stempeln (analog spec_format-Stempel) → Stories passieren board-ready
+                  R2 ohne manuellen Freigabe-Schritt. Bestehende active/superseded-Specs NIE umstempeln;
+                  ohne referenzierende Story bleibt die Spec draft.
 Output         Specs: docs/specs/<…>.md (neu|aktualisiert)
                #<n> <title> — Spec <slug> (AC<…>) — Priority <p> — depends:<…>
 Harte Grenzen  • kein Code, kein Commit/PR/Merge (Specs nur in den Working-Tree; commit macht der Skill)
