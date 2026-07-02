@@ -5,6 +5,12 @@ Plugin mit Skills + Agenten, das Projekte der Softwareschmiede baut (Board, Flow
 - **Architektur + Handoff-Verträge:** siehe [`AGENTS.md`](AGENTS.md) (von den Arbeits-Agenten gelesen) und [`CONCEPT.md`](CONCEPT.md).
 - **Projekt-Vorlagen:** `templates/` (pro Sprache + `_shared`/`_docs`).
 
+## Parallelbetrieb: mehrere Cloud-Sessions
+
+Der Owner arbeitet mit mehreren Cloud-Sessions gleichzeitig, oft über mehrere Repos hinweg (z. B. `agent-flow` + konsumierende Projekte wie `dev-gui`). Fremde, session-fremde Änderungen im Working Tree/Board sind normal — kein Hinweis an den Owner nötig. Jede Session arbeitet standardmäßig NUR an ihrer eigenen Aufgabe (kein Übernehmen/Einarbeiten fremder Änderungen) und IMMER über einen eigenen Feature-/Fix-Branch, um parallele Sessions nicht zu stören.
+
+Ausnahme: Beauftragt der Owner explizit eine Board-weite Abarbeitung (z. B. `/agent-flow:flow`, Nachtwächter-Modus), darf übergreifend über mehrere Stories hinweg gearbeitet werden.
+
 ## Kommunikation mit dem Owner
 
 Diese Vorgaben gelten für die **Haupt-Session im Dialog mit dem Owner** — nicht für die Arbeits-Agenten (coder/reviewer/tester/…), die ihren Handoff-Verträgen folgen.
