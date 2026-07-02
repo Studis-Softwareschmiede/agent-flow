@@ -1,0 +1,21 @@
+id: F-015
+title: Metrik-Integrität — Repo-Anker für Ledger-Pfade + A-priori-Token-Erwartung
+goal: Metrik-Writes (dispatches/items/token-collect) sind absolut am Board-Repo verankert
+  (nie Plugin-Root/Worktree-Drift, Vorfall 2026-07-02 — 46 items/220 dispatches im
+  falschen Repo, tok_total seit 17.06. durchgängig null); requirement setzt bei Anlage
+  eine Token-Erwartung (tok_est) aus der Baseline, damit die Schätzspalte nie leer ist.
+status: Backlog
+priority: P1
+spec: null
+definition_of_done: null
+labels:
+- process
+- docs
+depends: null
+owner: null
+stories:
+- S-032
+- S-033
+progress: 0/2 done
+created_at: '2026-07-02T19:52:18Z'
+updated_at: '2026-07-02T19:52:18Z'
