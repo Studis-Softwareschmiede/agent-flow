@@ -1,9 +1,9 @@
 ---
 name: flow
-description: Orchestriert die Softwareschmiede — liest das Projekt-Board und arbeitet die To-Do-Items Punkt für Punkt ab (coder → reviewer ⇄ Loop → tester → cicd ship → Done). Einziger Schreiber von Board-Status. Git-Abschluss-Operationen (merge+push) delegiert /flow an cicd als ausführenden Abschluss-Arm. Im Ziel-Projekt-Repo ausführen.
+description: Orchestriert die Softwareschmiede — liest das Projekt-Board und arbeitet EIN To-Do-Item (bzw. einen SR1-Parallel-Batch) ab (coder → reviewer ⇄ Loop → tester → cicd ship → Done), dann endet die Session (Default, auch headless — Kontext-Wachstum vermeiden; äußere Schleifen wie dev-gui ProjectDrain/Nachtwächter rotieren). `--all` (interaktives Opt-in) behält das bisherige Bis-Board-leer-Verhalten. Einziger Schreiber von Board-Status. Git-Abschluss-Operationen (merge+push) delegiert /flow an cicd als ausführenden Abschluss-Arm. Im Ziel-Projekt-Repo ausführen.
 ---
 
-# /flow [--cost <mode>] — Board abarbeiten (Orchestrator)
+# /flow [--cost <mode>] [--all] — Board abarbeiten (Orchestrator)
 
 Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task-Tool und bist der **einzige Schreiber** von Board-Status. Git/PR-Operationen im Abschluss werden an `cicd` als ausführenden Arm delegiert (s. §5). cwd = Ziel-Projekt-Repo.
 
@@ -17,6 +17,7 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
   - Fehlt `profile.default_branch` (Alt-Repo): `default_branch="$(gh repo view "$(git remote get-url origin)" --json defaultBranchRef -q .defaultBranchRef.name)"` (NICHT `main` annehmen — adoptierte Forks haben oft `master`).
 - **Auth herstellen:** `bash "$CLAUDE_PLUGIN_ROOT/scripts/ensure-gh-auth.sh"` (mintet App-Token aus `.env.gpg`, loggt `gh` ein). **NICHT `gh auth login --web`.**
 - **Security-Frische (einmaliger Nudge):** `last_trained:` aus `${CLAUDE_PLUGIN_ROOT}/knowledge/security.md` lesen; ist es **> 90 Tage** her → einmal ausgeben: „🔒 security-Pack ist <N> Tage alt — `/train security` erwägen." (nur Hinweis, blockiert nicht).
+- **Session-Rotation auflösen** (einmal, zu Beginn — Spec [`docs/specs/flow-session-rotation.md`](../../docs/specs/flow-session-rotation.md) AC3): **Default (ohne `--all`, auch headless):** die Session endet nach dem vollständigen Abschluss GENAU EINER Story bzw. eines SR1-Parallel-Batches (Details §6/§7) — kein automatisches Aufnehmen eines weiteren Items im selben Lauf. **`--all`** (interaktives Opt-in, gedacht für Sessions, in denen der Owner bewusst zusieht; Headless-Aufrufer wie dev-gui `ProjectDrain`/Nachtwächter verwenden es NICHT): behält das bisherige Verhalten (Schleife bis Board leer oder User stoppt). Rationale: Ø Cache-Read wuchs in einer 13-Story-Session von 82k auf 298k Token (Faktor 3,6, Messung 2026-07-02) — Rotation hält das Kontext-Wachstum über ein Board linear statt quadratisch; die äußere Schleife übernimmt die Rotation, `/flow` selbst startet keine Folge-Session.
 
 ## 0a. Vorab-Plan (vor dem ersten Item)
 
@@ -316,14 +317,14 @@ Fehlt die Variable und greift `$HOME` nicht → `tok` bleibt `null`, kein Crash 
     Dann zusätzlich **dba** (Task, Review-Modus): `git diff` + Spec + Item-Label. *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen.)* Lies sein `Review-Gate`:
     - `CHANGES-REQUIRED` → Critical+Important als `FINDINGS` an coder zurück, N++ → 3.1.
     - `PASS` → **beide Gates PASS** → weiter zu 4 (Tester). Pflicht: **beide** Reviews müssen PASS sagen, bevor `tester` läuft.
-- **SPEC-LÜCKE:** meldet der coder eine strukturelle/Scope-Lücke (oder der reviewer/dba verweist auf `requirement`) → `board set <id> status Blocked --reason "Spec unvollständig — /requirement nötig"`, dem User melden. Nicht im Loop raten.
-- **Schleifenschutz:** überlebt derselbe Befund N=3 → `board set <id> status Blocked --reason "Loop-Schutz N=3 — gleicher Befund überlebt 3 Iterationen"`, melde es dem User, frage ob mit den restlichen Items weiter. Dann 1.
+- **SPEC-LÜCKE:** meldet der coder eine strukturelle/Scope-Lücke (oder der reviewer/dba verweist auf `requirement`) → `board set <id> status Blocked --reason "Spec unvollständig — /requirement nötig"`, dem User melden. Nicht im Loop raten. Blocked-Ausgang (AC4): ohne `--all` weiter zu §7 (Session-Ende nach diesem Item, kein Weiterziehen).
+- **Schleifenschutz:** überlebt derselbe Befund N=3 → `board set <id> status Blocked --reason "Loop-Schutz N=3 — gleicher Befund überlebt 3 Iterationen"`, melde es dem User. **Ohne `--all`:** Session-Ende — weiter zu §7 (E1/AC4), kein Weiterziehen zum nächsten Item. **Mit `--all`:** frage, ob mit den restlichen Items weiter; bei Zustimmung zurück zu 1.
 
 ## 4. Test-Gate
 - **tester** (Task): Working-Tree + die **Spec** (AC<…>). Story-Kontext: der tester liest via `board show <story-id>` (statt Issue-Body). *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen.)* Lies `Test-Gate`:
   - `FAIL` → als Befund zurück an coder (zählt zum Schleifenschutz) → 3.1.
   - `PASS` → weiter zu 5.
-  - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): `board set <id> status Blocked --reason "DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"`, dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert.
+  - `SKIPPED-NO-DOCKER` → **human-handoff** (kein Auto-Merge): `board set <id> status Blocked --reason "DB-Subsystem-Smoke konnte nicht laufen — Docker-Daemon fehlt; bitte lokal mit Docker oder via Remote-Host wiederholen"`, dem User melden, **nicht** zu 5. weitergehen. Wir wissen sonst nicht, ob die Template-Änderung mechanisch funktioniert. Blocked-Ausgang (AC4): weiter zu §7 (Session-Ende nach diesem Item).
   - `SKIPPED-DOC-ONLY` → äquivalent zu PASS für den Gate-Zweck (Diff ist reine Doku in `tests/db-subsystem/`, kein mechanischer Effekt) → weiter zu 5. Im Normalfall greift der Pfad-Filter in §4 unten schon und der `tester` wird gar nicht dispatcht; dieser Branch ist Defense-in-Depth, falls der `tester` doch lief.
 
 **Template-Diff = hartes Test-Gate.** Wenn `git diff --name-only` (gegen `main`) im `agent-flow`-Repo Pfade unter `templates/_shared/db-*/**`, `templates/_shared/companion-*/**` oder `tests/db-subsystem/*.sh` (nur die Smoke-Skripte selbst, **nicht** README/Docs in dem Ordner) berührt, ist `Test-Gate: PASS` **Pflicht-Vorbedingung** für Schritt 5 — kein Bypass, auch nicht im `direct`-merge-Modus. Reine Doku-Edits (z.B. `tests/db-subsystem/README.md`) triggern das Gate **nicht** — der `tester` hat keinen Smoke für sowas und würde nur einen No-Op zurückgeben (siehe Pfad-Tabelle in `agents/tester.md`). Der `tester`-Agent dispatcht die zugehörigen Smoke-Skripte selbst (Auswahl-Regel siehe `agents/tester.md` → „DB-Subsystem-Smoke (bei Template-Diffs)"). Die früher angedachte CI-Variante (`.github/workflows/smoke-db.yml`) entfällt damit — lokaler Tester-Run ist schneller, kostet keine Actions-Minuten und scheitert nicht an leeren Org-Budgets.
@@ -385,12 +386,24 @@ Bei `pr`-Policy und ausstehemdem Merge: `board set <id> status "In Review"` (Orc
 
 **Kein Trigger.** Items, die nur App-Code/Doku ändern (kein DB-/Companion-Profile-Diff, kein Template-Pfad), lassen das Flag unangetastet — Cache bleibt valide.
 
-## 6. Nächstes
-- Zurück zu 1, bis das Board leer ist oder der User stoppt.
+## 6. Nächstes (Spec [`docs/specs/flow-session-rotation.md`](../../docs/specs/flow-session-rotation.md) AC1/AC3/AC4)
 
-## 7. Abschluss-Deploy — wenn das Board leer ist
+- **Default (ohne `--all`, auch headless):** Nach dem vollständigen Abschluss GENAU EINER Story (Done geschrieben + gelandet + Worktree abgebaut) bzw. eines SR1-Parallel-Batches (alle Storys des Batches gelandet oder einzeln geblockt, s. SR1 unten) endet diese Runde — weiter zu §7 (Abschluss). Kein automatisches Aufnehmen eines weiteren Items im selben Lauf. Rationale: Ø Cache-Read wuchs in einer 13-Story-Session von 82k auf 298k Token (Faktor 3,6, Messung 2026-07-02) — Rotation hält das Kontext-Wachstum über ein Board linear statt quadratisch; die äußere Schleife (dev-gui `ProjectDrain`, Nachtwächter) übernimmt die Rotation.
+- **Blocked-Ausgang (E1, AC4):** Endet das gewählte Item/Batch in Blocked (Loop-Schutz, SPEC-LÜCKE, `SKIPPED-NO-DOCKER`, Rollout-Gate FAIL/NEEDS-HUMAN), endet die Runde ebenso mit der bestehenden Blocked-Meldung — weiter zu §7, kein Weiterziehen zum nächsten Item.
+- **Mit `--all` (interaktives Opt-in, A1):** Zurück zu 1, bis das Board leer ist oder der User stoppt (bisheriges Verhalten). Bei Blocked: User fragen, ob mit den restlichen Items weiter; bei Zustimmung zurück zu 1.
 
-Hinweis: Wenn §5 den cicd-`ship`-Modus ausführt (Standard, `profile.deploy == docker`), sind CI-Watch + Rollout + Prune bereits in der ship-Sequenz enthalten. §7 ist dann nur eine abschliessende Zusammenfassung. Dieser Abschnitt gilt für Konfigurationen, in denen §5 keinen automatischen Rollout auslöst (z.B. `deploy != docker`) oder wenn der Rollout für ein späteres Board-Ende aufgeschoben wurde.
+## 7. Abschluss (Spec [`docs/specs/flow-session-rotation.md`](../../docs/specs/flow-session-rotation.md) AC2)
+
+Erreicht **nach jeder Runde**: Default (ohne `--all`) nach genau einem Item/Batch aus §6; mit `--all` erst wenn das Board leer ist oder der User stoppt.
+
+### 7a. Board-Status-Ausgabe (AC2)
+Vor dem Stoppen `board next` (Klartext, token-frei, kein Agent-Dispatch) UND `board ready --quiet` erneut aufrufen, um den verbleibenden Board-Zustand zu bestimmen:
+- **Liefert `board next` ein Item:** melden — `Board nicht leer — noch <n> abarbeitbare(s) Item(s), nächster Lauf nimmt voraussichtlich <id>.` (`<n>` = Anzahl bereiter Items aus `board ready --quiet`, `<id>` = das von `board next` gelieferte Item). Exit-Code bleibt 0 (Erfolgs-Ende, kein Abbruch — s. Spec [`docs/specs/flow-session-rotation.md`](../../docs/specs/flow-session-rotation.md) „Verträge").
+- **Liefert es nichts (Board leer):** unverändert die Leerlauf-Diagnose aus §1 (`board ready` + WAITING-Aggregat, Spec [`docs/specs/empty-drain-diagnostics.md`](../../docs/specs/empty-drain-diagnostics.md)).
+
+### 7b. Deploy — wenn Rollout aufgeschoben wurde
+
+Hinweis: Wenn §5 den cicd-`ship`-Modus ausführt (Standard, `profile.deploy == docker`), sind CI-Watch + Rollout + Prune bereits in der ship-Sequenz enthalten. Dieser Unterabschnitt ist dann nur eine abschliessende Zusammenfassung. Er gilt für Konfigurationen, in denen §5 keinen automatischen Rollout auslöst (z.B. `deploy != docker`) oder wenn der Rollout aufgeschoben wurde.
 
 Nur wenn diesem Lauf mindestens ein Item gelandet ist **und** `profile.deploy == docker` **und** kein Rollout in §5 bereits stattgefunden hat:
 
@@ -399,7 +412,7 @@ Nur wenn diesem Lauf mindestens ein Item gelandet ist **und** `profile.deploy ==
 **Rollout in §5 aufgeschoben (Ausnahme):**
 1. **`cicd`-Agent** (Task) dispatchen:
    ```
-   SHIP-TRIGGER: Board leer — bitte landen (falls noch nicht), CI beobachten, lokal ausrollen
+   SHIP-TRIGGER: bitte landen (falls noch nicht), CI beobachten, lokal ausrollen
    BRANCH: <aktueller Stand>
    MERGE_POLICY: <aus profile>
    IMAGE: <profile.image>:latest
@@ -412,7 +425,7 @@ Nur wenn diesem Lauf mindestens ein Item gelandet ist **und** `profile.deploy ==
    - **Faustregel:** `DEPLOY_ROLE=vps` → cicd-`ship`; `local` ohne expliziten Rollout-Wunsch → preview-Skill + manuelles prune.
 3. **Best-effort:** CI rot/Timeout oder Pull `denied` → melden + überspringen, Flow NICHT scheitern lassen (Hinweis auf `/cicd ship` bzw. `/preview up`).
 
-Dann stoppen mit Zusammenfassung (gelandete Items + Test-URL + Version).
+Dann stoppen mit Zusammenfassung (gelandete Items + Test-URL + Version + 7a-Board-Status).
 
 ## Strategie-Regeln
 
