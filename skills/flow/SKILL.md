@@ -59,13 +59,13 @@ Dieser Plan wird dem User ausgegeben und steuert die Dispatch-Reihenfolge in §3
 
 ### 1a. A-priori-Grössenklasse + `ep_est` (Spec `metrics-estimation` AC1–AC3/AC8/AC10, §2b)
 
-> **Konsument zuerst (v2, AC8/V8):** `/flow` liest die bei Story-Anlage von **requirement** geschriebenen Schätzfelder (`size_est`, `dispo_est`, `confidence`, `estimate_note`) aus der Story-YAML. Sind die Felder vorhanden → **übernehmen, nicht überschreiben** (kein erneuter estimator-Dispatch, keine Neuberechnung). Fehlen die Felder (Alt-Story / manuell angelegtes Item ohne Schätzfelder) → **Fallback**: `/flow` führt die §1a-Heuristik selbst durch (Rückwärtskompatibilität, AC10). Fehler → `size_est = "M"`, `ep_est = null`, kein Loop-Abbruch (K3).
+> **Konsument zuerst (v2, AC8/V8):** `/flow` liest die bei Story-Anlage von **requirement** geschriebenen Schätzfelder (`size_est`, `dispo_est`, `confidence`, `estimate_note`, `tok_est`) aus der Story-YAML. Sind die Felder vorhanden → **übernehmen, nicht überschreiben** (kein erneuter estimator-Dispatch, keine Neuberechnung). Fehlen die Felder (Alt-Story / manuell angelegtes Item ohne Schätzfelder) → **Fallback**: `/flow` führt die §1a-Heuristik selbst durch (Rückwärtskompatibilität, AC10). Fehler → `size_est = "M"`, `ep_est = null`, kein Loop-Abbruch (K3).
 
 **Schritt A — Felder aus Story-YAML lesen (Konsument-Pfad, AC8):**
 
 Lese die Story-YAML (`board/stories/<story-id>.yaml`) und prüfe, ob `size_est` gesetzt ist (nicht `null`, nicht leer):
 
-- **`size_est` gesetzt:** übernehme `size_est` und `dispo_est` unverändert als Session-Variablen. Schritt B und C entfallen vollständig — requirement hat bereits geschätzt. Weiter mit §2 (In Progress).
+- **`size_est` gesetzt:** übernehme `size_est`, `dispo_est` und `tok_est` unverändert als Session-Variablen (`tok_est` fehlt bei Alt-Stories vor `apriori-token-estimate` → Session-Variable bleibt `null`, kein Fehler, AC5). Schritt B und C entfallen vollständig — requirement hat bereits geschätzt. Weiter mit §2 (In Progress).
 - **`size_est` fehlt oder ist `null`:** → **Fallback-Pfad** (Alt-Story / manuell angelegtes Item). Führe Schritt A-Fallback, B und C aus.
 
 **Schritt A-Fallback — Heuristik (token-frei, deterministisch; nur wenn `size_est` fehlt):**
@@ -105,13 +105,14 @@ Der estimator liest selbst die Story-YAML, die Spec, `knowledge/reference-storie
   "split_suggestion": null|{ "into": <n>, "rationale": "<text>" } }
 ```
 
-**Empfang und Sofort-Persistenz** (fehlerresistent, blockiert nie den Loop):
+**Empfang und Sofort-Persistenz** (fehlerresistent, blockiert nie den Loop) — dies ist zugleich die **estimator-Übernahme-Stelle** für `tok_est` (Spec `apriori-token-estimate` AC3):
 
-1. Parse das JSON-Objekt aus dem estimator-Output. Schlägt das Parsen fehl → `dispo_est_from_estimator = null`, `estimate_note_from_estimator = "estimator-Dispatch fehlgeschlagen"`, `confidence_from_estimator = "low"`.
-2. Speichere `dispo_est_from_estimator` (float|null) als Session-Variable (für Schritt C unten).
+1. Parse das JSON-Objekt aus dem estimator-Output. Schlägt das Parsen fehl → `dispo_est_from_estimator = null`, `tok_est_from_estimator = null`, `estimate_note_from_estimator = "estimator-Dispatch fehlgeschlagen"`, `confidence_from_estimator = "low"`.
+2. Speichere `dispo_est_from_estimator` (float|null) und `tok_est_from_estimator` (int|null) als Session-Variablen (für Schritt C unten). **Präzedenz (AC3, Verträge `apriori-token-estimate`): der estimator-Wert für `tok_est` hat Vorrang vor jedem requirement-Baseline-Lookup** — läuft der estimator (L/XL), wird sein `tok_est` unverändert übernommen und übersteuert einen etwaigen älteren Baseline-Lookup-Wert (die eigentliche Baseline-Lookup-Berechnung findet für L/XL ohnehin nicht statt, s. `agents/requirement.md` Schritt B2, der denselben Skip aus Symmetriegründen anwendet).
 3. Persistiere sofort via `board set` (alle mit `|| true` — fehlende Story-YAML oder CLI-Fehler blockieren nie):
 ```bash
 board set <story-id> dispo_est "$dispo_est_from_estimator"        || true
+board set <story-id> tok_est   "$tok_est_from_estimator"          || true
 board set <story-id> estimate_note "$estimate_note_from_estimator" || true
 board set <story-id> confidence "$confidence_from_estimator"       || true
 ```
@@ -136,6 +137,10 @@ Wenn `medians[key].n` < 3: Schnitt vorhanden aber dünn — trotzdem verwenden (
 `ep_est` (und `size_est`) als Session-Variable merken → beim Done in `items.jsonl` eintragen (§2b unten).
 - **Konsument-Pfad (size_est vorhanden):** `ep_est` = `dispo_est` aus Story-YAML (für L/XL) resp. kein erneuter Lookup (Wert aus requirement bereits korrekt); für S/M direkt `dispo_est` aus Story-YAML als `ep_est` verwenden.
 - **Fallback-Pfad:** `ep_est` aus Schritt C wie oben.
+
+`tok_est` als eigene Session-Variable merken (Spec `apriori-token-estimate` AC4) → beim Done in `items.jsonl` eintragen (§2b unten).
+- **Konsument-Pfad (size_est vorhanden):** `tok_est` = `tok_est` aus der Story-YAML (Schritt A, von requirement geschrieben — bzw. `null` bei Alt-Story ohne das Feld, AC5).
+- **Fallback-Pfad:** `tok_est` = `tok_est_from_estimator` (L/XL, Schritt B) bzw. `null` (S/M — kein Baseline-Lookup für `tok_est` im Fallback-Pfad implementiert; optionales Feld, `null` ist erwartet, kein Fehler).
 
 ## 2. In Progress
 - `board set <story-id> status "In Progress"` — setzt die Story auf In Progress.
@@ -196,7 +201,7 @@ Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3,
 
 1. **`loc`/`files`** aus `git diff --shortstat` des Item-Diffs gegen `$default_branch`-Stand bei Item-Eintritt: `loc` = insertions + deletions, `files` = #geänderte Dateien.
 2. **`blocked`** = 1 wenn das Item zwischenzeitlich den Status `NEEDS-HUMAN`, ungelöste `depends` oder manuellen Eingriff hatte, sonst 0.
-3. **Schätzfelder:** `size_est` + `ep_est` aus §1a Session-Variable (Konsument-Pfad: aus Story-YAML; Fallback: §1a-Heuristik). War §1a nicht ausführbar oder ergab keinen Wert → `size_est = "M"`, `ep_est = null` (K3). `tok_total` = `null` (Phase 0, Befüllung durch `metrics-token-collect`).
+3. **Schätzfelder:** `size_est` + `ep_est` aus §1a Session-Variable (Konsument-Pfad: aus Story-YAML; Fallback: §1a-Heuristik). War §1a nicht ausführbar oder ergab keinen Wert → `size_est = "M"`, `ep_est = null` (K3). `tok_est` aus §1a Session-Variable, null-sicher (Spec `apriori-token-estimate` AC4 — Konsument-Pfad: aus Story-YAML; Fallback: §1a wie oben; kein Wert → `null`). `tok_total` = `null` (Phase 0, Befüllung durch `metrics-token-collect`).
 4. Das Skript `metrics-append-item.sh` übernimmt Rollup (Aggregation aller dispatch-Zeilen), EP-Berechnung und den Append.
 
 Felder der `items.jsonl`-Zeile (subsystem §2.2):
@@ -207,6 +212,7 @@ Felder der `items.jsonl`-Zeile (subsystem §2.2):
 | `item` | **String** `S-###` — kanonische Board-ID (AC2, V2: kein int-Präfix-Strip) |
 | `size_est` | aus §1a Session-Variable — Konsument-Pfad: aus Story-YAML (von requirement geschrieben); Fallback-Pfad: §1a-Heuristik; Default `"M"` |
 | `ep_est` | aus §1a Session-Variable — Konsument-Pfad: `dispo_est` aus Story-YAML; Fallback S/M: Baseline-Lookup, L/XL: `dispo_est` vom estimator; `null` wenn kein Wert |
+| `tok_est` | aus §1a Session-Variable — Konsument-Pfad: `tok_est` aus Story-YAML (von requirement geschrieben); Fallback L/XL: `tok_est` vom estimator, S/M: `null` (kein Lookup implementiert); `null` wenn kein Wert (Spec `apriori-token-estimate` AC4) |
 | `ep_act` | EP nach EP-Formel (§3 subsystem); `metrics-append-item.sh` berechnet intern |
 | `iters` | max `iter` der Dispatches |
 | `crit` | Σ `crit` |
@@ -231,9 +237,9 @@ FILES=$(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' ||
 
 bash "${METRICS_ROOT}/scripts/metrics-append-item.sh" \
   "$STORY_ID" "${SIZE_EST:-M}" "${EP_EST:-null}" "$LOC" "$FILES" \
-  "${BLOCKED:-0}" "${LANG:-md}" "${COST_MODE:-balanced}" >&2 || true
+  "${BLOCKED:-0}" "${LANG:-md}" "${COST_MODE:-balanced}" "${TOK_EST:-null}" >&2 || true
 ```
-Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3). Auch hier: Aufruf ausschließlich über `${METRICS_ROOT}/scripts/…` (AC2, s.o.) — nie über einen Worktree- oder Plugin-Root-Pfad.
+Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3). Auch hier: Aufruf ausschließlich über `${METRICS_ROOT}/scripts/…` (AC2, s.o.) — nie über einen Worktree- oder Plugin-Root-Pfad. `${TOK_EST:-null}` = die in §1a gemerkte `tok_est`-Session-Variable (9. Positionsparameter, optional — Alt-Aufrufe ohne diesen Parameter bleiben gültig, das Skript defaultet auf `null`, AC5).
 
 ### Self-Check beim Done (V4, AC5)
 

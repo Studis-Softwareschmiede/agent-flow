@@ -35,7 +35,7 @@ Festlegen, wie ein Board als git-Dateien aussieht — ein menschenlesbares, diff
 `board/features/F-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.1: **Pflicht** `id` (`F-###`), `title`, `goal`, `status` (`Backlog|Planned|Active|Done|Archived`), `priority` (`P0|P1|P2|P3`), `created_at`, `updated_at`. **Optional** `spec`, `definition_of_done`, `labels[]`, `depends[]` (Feature-IDs), `owner`. **Abgeleitet (nicht von Hand)** `stories[]`, `progress`.
 
 ### V3 — Story-YAML
-`board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|In Review|Done|Verworfen`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `branch`, `pr`, `blocked_reason`, `done_at`. Der Status `Verworfen` (Won't-Do/Obsolete) ist **terminal** wie `Done`, aber nicht *erfolgreich* — Semantik + terminale Wertung in `next`/`rollup`/`/flow` siehe [[story-status-verworfen]].
+`board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|In Review|Done|Verworfen`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `tok_est`, `branch`, `pr`, `blocked_reason`, `done_at`. `tok_est` (Ganzzahl | null, erwartete Gesamt-Tokens des Flow-Durchlaufs — A-priori-Wert aus `baseline.json`-Lookup bzw. `estimator`, Persistenz als Text via `board set` analog `dispo_est`; s. [[apriori-token-estimate]] AC1/AC2) ist rückwärtskompatibel: fehlt es (Alt-Story), bleibt die Story gültig (kein `lint`-Fehler). Der Status `Verworfen` (Won't-Do/Obsolete) ist **terminal** wie `Done`, aber nicht *erfolgreich* — Semantik + terminale Wertung in `next`/`rollup`/`/flow` siehe [[story-status-verworfen]].
 
 **Sonderfall: importierte Stories** (Feld `github_issue` gesetzt): `spec` und `implements` dürfen bei einem GitHub-Export-Lauf fehlen/null sein, wenn kein `Spec:`/`implements:`-Marker im Issue-Body vorhanden war. `lint` meldet fehlende Werte dieser beiden Felder dann als **WARN STORY-UNSPEC** (nicht als FEHLER FIELD-REQUIRED). Der Owner zieht sie im Cut-PR nach (Drift-Gate greift zur Implementierungszeit via coder/reviewer). Native Stories (ohne `github_issue`) behalten `spec`/`implements` als harte Pflichtfelder (FIELD-REQUIRED bei Fehlen).
 
@@ -123,6 +123,7 @@ dispo_act: null                       # optional  EP|null
 dispo_forecast: null                  # optional  +/-%|null
 estimate_note: null                   # optional
 confidence: null                      # optional  high|medium|low
+tok_est: null                         # optional  Ganzzahl|null  (A-priori-Tokens, s. apriori-token-estimate)
 branch: null                          # optional
 pr: null                              # optional
 blocked_reason: null                  # optional

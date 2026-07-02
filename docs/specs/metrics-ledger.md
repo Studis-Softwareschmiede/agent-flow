@@ -38,7 +38,7 @@ Die Felder werden aus dem Klartext-Handoff des Dispatches gezählt, kein zweiter
 `/flow` umklammert jeden Dispatch mit `T0=$(date -u +%s)` (vorher) und `secs = $(date -u +%s) − T0` (nachher) und trägt `secs` in die Dispatch-Zeile. Kein zusätzlicher LLM-Aufwand.
 
 ### V5 — Item-Rollup-Zeile (beim Done)
-Wenn `/flow` ein Item auf `Done` setzt (nach `Rollout-Gate: PASS`), appendet es **eine** Zeile nach `items.jsonl` mit den Feldern aus subsystem §2.2: `ts, item, size_est, ep_est, ep_act, iters, crit, imp, test_fails, rule_hits[], loc, files, tok_total (=null), secs_total, blocked, lang, cost_mode`. `iters` = max der `iter`-Werte; `crit`/`imp`/`test_fails` = Summen über die Dispatches des Items; `rule_hits` = Vereinigung; `secs_total` = Σ `secs`.
+Wenn `/flow` ein Item auf `Done` setzt (nach `Rollout-Gate: PASS`), appendet es **eine** Zeile nach `items.jsonl` mit den Feldern aus subsystem §2.2: `ts, item, size_est, ep_est, tok_est, ep_act, iters, crit, imp, test_fails, rule_hits[], loc, files, tok_total (=null), secs_total, blocked, lang, cost_mode`. `iters` = max der `iter`-Werte; `crit`/`imp`/`test_fails` = Summen über die Dispatches des Items; `rule_hits` = Vereinigung; `secs_total` = Σ `secs`. `tok_est` (Spec `apriori-token-estimate` AC4) wird null-sicher aus der Story-YAML übernommen — Alt-Zeilen ohne dieses Feld bleiben gültig (Rückwärtskompatibilität).
 
 ### V6 — Diff-Grösse beim Done
 `loc` und `files` stammen aus `git diff --shortstat` des Item-Diffs gegen den `default_branch`-Stand bei Item-Eintritt (`loc` = insertions + deletions, `files` = #geänderte Dateien).

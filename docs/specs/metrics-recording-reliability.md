@@ -52,7 +52,7 @@ Nach dem Done prüft `/flow`, ob für das Item eine `items.jsonl`-Zeile existier
 
 ## Verträge
 
-- **Skripte:** `scripts/metrics-append-dispatch.sh <story-id> <agent> <seq> <iter> <gate> <secs> [<cost_mode>]`, `scripts/metrics-append-item.sh <story-id> [<size_est> [<ep_est> [<loc> [<files> [<blocked> [<lang> [<cost_mode>]]]]]]]` (Rollup aus den Dispatches). Append-only, idempotenz-tolerant, `|| true`.
+- **Skripte:** `scripts/metrics-append-dispatch.sh <story-id> <agent> <seq> <iter> <gate> <secs> [<cost_mode>]`, `scripts/metrics-append-item.sh <story-id> [<size_est> [<ep_est> [<loc> [<files> [<blocked> [<lang> [<cost_mode> [<tok_est>]]]]]]]]` (Rollup aus den Dispatches). Append-only, idempotenz-tolerant, `|| true`.
 - **Ledger-Schema** unverändert (`docs/architecture/metrics-subsystem.md §2`) — einzige Änderung: `item` als `S-###`-String.
 - **Aufrufer:** `skills/flow/SKILL.md §2b` ruft die Skripte an den bestehenden Touchpoints (Dispatch / Done) auf; `metrics-collect.sh` unverändert in der Aufruf-Kette (V3 fixt nur die Pfad-Auflösung).
 

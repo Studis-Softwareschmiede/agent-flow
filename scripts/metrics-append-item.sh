@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# metrics-append-item.sh <story-id> [<size_est> [<ep_est> [<loc> [<files> [<blocked> [<lang> [<cost_mode>]]]]]]]
+# metrics-append-item.sh <story-id> [<size_est> [<ep_est> [<loc> [<files> [<blocked> [<lang> [<cost_mode> [<tok_est>]]]]]]]]
 #
 # Rollup: liest alle dispatches.jsonl-Zeilen des Items, berechnet ep_act
 # und hängt eine Zeile an .claude/metrics/items.jsonl an.
 # Wird von /flow beim Done (nach Rollout-Gate PASS) aufgerufen (§2b Touchpoint).
 #
-# Verträge (Spec metrics-recording-reliability V1/V2):
+# Verträge (Spec metrics-recording-reliability V1/V2; <tok_est> Spec apriori-token-estimate AC4):
 #   - <story-id>  : kanonisches String-Format "S-###" (AC2)
 #   - <size_est>  : S|M|L|XL (Default "M")
 #   - <ep_est>    : float|null (Default null)
@@ -14,6 +14,8 @@
 #   - <blocked>   : 0|1 (Default 0)
 #   - <lang>      : Sprache aus profile.lang (Default "md")
 #   - <cost_mode> : aktiver Cost-Mode (Default "balanced")
+#   - <tok_est>   : int|null (A-priori-Token-Erwartung aus Story-YAML; Default null; optional
+#                   — Alt-Aufrufe ohne diesen 9. Parameter bleiben gültig, AC5)
 #
 # Append-only, idempotenz-tolerant, || true (K3: kein Loop-Abbruch bei Fehler).
 # Kein LLM-Aufruf — reine Bash/jq-Arithmetik (K1, AC6).
@@ -34,6 +36,7 @@ FILES="${5:-0}"
 BLOCKED="${6:-0}"
 LANG="${7:-md}"
 COST_MODE="${8:-balanced}"
+TOK_EST_RAW="${9:-null}"
 
 # Pflichtfeld prüfen
 if [[ -z "$STORY_ID" ]]; then
@@ -76,6 +79,17 @@ else
     EP_EST_JSON="$EP_EST_RAW"
   else
     EP_EST_JSON='null'
+  fi
+fi
+
+# tok_est: "null" oder leer → JSON null; sonst Zahl (apriori-token-estimate AC4)
+if [[ -z "$TOK_EST_RAW" || "$TOK_EST_RAW" == "null" ]]; then
+  TOK_EST_JSON='null'
+else
+  if printf '%s' "$TOK_EST_RAW" | jq -e '. | numbers' >/dev/null 2>&1; then
+    TOK_EST_JSON="$TOK_EST_RAW"
+  else
+    TOK_EST_JSON='null'
   fi
 fi
 
@@ -152,6 +166,7 @@ jq -nc \
   --arg     item       "$STORY_ID" \
   --arg     size_est   "$SIZE_EST" \
   --argjson ep_est     "$EP_EST_JSON" \
+  --argjson tok_est    "$TOK_EST_JSON" \
   --argjson ep_act     "$EP_ACT" \
   --argjson iters      "$ITERS" \
   --argjson crit       "$CRIT_SUM" \
@@ -164,7 +179,7 @@ jq -nc \
   --argjson blocked    "$BLOCKED" \
   --arg     lang       "$LANG" \
   --arg     cost_mode  "$COST_MODE" \
-  '{ts:$ts, item:$item, size_est:$size_est, ep_est:$ep_est,
+  '{ts:$ts, item:$item, size_est:$size_est, ep_est:$ep_est, tok_est:$tok_est,
     ep_act:$ep_act, iters:$iters, crit:$crit, imp:$imp,
     test_fails:$test_fails, rule_hits:$rule_hits,
     loc:$loc, files:$files, tok_total:null,

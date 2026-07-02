@@ -85,6 +85,10 @@
       "enum": ["high", "medium", "low", null],
       "description": "Optionales Vertrauensniveau der Schaetzung."
     },
+    "tok_est": {
+      "type": ["string", "null"],
+      "description": "Optionale A-priori-Token-Erwartung (Ganzzahl als Text, analog dispo_est; null wenn keine Baseline). Herkunft in estimate_note vermerkt. Siehe apriori-token-estimate AC1/AC2."
+    },
     "branch": {
       "type": ["string", "null"],
       "description": "Optionaler Branch-Name (von /flow gesetzt)."
