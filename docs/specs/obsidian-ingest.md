@@ -135,7 +135,10 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
   vorgeschlagener Antworten). dev-gui rendert die Liste, sammelt Antworten und reicht sie zurück (Zuordnung über
   `id`); die Pipeline setzt die Stufe mit den Antworten fort und committet. Terminal-Pfad: gleicher Katalog via
   `AskUserQuestion`. (Das konkrete Serialisierungs-Detail — z.B. JSON-Block — legt die Umsetzung fest; die
-  **Feldmenge** oben ist der bindende Vertrag.)
+  **Feldmenge** oben ist der bindende Vertrag.) **Konkrete Serialisierung (Implementierung):** eine JSON-Liste von
+  Frage-Objekten, formal beschrieben in `board/fragenkatalog.schema.json` (JSON Schema); der wiederverwendbare
+  Gate-Validator `scripts/obsidian-fragenkatalog-validate.sh` prüft einen Katalog gegen diese Feldmenge und
+  unterscheidet **leerer Katalog** → Auto-Durchlauf (AC8) von **nicht-leerer Katalog** → dem User vorlegen (AC7).
 - **Stufen-Outputs:** (a) `docs/concept.md`; (b) `docs/specs/<feature>.md` (+ ggf. `docs/architecture*.md`);
   (c) Board-Items/Stories (To Do) über `requirement`. **Ein Commit pro Stufe** (AC12).
 - **Wiederverwendete Agenten:** `requirement` (Stufe c, Zerlegung + Schätzung), `architekt`/`dba` (Stufe b, tiefes

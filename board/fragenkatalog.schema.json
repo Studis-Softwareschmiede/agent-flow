@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "board/fragenkatalog.schema.json",
+  "title": "Fragenkatalog (Obsidian-Ingest Stufen-Gate — dev-gui-Schnittstelle)",
+  "description": "Maschinenlesbares Rueckgabeformat des Fragenkatalog-Gates aus docs/specs/obsidian-ingest.md AC9 (Vertrag: docs/architecture/obsidian-ingest-subsystem.md §6). Beim Uebergang JEDER Stufe (a/b/c/sync) legt die Pipeline offene Unklarheiten als GENAU EINEN gesammelten Katalog vor. Der Katalog ist eine LISTE von Frage-Objekten. dev-gui rendert die Liste, sammelt Antworten und reicht sie ueber die stabile 'id' zurueck; im Terminal-Pfad wird derselbe Katalog via AskUserQuestion gestellt. Die Feldmenge hier ist der bindende Vertrag; das Serialisierungs-Detail (JSON) ist Implementierungsfreiheit. Ein LEERER Katalog (leere Liste) bedeutet: Stufe klar/widerspruchsfrei -> Auto-Durchlauf ohne Rueckfrage (AC8) -- er ist gueltig und wird NICHT dem User vorgelegt.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["stage", "id", "frage", "quelle"],
+    "additionalProperties": false,
+    "properties": {
+      "stage": {
+        "type": "string",
+        "enum": ["a", "b", "c", "sync"],
+        "description": "Pipeline-Stufe, deren Uebergang diese Frage anhaelt. a=Notiz->Konzept, b=Konzept->Spec, c=Spec->Board, sync=Re-Sync (obsidian-sync)."
+      },
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z]+-[0-9]+$",
+        "description": "Stabile, katalog-eindeutige Frage-ID (Muster <stage>-<n>, z.B. 'a-1'). dev-gui ordnet die Antwort ueber diese ID zurueck. Innerhalb eines Katalogs eindeutig."
+      },
+      "frage": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Der Fragetext (an den Menschen gerichtet, in Alltagssprache)."
+      },
+      "quelle": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Notiz-/Doku-Fundstelle, aus der die Unklarheit stammt: relativer Notiz-Pfad (Herkunfts-Marker des Korpus, AC4) + Kontext. Macht die Frage bis zur Quellnotiz rueckverfolgbar (NFR Nachvollziehbarkeit)."
+      },
+      "optionen": {
+        "type": ["array", "null"],
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "OPTIONAL: vorgeschlagene Antwortoptionen (z.B. die beiden widerspruechlichen Lesarten). dev-gui rendert sie als Auswahl, AskUserQuestion als Options-Liste. Weglassbar/null -> Freitext-Antwort."
+      }
+    }
+  }
+}
