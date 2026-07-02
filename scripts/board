@@ -1132,8 +1132,20 @@ cmd_export_github() {
 #   NOT-READY S-xxx — <Grund(e)>
 #   (n/a)     S-xxx  (status != "To Do" — nur ohne --quiet)
 #
+# Aggregierte NOT-READY-Diagnose (empty-drain-diagnostics AC1/AC2):
+#   Nach den Einzelzeilen und vor der Summary ein Aggregat-Block, der die
+#   NOT-READY-Stories nach Grund-Kategorie gruppiert (feste Reihenfolge):
+#     WAITING spec-not-active (n): S-xxx, … — Specs: docs/specs/a.md, …
+#     WAITING spec-missing (n): …
+#     WAITING ac-missing (n): …
+#     WAITING depends-open (n): …
+#     WAITING blocked (n): …
+#   Kategorie nur, wenn ≥1 Story betroffen. Eine Story mit mehreren Gründen
+#   erscheint in jeder zutreffenden Kategorie. Block entfällt, wenn alle ready
+#   oder keine To-Do-Stories vorhanden sind (AC5).
+#
 # Exit-Code: 0 wenn alle To-Do-Items ready (oder keine To-Do-Items),
-#            1 wenn mindestens eine To-Do-Story NOT-READY ist.
+#            1 wenn mindestens eine To-Do-Story NOT-READY ist. (unverändert)
 # --quiet: unterdrückt n/a-Zeilen; gibt zuletzt eine Summary-Zeile aus.
 # ---------------------------------------------------------------------------
 cmd_ready() {
@@ -1200,6 +1212,33 @@ not_ready_count = 0
 total_todo = 0
 
 lines = []
+
+# --- Aggregierte NOT-READY-Diagnose (empty-drain-diagnostics AC1/AC2) ---
+# Feste, deterministische Kategorien-Reihenfolge. Der Kategorie-Schlüssel ist
+# zugleich das stabile Zeilen-Präfix (WAITING <kategorie> …).
+CATEGORY_ORDER = [
+    "spec-not-active",   # R2: status != active / kein Frontmatter / nicht lesbar
+    "spec-missing",      # R2: spec nicht gesetzt / spec-Datei fehlt
+    "ac-missing",        # R3: implements leer / AC fehlt in Spec / ungültiger Typ
+    "depends-open",      # R4: depends offen / existiert nicht
+    "blocked",           # R5: blocked_reason gesetzt
+]
+cat_stories = {c: [] for c in CATEGORY_ORDER}   # kategorie -> [sid, …] (sortiert durch Iteration)
+cat_specs   = {c: [] for c in CATEGORY_ORDER}   # kategorie -> [spec_pfad, …] (für AC2: spec-not-active)
+
+def categorize(reason):
+    """Ordnet einen NOT-READY-Grund einer festen Kategorie zu (R2 splittet in zwei)."""
+    if reason.startswith("R2:"):
+        if "nicht gesetzt" in reason or "spec-Datei fehlt" in reason:
+            return "spec-missing"
+        return "spec-not-active"
+    if reason.startswith("R3:"):
+        return "ac-missing"
+    if reason.startswith("R4:"):
+        return "depends-open"
+    if reason.startswith("R5:"):
+        return "blocked"
+    return None
 
 for sid in sorted_ids:
     data = stories[sid]
@@ -1289,12 +1328,40 @@ for sid in sorted_ids:
     if reasons:
         not_ready_count += 1
         lines.append(f"NOT-READY {sid} — {'; '.join(reasons)}")
+        # Aggregation: Story in JEDER zutreffenden Kategorie führen (Gründe nicht
+        # exklusiv — Doppelnennung über Kategorien ist gewollt, zeigt alle Blocker).
+        for reason in reasons:
+            cat = categorize(reason)
+            if cat is None:
+                continue
+            if sid not in cat_stories[cat]:
+                cat_stories[cat].append(sid)
+            # AC2: spec-not-active nennt zusätzlich den betroffenen Spec-Pfad
+            if cat == "spec-not-active" and spec_str and spec_str not in cat_specs[cat]:
+                cat_specs[cat].append(spec_str)
     else:
         lines.append(f"READY     {sid}")
 
 # Ausgabe
 for line in lines:
     print(line)
+
+# --- Aggregierter NOT-READY-Diagnose-Block (empty-drain-diagnostics AC1/AC2) ---
+# Nur ausgeben, wenn ≥1 To-Do-Story NOT-READY ist (AC5: bei ausschließlich
+# readyen oder keinen To-Do-Stories KEIN Aggregat-Block). Feste Kategorien-
+# Reihenfolge; Kategorie nur, wenn ≥1 Story betroffen. Story-IDs deterministisch
+# sortiert (Iteration lief über sorted_ids).
+if not_ready_count > 0:
+    for cat in CATEGORY_ORDER:
+        sids = cat_stories[cat]
+        if not sids:
+            continue
+        line = f"WAITING {cat} ({len(sids)}): {', '.join(sids)}"
+        if cat == "spec-not-active":
+            specs = sorted(set(cat_specs[cat]))
+            if specs:
+                line += " — Specs: " + ", ".join(specs)
+        print(line)
 
 # Summary — immer ausgeben (auch bei --quiet, auch wenn keine To-Do-Items)
 if total_todo == 0:

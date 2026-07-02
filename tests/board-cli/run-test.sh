@@ -4,13 +4,22 @@
 # Self-Test für `board ready` (AC12, F-008 „Autonome Board-Abarbeitung").
 # Verwendet /tmp — berührt NIEMALS das echte board/ des Repos.
 #
-# Testziele:
+# Testziele (board-cli AC12):
 #   - Alle To-Do-Stories ready → Exit 0, READY-Zeilen (happy path)
 #   - Mindestens eine To-Do-Story NOT-READY → Exit 1 (not-ready path)
 #   - Jede Regel R2–R5 erzeugt den korrekten NOT-READY-Grund
 #   - --quiet unterdrückt (n/a)-Zeilen
 #   - Nicht-To-Do-Stories werden als (n/a) übersprungen
 #   - Fehlendes Board-Verzeichnis → Exit 0, kein Crash
+#
+# Covers (empty-drain-diagnostics) — aggregierter NOT-READY-Diagnose-Block:
+#   AC1 — WAITING <kategorie> (<n>): S-… Aggregat, feste Reihenfolge, Mehrfachnennung,
+#         Block vor Summary (Tests 18a, 19a/19b, 20a, 23)
+#   AC2 — spec-not-active nennt zusätzlich die Spec-Pfade (Test 18b)
+#   AC5 — Exit-Code-Vertrag unverändert; kein Block bei nur readyen / keinen
+#         To-Do-Stories (Tests 18c, 21a/21b, 22a/22b). Token-frei/deterministisch:
+#         reines python3 im board-CLI, kein Agent-Call (Struktur-immanent, hier
+#         durch reproduzierbare String-Vergleiche geprüft).
 #
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 
@@ -704,6 +713,247 @@ if echo "$T17_OUTPUT" | grep -q "R3: implements hat ungültigen Typ"; then
 else
   fail "Test 17c: Scalar implements → R3-Grund fehlt oder falsch"
   echo "  Output: $T17_OUTPUT"
+fi
+
+# ===========================================================================
+# Test 18: Aggregat-Block — spec-not-active gruppiert + Spec-Pfade
+#   @trace empty-drain-diagnostics#AC1
+#   @trace empty-drain-diagnostics#AC2
+# ===========================================================================
+echo ""
+echo "--- Test 18: Aggregat-Block spec-not-active + Spec-Pfade (AC1/AC2) ---"
+
+T18_DIR="${TEST_WORK_DIR}/test18"
+setup_board "$T18_DIR"
+# Zwei draft-Specs (nicht active) → beide Stories in spec-not-active
+mkdir -p "${T18_DIR}/docs/specs"
+cat > "${T18_DIR}/docs/specs/a.md" <<'MDEOF'
+---
+id: spec-a
+status: draft
+---
+# Spec A
+- **AC1** — Test
+MDEOF
+cat > "${T18_DIR}/docs/specs/b.md" <<'MDEOF'
+---
+id: spec-b
+status: draft
+---
+# Spec B
+- **AC1** — Test
+MDEOF
+make_story "$T18_DIR" "S-003" "To Do" "docs/specs/a.md" "AC1" "" ""
+make_story "$T18_DIR" "S-004" "To Do" "docs/specs/b.md" "AC1" "" ""
+
+T18_EXIT=0
+T18_OUTPUT=""
+set +e
+T18_OUTPUT="$(cd "$T18_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" ready 2>&1)"
+T18_EXIT=$?
+set -e
+
+echo "$T18_OUTPUT"
+
+# @trace empty-drain-diagnostics#AC1 — WAITING-Präfix + gruppierte, sortierte IDs
+if echo "$T18_OUTPUT" | grep -q "^WAITING spec-not-active (2): S-003, S-004"; then
+  pass "Test 18a: WAITING spec-not-active (2): S-003, S-004 (AC1)"
+else
+  fail "Test 18a: WAITING spec-not-active-Zeile fehlt oder falsch (AC1)"
+  echo "  Output: $T18_OUTPUT"
+fi
+
+# @trace empty-drain-diagnostics#AC2 — Spec-Pfade genannt (sortiert, dedupliziert)
+if echo "$T18_OUTPUT" | grep -q "^WAITING spec-not-active (2): S-003, S-004 — Specs: docs/specs/a.md, docs/specs/b.md"; then
+  pass "Test 18b: spec-not-active nennt Spec-Pfade (AC2)"
+else
+  fail "Test 18b: spec-not-active Spec-Pfade fehlen oder falsch (AC2)"
+  echo "  Output: $T18_OUTPUT"
+fi
+
+# @trace empty-drain-diagnostics#AC5 — Exit-Code-Vertrag unverändert (≥1 NOT-READY → 1)
+if [[ $T18_EXIT -eq 1 ]]; then
+  pass "Test 18c: Exit-Code unverändert (1 bei NOT-READY) (AC5)"
+else
+  fail "Test 18c: Exit ${T18_EXIT} (erwartet 1) (AC5)"
+fi
+
+# ===========================================================================
+# Test 19: Aggregat-Block — alle Kategorien, feste Reihenfolge, Mehrfachnennung
+#   @trace empty-drain-diagnostics#AC1
+# ===========================================================================
+echo ""
+echo "--- Test 19: Aggregat — alle Kategorien + feste Reihenfolge + Mehrfachnennung (AC1) ---"
+
+T19_DIR="${TEST_WORK_DIR}/test19"
+setup_board "$T19_DIR"
+make_active_spec "${T19_DIR}/docs/specs/ok.md" "AC1"
+mkdir -p "${T19_DIR}/docs/specs"
+cat > "${T19_DIR}/docs/specs/draft.md" <<'MDEOF'
+---
+id: draft
+status: draft
+---
+# Draft
+- **AC1** — Test
+MDEOF
+# S-001: spec-not-active (draft)
+make_story "$T19_DIR" "S-001" "To Do" "docs/specs/draft.md" "AC1" "" ""
+# S-002: spec-missing (kein spec; implements gesetzt → NUR spec-missing, kein R3)
+make_story "$T19_DIR" "S-002" "To Do" "" "AC1" "" ""
+# S-003: ac-missing (AC99 nicht in Spec)
+make_story "$T19_DIR" "S-003" "To Do" "docs/specs/ok.md" "AC99" "" ""
+# S-004: depends-open (haengt an nicht-Done S-001)
+make_story "$T19_DIR" "S-004" "To Do" "docs/specs/ok.md" "AC1" "S-001" ""
+# S-005: blocked (blocked_reason gesetzt)
+make_story "$T19_DIR" "S-005" "To Do" "docs/specs/ok.md" "AC1" "" "Warte"
+
+T19_OUTPUT=""
+set +e
+T19_OUTPUT="$(cd "$T19_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" ready 2>&1)"
+set -e
+
+echo "$T19_OUTPUT"
+
+# @trace empty-drain-diagnostics#AC1 — jede Kategorie präsent mit korrekter Story
+CHECK_ALL=1
+echo "$T19_OUTPUT" | grep -q "^WAITING spec-not-active (1): S-001"   || CHECK_ALL=0
+echo "$T19_OUTPUT" | grep -q "^WAITING spec-missing (1): S-002"      || CHECK_ALL=0
+echo "$T19_OUTPUT" | grep -q "^WAITING ac-missing (1): S-003"        || CHECK_ALL=0
+echo "$T19_OUTPUT" | grep -q "^WAITING depends-open (1): S-004"      || CHECK_ALL=0
+echo "$T19_OUTPUT" | grep -q "^WAITING blocked (1): S-005"           || CHECK_ALL=0
+if [[ $CHECK_ALL -eq 1 ]]; then
+  pass "Test 19a: alle 5 Kategorien korrekt gruppiert (AC1)"
+else
+  fail "Test 19a: mindestens eine Kategorie fehlt/falsch (AC1)"
+  echo "  Output: $T19_OUTPUT"
+fi
+
+# @trace empty-drain-diagnostics#AC1 — feste Kategorien-Reihenfolge
+T19_ORDER="$(echo "$T19_OUTPUT" | grep '^WAITING ' | sed -E 's/^WAITING ([a-z-]+) .*/\1/' | tr '\n' ',')"
+if [[ "$T19_ORDER" == "spec-not-active,spec-missing,ac-missing,depends-open,blocked," ]]; then
+  pass "Test 19b: feste Kategorien-Reihenfolge (AC1)"
+else
+  fail "Test 19b: Reihenfolge falsch: '${T19_ORDER}' (AC1)"
+fi
+
+# ===========================================================================
+# Test 20: Mehrfachnennung — eine Story mit mehreren Blockern in jeder Kategorie
+#   @trace empty-drain-diagnostics#AC1
+# ===========================================================================
+echo ""
+echo "--- Test 20: Story mit mehreren Blockern erscheint in jeder Kategorie (AC1) ---"
+
+T20_DIR="${TEST_WORK_DIR}/test20"
+setup_board "$T20_DIR"
+# Kein spec, kein implements, blocked_reason gesetzt → spec-missing + ac-missing + blocked
+make_story "$T20_DIR" "S-001" "To Do" "" "" "" "Technische Schuld"
+
+T20_OUTPUT=""
+set +e
+T20_OUTPUT="$(cd "$T20_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" ready 2>&1)"
+set -e
+
+echo "$T20_OUTPUT"
+
+CHECK_MULTI=1
+echo "$T20_OUTPUT" | grep -q "^WAITING spec-missing (1): S-001" || CHECK_MULTI=0
+echo "$T20_OUTPUT" | grep -q "^WAITING ac-missing (1): S-001"   || CHECK_MULTI=0
+echo "$T20_OUTPUT" | grep -q "^WAITING blocked (1): S-001"      || CHECK_MULTI=0
+if [[ $CHECK_MULTI -eq 1 ]]; then
+  pass "Test 20a: S-001 in allen 3 zutreffenden Kategorien (AC1)"
+else
+  fail "Test 20a: Mehrfachnennung fehlt (AC1)"
+  echo "  Output: $T20_OUTPUT"
+fi
+
+# ===========================================================================
+# Test 21: Kein Aggregat-Block bei ausschliesslich readyen Stories
+#   @trace empty-drain-diagnostics#AC5
+# ===========================================================================
+echo ""
+echo "--- Test 21: Kein Aggregat-Block wenn alle ready (AC5) ---"
+
+T21_DIR="${TEST_WORK_DIR}/test21"
+setup_board "$T21_DIR"
+make_active_spec "${T21_DIR}/docs/specs/ok.md" "AC1"
+make_story "$T21_DIR" "S-001" "To Do" "docs/specs/ok.md" "AC1" "" ""
+
+T21_EXIT=0
+T21_OUTPUT=""
+set +e
+T21_OUTPUT="$(cd "$T21_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" ready 2>&1)"
+T21_EXIT=$?
+set -e
+
+if echo "$T21_OUTPUT" | grep -q "^WAITING "; then
+  fail "Test 21a: Aggregat-Block trotz nur readyer Stories (AC5)"
+  echo "  Output: $T21_OUTPUT"
+else
+  pass "Test 21a: kein Aggregat-Block bei nur readyen Stories (AC5)"
+fi
+
+if [[ $T21_EXIT -eq 0 ]]; then
+  pass "Test 21b: Exit 0 unverändert (alle ready) (AC5)"
+else
+  fail "Test 21b: Exit ${T21_EXIT} (erwartet 0) (AC5)"
+fi
+
+# ===========================================================================
+# Test 22: Kein Aggregat-Block bei keinen To-Do-Stories
+#   @trace empty-drain-diagnostics#AC5
+# ===========================================================================
+echo ""
+echo "--- Test 22: Kein Aggregat-Block wenn keine To-Do-Stories (AC5) ---"
+
+T22_DIR="${TEST_WORK_DIR}/test22"
+setup_board "$T22_DIR"
+make_active_spec "${T22_DIR}/docs/specs/ok.md" "AC1"
+make_story "$T22_DIR" "S-001" "Done" "docs/specs/ok.md" "AC1" "" ""
+
+T22_EXIT=0
+T22_OUTPUT=""
+set +e
+T22_OUTPUT="$(cd "$T22_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" ready 2>&1)"
+T22_EXIT=$?
+set -e
+
+if echo "$T22_OUTPUT" | grep -q "^WAITING "; then
+  fail "Test 22a: Aggregat-Block trotz keiner To-Do-Stories (AC5)"
+  echo "  Output: $T22_OUTPUT"
+else
+  pass "Test 22a: kein Aggregat-Block bei keinen To-Do-Stories (AC5)"
+fi
+
+if [[ $T22_EXIT -eq 0 ]]; then
+  pass "Test 22b: Exit 0 unverändert (keine To-Do) (AC5)"
+else
+  fail "Test 22b: Exit ${T22_EXIT} (erwartet 0) (AC5)"
+fi
+
+# ===========================================================================
+# Test 23: Aggregat-Block steht vor der Summary-Zeile
+#   @trace empty-drain-diagnostics#AC1
+# ===========================================================================
+echo ""
+echo "--- Test 23: Aggregat-Block vor Summary (AC1) ---"
+
+T23_DIR="${TEST_WORK_DIR}/test23"
+setup_board "$T23_DIR"
+make_story "$T23_DIR" "S-001" "To Do" "" "" "" ""   # spec-missing + ac-missing
+
+T23_OUTPUT=""
+set +e
+T23_OUTPUT="$(cd "$T23_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" ready 2>&1)"
+set -e
+
+WAITING_LINE=$(echo "$T23_OUTPUT" | grep -n "^WAITING " | head -1 | cut -d: -f1)
+SUMMARY_LINE=$(echo "$T23_OUTPUT" | grep -n "^Summary:" | head -1 | cut -d: -f1)
+if [[ -n "$WAITING_LINE" && -n "$SUMMARY_LINE" && "$WAITING_LINE" -lt "$SUMMARY_LINE" ]]; then
+  pass "Test 23: Aggregat-Block steht vor der Summary (AC1)"
+else
+  fail "Test 23: Reihenfolge Aggregat/Summary falsch (WAITING=${WAITING_LINE}, Summary=${SUMMARY_LINE}) (AC1)"
+  echo "  Output: $T23_OUTPUT"
 fi
 
 # ===========================================================================
