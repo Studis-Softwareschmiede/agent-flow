@@ -1,0 +1,13 @@
+[
+  {
+    "stage": "a",
+    "id": "a-1",
+    "frage": "Die Notizen widersprechen sich bei der Zielgruppe: 'idee.md' nennt Grundschulkinder (spielerisch, wenig Text), 'scope.md' berufstätige Erwachsene (ernsthaftes Dashboard, Anki-Export). Für wen ist die App wirklich?",
+    "quelle": "idee.md (»Zielgruppe sind Grundschulkinder«) vs. scope.md (»berufstätige Erwachsene«)",
+    "optionen": [
+      "Grundschulkinder (spielerisch, bildlastig)",
+      "Berufstätige Erwachsene (Karteikarten, Statistiken, Anki-Export)",
+      "Beide — mit getrennten Modi"
+    ]
+  }
+]
