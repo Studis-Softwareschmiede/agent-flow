@@ -11,6 +11,7 @@
   Orchestrator = `/flow` (interaktive Haupt-Session) — **einziger Schreiber** von Board-Status. Git/PR-Abschluss-Operationen delegiert `/flow` an `cicd` als ausführenden Abschluss-Arm (Beauftragung via SHIP-TRIGGER); die konzeptuelle Hoheit über den Flow-Ablauf und die Board-Übergänge bleibt beim Orchestrator.
   (`/upgrade` erweitert das additiv: initialer Plan-Commit + Item-Anlage + Profil-Rückschreib am Lauf-Ende —
   `docs/architecture/upgrade-subsystem.md` §3/§7; Item-Status-Übergänge bleiben `/flow`-Hoheit.)
+- **Session-Rotation (Default, auch headless, Spec `docs/specs/flow-session-rotation.md`):** `/flow` arbeitet pro Lauf **eine** Story (bzw. einen SR1-Parallel-Batch) ab und beendet die Session danach erfolgreich (Exit 0) — kein automatisches Weiterziehen zum nächsten Item; äußere Schleifen (dev-gui `ProjectDrain`, Nachtwächter) übernehmen die Rotation. Grund: Ø Cache-Read wuchs sonst in einer 13-Story-Session von 82k auf 298k Token (Messung 2026-07-02) — linear statt quadratisch wachsender Kontext über ein Board. `--all` (interaktives Opt-in) behält das bisherige Bis-Board-leer-Verhalten.
 - **Knowledge Packs:** `coder`/`reviewer`/`tester` laden zur Laufzeit `knowledge/<profile.language>.md`
   (+ `knowledge/<domain>.md` je `profile.domains`). Pack-Abschnitte: `Coder-Guidance`,
   `Reviewer-Checklist`, `Test-Approach`.
@@ -366,7 +367,7 @@ Harte Grenzen  • NIE Direkt-Push auf main
 
 ## Skills (Entry Points)
 
-- **`/flow`** — Orchestrator: arbeitet das Board ab (Spine + Handoff-Verträge: `CONCEPT.md` §4b). Einziger Schreiber von Board-Status + git/PR.
+- **`/flow [--all]`** — Orchestrator: arbeitet pro Lauf **eine** Story (bzw. einen SR1-Parallel-Batch) ab (Spine + Handoff-Verträge: `CONCEPT.md` §4b), dann endet die Session (Default, auch headless — Kontext-Wachstum vermeiden, äußere Schleife rotiert; Spec `docs/specs/flow-session-rotation.md`). `--all` (interaktives Opt-in) behält das bisherige Bis-Board-leer-Verhalten. Einziger Schreiber von Board-Status + git/PR.
 - **`/retro`**, **`/train <lang>`** — triggern die gleichnamigen Meta-Agenten (oben).
 - **`/new-project` / `/init`** — Projekt-Bootstrap (Spec unten).
 - **`/adopt <owner/repo>`** — bestehendes Repo adoptieren + auf Standard heben: clone (fremd → Fork in die Org) → init (Spec aus Code) → **Audit** (reviewer Audit-Modus + gitleaks/dep-audit gegen Security-Floor/Packs/Spec) → Funde als priorisiertes **Backlog** aufs Board → `/flow`. Behebt nichts automatisch; pusht nie ungefragt aufs fremde Upstream.

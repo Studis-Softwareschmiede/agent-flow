@@ -2,7 +2,7 @@ id: S-031
 parent: F-014
 title: '/flow Session-Rotation: Session endet nach einer gelandeten Story bzw. einem
   SR1-Batch; --all als interaktives Opt-in'
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/flow-session-rotation.md
 implements:
@@ -23,9 +23,9 @@ estimate_note: 'Heuristik: 5 AC, 2 Komponenten (skills/flow/SKILL.md §0/§6, AG
   -> M. Skill-Loop-Regel + Doku-Nachzug, keine Skripte. baseline md|balanced|M ep=3.0
   -> dispo_est 3.0, confidence medium.'
 confidence: medium
-branch: null
+branch: feat/S-031-flow-session-rotation
 pr: null
 blocked_reason: null
 created_at: '2026-07-02T19:12:37Z'
-updated_at: '2026-07-02T19:12:37Z'
-done_at: null
+updated_at: '2026-07-02T19:44:34Z'
+done_at: '2026-07-02T19:44:34Z'
