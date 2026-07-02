@@ -2,7 +2,7 @@ id: S-021
 parent: F-012
 title: 'Notiz-Korpus-Reader: alle .md rekursiv -> ein deterministisch geordneter Korpus
   mit Herkunfts-Markern, rein lesend, Abbruch statt Leerlauf'
-status: In Progress
+status: In Review
 priority: P2
 spec: docs/specs/obsidian-ingest.md
 implements:
@@ -20,8 +20,8 @@ estimate_note: Heuristik score=5 (n_ac=3 [AC4,AC5,AC6], n_comp=2 [Notiz-Reader, 
   label_bump=0) -> M. dispo_est aus baseline.json md|balanced|M (ep=3.0, n=8>=3).
 confidence: medium
 branch: feat/S-021-obsidian-notiz-reader
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/223
 blocked_reason: null
 created_at: '2026-07-02T05:26:42Z'
-updated_at: '2026-07-02T08:11:51Z'
+updated_at: '2026-07-02T08:19:32Z'
 done_at: null
