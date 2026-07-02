@@ -1,7 +1,7 @@
 id: S-015
 parent: F-009
 title: 'Board-Tooling: "Verworfen" als gueltiger, schreibbarer, terminaler Story-Status'
-status: To Do
+status: In Review
 priority: P1
 spec: docs/specs/story-status-verworfen.md
 implements:
@@ -26,9 +26,9 @@ estimate_note: 'Heuristik score=10 (n_ac=7, n_comp=3 [board-lint.sh, story.schem
   low. Groesster Brocken: scripts/board (set-Enum-Guard + next-Depends-Gate + rollup-Progress-Format)
   plus lint + story.schema.json-Enum.'
 confidence: low
-branch: null
-pr: null
+branch: feat/S-015-story-status-verworfen
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/220
 blocked_reason: null
 created_at: '2026-07-02T05:08:01Z'
-updated_at: '2026-07-02T05:08:25Z'
+updated_at: '2026-07-02T07:54:35Z'
 done_at: null

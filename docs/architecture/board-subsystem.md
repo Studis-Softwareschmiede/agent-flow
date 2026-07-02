@@ -247,8 +247,10 @@ Backlog ──► Planned ──► Active ──► Done ──► Archived
                           ▲          │
                           └──────────┘  (re-open, wenn neue Story dazukommt)
 ```
-- `Active` = mindestens eine Story `In Progress`/done, nicht alle done.
-- `Done` = **alle** Stories `Done` (vom Board-Tool aus Rollup vorgeschlagen, vom Owner bestätigt).
+- `Active` = mindestens eine Story `In Progress`/done, nicht alle terminal.
+- `Done` = **alle** Stories terminal, d. h. `#Done + #Verworfen == total` (terminale Menge
+  `{Done, Verworfen}`; vom Board-Tool aus Rollup vorgeschlagen, vom Owner bestätigt). Der
+  `done/total`-Zähler bleibt „erfolgreich abgeschlossen / gesamt" — Verworfen zählt terminal, aber nie als erfolgreich.
 
 **Story** (`/flow` ist einziger Schreiber der Loop-Übergänge; `Verworfen` ist eine
 manuelle Owner/GUI-Entscheidung, kein Loop-Ausgang):
@@ -328,8 +330,9 @@ board export-github             # einmaliger Import: GitHub-Board → board/ (Mi
 ```
 
 **Queue-Logik von `board next`** (ersetzt `gh project item-list` in `flow/SKILL.md:22`):
-die erste Story mit `status=To Do`, deren `depends` alle `Done` sind, nach
-`priority` (P0 zuerst), Tie-Break Feature-`priority`, dann `id`.
+die erste Story mit `status=To Do`, deren `depends` alle terminal sind (Status ∈
+`{Done, Verworfen}`), nach `priority` (P0 zuerst), Tie-Break Feature-`priority`, dann
+`id`. `Verworfen`-Stories sind nie Kandidaten (terminal).
 
 **Single-Writer bleibt:** Nur `/flow` ruft `board set <story> status …`. `requirement`
 darf `feature add`/`story add` und nicht-Status-Felder setzen. Das ist die heutige
