@@ -1,0 +1,30 @@
+id: S-029
+parent: F-013
+title: /flow surft bei leerem board next die aggregierten NOT-READY-Gründe an — nie
+  stumm
+status: To Do
+priority: P2
+spec: docs/specs/empty-drain-diagnostics.md
+implements:
+- AC3
+- AC4
+depends:
+- S-028
+labels:
+- process
+- docs
+size_est: S
+dispo_est: '5.5'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Heuristik-Score 3 (2 AC + 1 Komponente: skills/flow/SKILL.md; label_bump
+  0) -> S. Skill-Text/Ablauf-Ergaenzung (board ready bei leerem board next aufrufen
+  + Gruende melden). S/M -> kein estimator; baseline md|balanced|S ep=5.5 (n=3) ->
+  dispo_est 5.5, confidence medium.'
+confidence: medium
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-02T10:26:25Z'
+updated_at: '2026-07-02T10:26:47Z'
+done_at: null
