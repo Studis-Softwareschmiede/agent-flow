@@ -14,6 +14,11 @@
 #        AC11 (deterministisch, FEHLER|WARN-Format, Exit-Code-Semantik)
 #        spec-status-lifecycle#AC4 (SPEC-STATUS-INVALID: referenzierte Spec-Datei
 #              traegt einen status-Wert ausserhalb {draft, active, superseded})
+#        board-areas#AC5 (AREA-UNKNOWN: Feature-`area` oder Spec-`area`-Frontmatter
+#              zeigt auf keinen Eintrag in board/areas.yaml — auch wenn areas.yaml
+#              fehlt und trotzdem ein Item eine area referenziert;
+#              AREA-FIELD: board/areas.yaml selbst malformt — fehlendes Pflichtfeld,
+#              id nicht kebab-case, doppelte id/reihenfolge)
 #
 # Ausgabe je Verstoss: FEHLER|WARN <regel-id> <datei> <feld/detail>
 # Exit-Code: 1 bei mindestens einem FEHLER, 0 bei nur Warnungen oder gruen.
@@ -36,6 +41,14 @@
 #   SPEC-STATUS-INVALID  — referenzierte, existierende Spec-Datei hat Frontmatter-status:
 #                          ausserhalb {draft, active, superseded}
 #                          (aus Spec docs/specs/spec-status-lifecycle.md, AC4)
+#   AREA-UNKNOWN         — Feature-`area` oder Spec-`area`-Frontmatter (docs/specs/*.md)
+#                          referenziert einen Bereich, der in board/areas.yaml nicht
+#                          existiert (auch wenn areas.yaml komplett fehlt, s. E2)
+#                          (aus Spec docs/specs/board-areas.md, AC5)
+#   AREA-FIELD           — board/areas.yaml verletzt das Feldformat: fehlendes
+#                          Pflichtfeld (id/titel/beschreibung/reihenfolge), id nicht
+#                          kebab-case, doppelte id, doppelte reihenfolge
+#                          (aus Spec docs/specs/board-areas.md, AC5)
 
 set -euo pipefail
 
@@ -735,6 +748,104 @@ for fid, entry in features.items():
             messages.append((rel(path), f"WARN ROLLUP-STALE {rel(path)} progress veraltet (gespeichert={prog_str!r}, erwartet beginnt mit {expected_prefix!r})"))
 
 # -----------------------------------------------------------------------
+# board-areas#AC5 — AREA-UNKNOWN / AREA-FIELD
+# -----------------------------------------------------------------------
+# board/areas.yaml ist die einzige Quelle gueltiger Bereichs-ids. Fehlt die
+# Datei UND referenziert kein Item eine area, gibt es keine Bereichs-Fehler
+# (E2). Referenziert jedoch ein Item eine area OHNE areas.yaml, ist das
+# ebenfalls AREA-UNKNOWN — valid_area_ids bleibt dafuer einfach leer.
+AREA_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+AREA_REQUIRED = ("id", "titel", "beschreibung", "reihenfolge")
+
+areas_path = os.path.join(board_dir, "areas.yaml")
+valid_area_ids = set()
+
+if os.path.isfile(areas_path):
+    areas_rel = rel(areas_path)
+    try:
+        with open(areas_path, encoding="utf-8") as f:
+            areas_data = yaml.safe_load(f)
+    except Exception as e:
+        areas_data = None
+        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} <parse-error: {e}>"))
+
+    if areas_data is not None:
+        if not isinstance(areas_data, list):
+            messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} areas.yaml muss eine YAML-Liste sein"))
+        else:
+            seen_ids = {}          # id -> erster Eintrags-Index (1-basiert)
+            seen_reihenfolge = {}  # reihenfolge -> erster Eintrags-Index (1-basiert)
+            for idx, area_entry in enumerate(areas_data):
+                loc = f"Eintrag {idx + 1}"
+                if not isinstance(area_entry, dict):
+                    messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: kein Mapping"))
+                    continue
+
+                for field in AREA_REQUIRED:
+                    val = area_entry.get(field)
+                    if val is None or (isinstance(val, str) and val.strip() == ""):
+                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: Pflichtfeld '{field}' fehlt"))
+
+                eid = area_entry.get("id")
+                if eid is not None and str(eid).strip() != "":
+                    eid_s = str(eid).strip()
+                    if not AREA_ID_PATTERN.match(eid_s):
+                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: id={eid_s!r} nicht kebab-case"))
+                    if eid_s in seen_ids:
+                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: doppelte id={eid_s!r} (bereits Eintrag {seen_ids[eid_s]})"))
+                    else:
+                        seen_ids[eid_s] = idx + 1
+                        valid_area_ids.add(eid_s)
+
+                reihenfolge = area_entry.get("reihenfolge")
+                if reihenfolge is not None:
+                    if not isinstance(reihenfolge, int) or isinstance(reihenfolge, bool):
+                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: reihenfolge={reihenfolge!r} kein int"))
+                    elif reihenfolge in seen_reihenfolge:
+                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: doppelte reihenfolge={reihenfolge!r} (bereits Eintrag {seen_reihenfolge[reihenfolge]})"))
+                    else:
+                        seen_reihenfolge[reihenfolge] = idx + 1
+
+# Feature-`area` gegen valid_area_ids pruefen
+for fid, entry in features.items():
+    data = entry["data"]
+    path = entry["path"]
+    area_val = data.get("area")
+    if area_val is None or str(area_val).strip() == "":
+        continue
+    area_s = str(area_val).strip()
+    if area_s not in valid_area_ids:
+        messages.append((rel(path), f"FEHLER AREA-UNKNOWN {rel(path)} {area_s}"))
+
+# Spec-`area`-Frontmatter (ALLE docs/specs/*.md, unabhaengig von Story-Referenz)
+# gegen valid_area_ids pruefen.
+specs_dir = os.path.join(repo_root, "docs", "specs")
+FRONTMATTER_AREA = re.compile(r"^area:\s*(.+?)\s*$", re.MULTILINE)
+if os.path.isdir(specs_dir):
+    for fn in sorted(os.listdir(specs_dir)):
+        if not fn.endswith(".md"):
+            continue
+        spec_abs = os.path.join(specs_dir, fn)
+        spec_rel = rel(spec_abs)
+        try:
+            with open(spec_abs, encoding="utf-8", errors="replace") as f:
+                spec_content = f.read()
+        except Exception:
+            continue
+        fm_match = FRONTMATTER_BLOCK.match(spec_content)
+        if not fm_match:
+            continue
+        area_match = FRONTMATTER_AREA.search(fm_match.group(1))
+        if not area_match:
+            continue
+        # Trailing YAML-Inline-Kommentar abtrennen (coder/L25), "null" ignorieren.
+        area_val = area_match.group(1).split("#", 1)[0].strip()
+        if not area_val or area_val.lower() == "null":
+            continue
+        if area_val not in valid_area_ids:
+            messages.append((spec_rel, f"FEHLER AREA-UNKNOWN {spec_rel} {area_val}"))
+
+# -----------------------------------------------------------------------
 # Ausgabe (deterministisch: sortiert nach Dateipfad, dann Zeileninhalt)
 # -----------------------------------------------------------------------
 for _, line in sorted(messages):
@@ -794,13 +905,20 @@ fi
 if [[ -f "$BOARD_YAML" ]]; then
   # Repo-Wurzel: Verzeichnis eine Ebene ueber BOARD_DIR (fuer Spec-Pfade)
   REPO_ROOT="$(cd "${BOARD_DIR}/.." 2>/dev/null && pwd)"
-  mapfile -t integrity_errors < <(lint_integrity "${BOARD_DIR}" "${REPO_ROOT}" 2>/dev/null || true)
-  for line in "${integrity_errors[@]}"; do
-    echo "$line"
-    if [[ "$line" == FEHLER* ]]; then
-      ERRORS=$(( ERRORS + 1 ))
-    fi
-  done
+  integrity_exit=0
+  integrity_output="$(lint_integrity "${BOARD_DIR}" "${REPO_ROOT}" 2>/dev/null)" || integrity_exit=$?
+  if [[ $integrity_exit -ne 0 ]]; then
+    echo "FEHLER LINT-CRASH lint_integrity beendete mit Exit-Code ${integrity_exit}"
+    ERRORS=$(( ERRORS + 1 ))
+  fi
+  if [[ -n "$integrity_output" ]]; then
+    while IFS= read -r line; do
+      echo "$line"
+      if [[ "$line" == FEHLER* ]]; then
+        ERRORS=$(( ERRORS + 1 ))
+      fi
+    done <<< "$integrity_output"
+  fi
 fi
 
 # Exit-Code

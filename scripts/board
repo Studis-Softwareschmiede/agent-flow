@@ -1066,6 +1066,11 @@ progress_str = " · ".join(parts) if total > 0 else "0/0 done"
 # (bzw. der dev-gui-Aggregator) den Feature-Rollup-Status Done ableitet (board-subsystem §5);
 # rollup schreibt selbst keinen Feature-Status. Der done/total-Zaehler behaelt die Bedeutung
 # "erfolgreich abgeschlossen / gesamt"; Verworfen zaehlt terminal, aber nie als erfolgreich (AC5).
+#
+# Bereichs-Feature-Permanenz (docs/specs/board-areas.md AC3): weil rollup NIE einen
+# Feature-status schreibt — auch fuer Features mit gesetztem `area` (Bereichs-Feature)
+# nicht — bleibt ein Bereichs-Feature dauerhaft (nie automatisch Done/Archived), selbst
+# wenn alle Kind-Storys terminal sind. progress wird trotzdem weiter berechnet (s.o.).
 
 # --- Nur abgeleitete Felder + updated_at überschreiben ---
 feat_data = normalize_all(feat_data)
