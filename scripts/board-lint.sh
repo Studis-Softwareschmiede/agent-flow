@@ -12,6 +12,8 @@
 #        AC9  (Pflichtfelder und Enum-Verletzungen mit Datei + Feldname)
 #        AC10 (ROLLUP-STALE: abgeleitete Felder veraltet — WARN, kein FEHLER)
 #        AC11 (deterministisch, FEHLER|WARN-Format, Exit-Code-Semantik)
+#        AC12 (ABGENOMMEN-FORMAT: gesetztes Story-Feld abgenommen_at verletzt
+#              das ISO-8601-UTC-Format; fehlend/null ist kein Fehler)
 #        spec-status-lifecycle#AC4 (SPEC-STATUS-INVALID: referenzierte Spec-Datei
 #              traegt einen status-Wert ausserhalb {draft, active, superseded})
 #        board-areas#AC5 (AREA-UNKNOWN: Feature-`area` oder Spec-`area`-Frontmatter
@@ -38,6 +40,8 @@
 #   ROLLUP-STALE         — stories[]/progress eines Features veraltet (V10, WARN)
 #   STORY-UNSPEC         — importierte Story (github_issue gesetzt) hat spec oder implements
 #                          nicht gesetzt — WARN, kein FEHLER (V3, Owner zieht nach im Cut-PR)
+#   ABGENOMMEN-FORMAT     — gesetztes Story-Feld abgenommen_at ist kein gueltiges
+#                          ISO-8601-UTC (V12; fehlend/null ist kein Fehler)
 #   SPEC-STATUS-INVALID  — referenzierte, existierende Spec-Datei hat Frontmatter-status:
 #                          ausserhalb {draft, active, superseded}
 #                          (aus Spec docs/specs/spec-status-lifecycle.md, AC4)
@@ -271,6 +275,13 @@ if "done_at" in data and data["done_at"] is not None:
     ts_str = ts_to_str(data["done_at"])
     if not TS_PATTERN.match(ts_str):
         errors.append(f"FEHLER ENUM-INVALID {rel} done_at={data['done_at']!r} (muss ISO-8601-UTC)")
+
+# abgenommen_at (V12) — optional, kein Pflichtfeld; nur bei gesetztem Wert das
+# Format pruefen (fehlend/null ist rueckwaertskompatibel und kein Fehler).
+if "abgenommen_at" in data and data["abgenommen_at"] is not None:
+    ts_str = ts_to_str(data["abgenommen_at"])
+    if not TS_PATTERN.match(ts_str):
+        errors.append(f"FEHLER ABGENOMMEN-FORMAT {rel} abgenommen_at={data['abgenommen_at']!r} (muss ISO-8601-UTC)")
 
 for e in errors:
     print(e)

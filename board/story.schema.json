@@ -101,6 +101,11 @@
       "type": ["string", "null"],
       "description": "Optionaler Blockierungsgrund (bei status=Blocked)."
     },
+    "abgenommen_at": {
+      "type": ["string", "null"],
+      "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)?$",
+      "description": "Optionaler Zeitstempel der manuellen Owner-Abnahme *nach* Done (ISO-8601-UTC). Schreiber ist ausschliesslich die dev-gui-Oberflaeche; kein Agent (auch nicht /flow) setzt dieses Feld. Aendert den Story-status nicht. Siehe board-schema AC12."
+    },
     "created_at": {
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
