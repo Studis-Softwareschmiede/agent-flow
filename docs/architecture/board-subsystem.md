@@ -112,6 +112,7 @@ Feature  F-002  „Key-Rotation"
 ║  labels        [infra, vps]          ← frei, fachlich                       ║
 ║  depends       [F-000]               ← andere Features (grobe Reihenfolge)  ║
 ║  owner         alex                  ← optional                            ║
+║  area          <bereich-id>|null     ← optional; siehe board-areas         ║
 ║  ── abgeleitet / Rollup (nicht von Hand gepflegt) ──────────────────────── ║
 ║  stories       [S-014, S-015, S-016] ← Kinder (Rückverweis, generierbar)    ║
 ║  progress      2/3 done · 1 in progress   ← aus Story-Status berechnet      ║
@@ -165,6 +166,7 @@ Feature  F-002  „Key-Rotation"
 | `spec` | ✅ (optional) | ✅ (AC-Quelle) | Datei unter `docs/specs/` |
 | `implements` (AC-Liste) | — | ✅ | Drift-Gate-Bindung |
 | `definition_of_done` | ✅ grob | — | Story-Akzeptanz = AC in Spec |
+| `area` | ✅ optional | — | Bereichs-Kopplung an `areas.yaml`, siehe §4.5/board-areas |
 | `depends` | ✅ (Features) | ✅ (Stories) | Reihenfolge-Gate |
 | `labels` | ✅ fachlich | ✅ dispatch-steuernd | |
 | `dispo_est`/`dispo_act` (EP + Tokens) | — | ✅ | „Dispo" — geschätzt vs. Ist, §4.4 |
@@ -244,6 +246,34 @@ Metrik-Zeilen eines dev-gui-Laufs versehentlich im `agent-flow`-Plugin-Repo stat
 Projekt-Repo, weil der Pfad zur Laufzeit relativ/erneut aufgelöst wurde und nach
 Verzeichniswechseln vom Board-Repo abdriftete.
 
+### 4.5 Bereichs-Ebene: `board/areas.yaml`
+
+**Amendment (Spec `docs/specs/board-areas.md`, bindend).** Neben `board.yaml`
+(ID-Zähler/Meta) trägt `board/` eine eigene, dritte Datei: `board/areas.yaml` — die
+**stabile Strukturkarte** der Applikation. Sie ist eine YAML-**Liste** (kein
+ID-Zähler, keine `F-`/`S-`-Nummer) von Bereichen; jeder Eintrag trägt:
+
+```
+- id: board                    # kebab-case Slug, projektweit eindeutig
+  titel: Board                 # Kurztitel (Kachel-/Dropdown-Anzeige)
+  beschreibung: Genau 1 Satz, was der Bereich umfasst.
+  reihenfolge: 1                # int, eindeutig — Kachel-/Dropdown-Sortierung
+```
+
+Formal festgenagelt in `board/areas.schema.json` (analog `feature.schema.json`/
+`story.schema.json`). `areas.yaml` ist optional: fehlt sie, referenziert aber auch
+kein Item eine `area`, ist das Board weiterhin gültig (Rückwärtskompatibilität vor
+Migration).
+
+**Kopplung Feature → Bereich (§4.1).** Ein Feature trägt optional `area:
+<bereich-id>` (String|null), das auf einen `areas.yaml`-Eintrag zeigt — ein
+**Bereichs-Feature** ist ein Feature mit gesetztem `area`. Ein Feature ohne `area`
+(Alt-Feature) bleibt gültig. Die Lint-Durchsetzung (`AREA-UNKNOWN`,
+`AREA-DUP-FEATURE`, `AREA-FIELD`) sowie die Bereichs-Semantik (dauerhaftes
+Bereichs-Feature, Archiv-Semantik auf der Story, Bereichs-Operationen) definiert
+`docs/specs/board-areas.md` vollständig; dieser Abschnitt hält nur das Datenformat
+fest.
+
 ---
 
 ## 5. Status-Lebenszyklen
@@ -293,6 +323,7 @@ bleiben ausschließlich `Done` vorbehalten. Verhaltensvertrag: `docs/specs/story
 <projekt-repo>/
   board/
     board.yaml                 # Board-Meta: schema_version, projekt-slug, id-zähler
+    areas.yaml                 # optional: Bereichsliste (Strukturkarte), s. §4.5/board-areas
     features/
       F-001-provisioning.yaml
       F-002-key-rotation.yaml

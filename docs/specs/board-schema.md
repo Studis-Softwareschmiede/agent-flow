@@ -32,7 +32,7 @@ Festlegen, wie ein Board als git-Dateien aussieht — ein menschenlesbares, diff
 `board/board.yaml` enthält: `schema_version` (int, für spätere Migrationen), `project_slug` (string), und je Typ einen ID-Zähler (`next_feature_id`, `next_story_id` — die zuletzt vergebene bzw. nächste freie Nummer). Fehlt `board.yaml`, gilt das Board als nicht initialisiert.
 
 ### V2 — Feature-YAML
-`board/features/F-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.1: **Pflicht** `id` (`F-###`), `title`, `goal`, `status` (`Backlog|Planned|Active|Done|Archived`), `priority` (`P0|P1|P2|P3`), `created_at`, `updated_at`. **Optional** `spec`, `definition_of_done`, `labels[]`, `depends[]` (Feature-IDs), `owner`. **Abgeleitet (nicht von Hand)** `stories[]`, `progress`.
+`board/features/F-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.1: **Pflicht** `id` (`F-###`), `title`, `goal`, `status` (`Backlog|Planned|Active|Done|Archived`), `priority` (`P0|P1|P2|P3`), `created_at`, `updated_at`. **Optional** `spec`, `definition_of_done`, `labels[]`, `depends[]` (Feature-IDs), `owner`, `area` (String|null — Bereichs-Kopplung, muss falls gesetzt auf einen `id`-Eintrag in `board/areas.yaml` zeigen; [[board-areas]] AC2). **Abgeleitet (nicht von Hand)** `stories[]`, `progress`.
 
 ### V3 — Story-YAML
 `board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|In Review|Done|Verworfen`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `tok_est`, `branch`, `pr`, `blocked_reason`, `done_at`. `tok_est` (Ganzzahl | null, erwartete Gesamt-Tokens des Flow-Durchlaufs — A-priori-Wert aus `baseline.json`-Lookup bzw. `estimator`, Persistenz als Text via `board set` analog `dispo_est`; s. [[apriori-token-estimate]] AC1/AC2) ist rückwärtskompatibel: fehlt es (Alt-Story), bleibt die Story gültig (kein `lint`-Fehler). Der Status `Verworfen` (Won't-Do/Obsolete) ist **terminal** wie `Done`, aber nicht *erfolgreich* — Semantik + terminale Wertung in `next`/`rollup`/`/flow` siehe [[story-status-verworfen]].
@@ -69,7 +69,7 @@ Story-YAML kennt das **optionale** Feld `abgenommen_at` (ISO-8601-UTC-Timestamp 
 ## Acceptance-Kriterien
 
 - **AC1** — `board/board.yaml` enthält `schema_version` (int), `project_slug` und je einen ID-Zähler `next_feature_id`/`next_story_id`; ohne `board.yaml` gilt das Board als nicht initialisiert. *(V1)*
-- **AC2** — Feature-YAML trägt alle Pflichtfelder aus board-subsystem §4.1 (`id,title,goal,status,priority,created_at,updated_at`) plus die optionalen/abgeleiteten Felder; `status`∈{Backlog,Planned,Active,Done,Archived}, `priority`∈{P0,P1,P2,P3}. *(V2)*
+- **AC2** — Feature-YAML trägt alle Pflichtfelder aus board-subsystem §4.1 (`id,title,goal,status,priority,created_at,updated_at`) plus die optionalen/abgeleiteten Felder (inkl. `area`); `status`∈{Backlog,Planned,Active,Done,Archived}, `priority`∈{P0,P1,P2,P3}. *(V2)*
 - **AC3** — Story-YAML trägt alle Pflichtfelder aus board-subsystem §4.2 (`id,parent,title,status,priority,spec,implements,created_at,updated_at`) plus die optionalen Felder; `status`∈{To Do,In Progress,Blocked,In Review,Done,Verworfen}, `priority`∈{P0,P1,P2,P3}. `Verworfen` ist ein terminaler Status (Won't-Do/Obsolete, [[story-status-verworfen]]). Für **importierte Stories** (`github_issue` gesetzt) sind `spec`/`implements` bei Fehlen WARN STORY-UNSPEC (kein FEHLER), bis der Owner sie im Cut-PR nachzieht. *(V3)*
 - **AC4** — IDs matchen `^F-\d{3,}$`/`^S-\d{3,}$`, Enums tragen nur erlaubte Werte, `implements[]` sind `AC<n>`-Tokens, Zeitstempel ISO-8601-UTC; Abweichung → `lint`-Fehler. *(V4, V9)*
 - **AC5** — `lint` meldet doppelte Feature-/Story-IDs und einen Dateiname-Präfix, der nicht zur `id` im Body passt, als Fehler. *(V5)*
@@ -103,6 +103,7 @@ definition_of_done: <grob, prüfbar>  # optional
 labels: [infra, vps]                  # optional
 depends: [F-000]                      # optional, Feature-IDs
 owner: alex                           # optional
+area: null                            # optional  Bereichs-id|null, s. board-areas AC2
 stories: [S-014, S-015]               # abgeleitet
 progress: "2/3 done · 1 in progress"  # abgeleitet
 created_at: 2026-06-14T00:00:00Z

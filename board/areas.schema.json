@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "board/areas.schema.json",
+  "title": "Bereichsliste (board/areas.yaml)",
+  "description": "Schema fuer die Bereichsliste board/areas.yaml — die stabile Strukturkarte der Applikation (docs/specs/board-areas.md AC1). Optional: fehlt die Datei und referenziert kein Item eine area, ist das Board weiterhin gueltig.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "titel", "beschreibung", "reihenfolge"],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        "description": "Kebab-case Bereichs-Slug, projektweit eindeutig. Kein Zaehler-Muster (kein F-###/S-###) — board/board.yaml bleibt der alleinige ID-Zaehler fuer Feature/Story."
+      },
+      "titel": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Kurztitel des Bereichs (Kachel-/Dropdown-Anzeige)."
+      },
+      "beschreibung": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Genau 1 Satz: was dieser Bereich umfasst."
+      },
+      "reihenfolge": {
+        "type": "integer",
+        "description": "Sortierschluessel fuer Kachel-/Dropdown-Anzeige, projektweit eindeutig."
+      }
+    }
+  }
+}

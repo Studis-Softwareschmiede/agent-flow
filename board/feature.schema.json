@@ -57,6 +57,10 @@
       "type": ["string", "null"],
       "description": "Optionaler Verantwortlicher."
     },
+    "area": {
+      "type": ["string", "null"],
+      "description": "Optionale Bereichs-Kopplung: zeigt (falls gesetzt) auf einen id-Eintrag in board/areas.yaml. Ein Feature mit gesetztem area ist ein Bereichs-Feature (docs/specs/board-areas.md AC2). Existenzpruefung gegen areas.yaml ist Sache von board lint (AREA-UNKNOWN), nicht dieses Schemas."
+    },
     "stories": {
       "type": ["array", "null"],
       "items": {
