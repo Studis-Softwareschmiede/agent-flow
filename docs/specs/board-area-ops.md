@@ -85,7 +85,8 @@ board/stories/archive/S-###-<slug>.yaml   # verschobene Done-Storys (aus aktivem
 ## Edge-Cases & Fehlerverhalten
 
 - **`merge` von `<a>`==`<ziel>`** → `<b>` wird in `<a>` eingegliedert; kein Fehler.
-- **`merge`, wenn `<ziel>` noch nicht existiert** → `<ziel>` wird in `areas.yaml` angelegt (nächste `reihenfolge`), dann `<a>`/`<b>` eingegliedert.
+- **`merge`, wenn `<ziel>` noch nicht existiert** → `<ziel>` wird in `areas.yaml` angelegt (nächste `reihenfolge`), dann `<a>`/`<b>` eingegliedert. *(Spec-Präzisierung: `titel`/`beschreibung` des neuen `<ziel>`-Eintrags werden von `<a>` übernommen, falls `<a>` in `areas.yaml` existiert, sonst von `<b>`; `reihenfolge` = höchste bestehende `reihenfolge` + 1.)*
+- **`merge`-Gültigkeitsprüfung („unbekannter Bereich", E1) — Spec-Präzisierung:** `areas.yaml` ist die einzige Quelle gültiger Bereichs-`id`s (AC1). Ein Aufruf gilt nur dann als **unbekannter Bereich** (Fehler, kein Schreiben, Exit ≠ 0), wenn **weder** `<a>` **noch** `<b>` **noch** `<ziel>` aktuell als Eintrag in `areas.yaml` existiert. Ist mindestens einer der drei bekannt (z. B. `<ziel>` existiert bereits aus einem vorherigen Merge-Lauf, oder `<a>`==`<ziel>` und bekannt), läuft der Merge durch; ein bereits fehlender `<a>`/`<b>`-Eintrag gilt dabei als „nichts mehr zu entfernen" (kein Fehler). Diese Regel macht einen zweiten, identischen Aufruf idempotent (AC2), ohne die Kernaussage von E1 (garantiert unbekannte Eingabe → Fehler) zu verletzen.
 - **`archive-done-stories` ohne `Done`-Storys** → leere Ausgabe, Exit 0 (nichts zu tun).
 - **`split` mit offenen Fragen** → der Quell-Bereich `<a>` bleibt in `areas.yaml`, bis alle Artefakte zugeordnet sind (kein Datenverlust).
 - **Story ist bereits in `archive/`** → wird von `list`/`next`/`rollup` ignoriert; erneutes `archive-done-stories` fasst sie nicht an.

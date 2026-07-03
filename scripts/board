@@ -4,7 +4,8 @@
 # Verben (implementiert): feature add, story add, set, show, list, next,
 #                         rollup (AC7), lint (AC8, delegiert an board-lint.sh),
 #                         ready (AC12, F-008 „Autonome Board-Abarbeitung"),
-#                         export-github (AC11, Stub/Registrierung — #129)
+#                         export-github (AC11, Stub/Registrierung — #129),
+#                         area list/merge (board-area-ops AC1/AC2/AC5, S-036)
 # Single-Writer-Erzwingung: AC9
 #
 # Requires: bash >= 4.0, python3 mit PyYAML
@@ -42,6 +43,8 @@ Verwendung:
   board lint [<board-dir>]
   board ready [--quiet]
   board export-github
+  board area list
+  board area merge <a> <b> <ziel>
 EOF
   exit 1
 }
@@ -1123,6 +1126,283 @@ cmd_export_github() {
 }
 
 # ---------------------------------------------------------------------------
+# Verb: area list — AC1 (docs/specs/board-area-ops.md)
+#
+# Gibt board/areas.yaml als sortiertes JSON-Array aus (Felder id, titel,
+# beschreibung, reihenfolge). Fehlt areas.yaml (oder ist sie leer/kein
+# Mapping) → leeres Array, Exit 0. Lesend, token-frei/deterministisch —
+# kein require_board (areas.yaml ist optional, board-areas AC1/E2).
+# ---------------------------------------------------------------------------
+cmd_area_list() {
+  local areas_file="${BOARD_DIR}/areas.yaml"
+
+  python3 - "$areas_file" <<'PYEOF'
+import sys, yaml, json
+
+areas_file = sys.argv[1]
+
+try:
+    with open(areas_file, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+except FileNotFoundError:
+    data = None
+except Exception:
+    # Malformte areas.yaml wird von `board lint` (AREA-FIELD) diagnostiziert;
+    # `area list` bleibt tolerant und liefert im Zweifel ein leeres Array.
+    data = None
+
+if not isinstance(data, list):
+    print("[]")
+    sys.exit(0)
+
+items = []
+for entry in data:
+    if not isinstance(entry, dict):
+        continue
+    items.append({
+        "id":           entry.get("id"),
+        "titel":        entry.get("titel"),
+        "beschreibung": entry.get("beschreibung"),
+        "reihenfolge":  entry.get("reihenfolge"),
+    })
+
+def sort_key(item):
+    r = item.get("reihenfolge")
+    return r if (isinstance(r, int) and not isinstance(r, bool)) else 10**9
+
+items.sort(key=sort_key)
+
+print(json.dumps(items, ensure_ascii=False))
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
+# Verb: area merge — AC2/AC5 (docs/specs/board-area-ops.md)
+#
+# `board area merge <a> <b> <ziel>` legt Bereich <a>/<b> unter <ziel> zusammen:
+#   - areas.yaml: <a>/<b>-Eintraege entfernen (sofern != <ziel>), <ziel>
+#     behalten oder neu anlegen (Titel/Beschreibung von <a>, sonst <b>;
+#     naechste reihenfolge — Spec-Praezisierung, s. Edge-Cases in der Spec).
+#   - Mechanisches Umschreiben aller area-Etiketten (Feature-`area`,
+#     Spec-`area`-Frontmatter, Ideen-Inbox-`- area:`-Eintraege) von <a>/<b>
+#     auf <ziel>.
+#   - Keine Dateiverschiebung, keine Spec-ID-Aenderung.
+#
+# Gueltigkeits-/Idempotenz-Regel (Spec-Praezisierung, s. Edge-Cases):
+#   "Unbekannter Bereich" (Fehler, kein Schreiben, Exit != 0) nur wenn WEDER
+#   <a> NOCH <b> NOCH <ziel> als Eintrag in areas.yaml existiert. Ist
+#   mindestens einer bekannt, laeuft der Merge durch — bereits fehlende
+#   <a>/<b>-Eintraege gelten als "nichts zu entfernen" (kein Fehler). Das
+#   macht einen zweiten, identischen Aufruf idempotent (AC2).
+#
+# Atomaritaet (AC5): saemtliche Validierung + Aenderungsberechnung laeuft VOR
+# jedem Schreibzugriff (python err()-Pfad beendet ohne jede Datei beruehrt zu
+# haben); jede tatsaechlich veraenderte Datei wird einzeln atomar geschrieben
+# (tmp im selben Verzeichnis + os.replace).
+# ---------------------------------------------------------------------------
+cmd_area_merge() {
+  [[ $# -eq 3 ]] || die "area merge: Verwendung: board area merge <a> <b> <ziel>"
+
+  local area_a="$1" area_b="$2" area_ziel="$3"
+  [[ -n "$area_a" && -n "$area_b" && -n "$area_ziel" ]] || \
+    die "area merge: <a>/<b>/<ziel> duerfen nicht leer sein"
+
+  require_board
+
+  local repo_root
+  repo_root="$(cd "${BOARD_DIR}/.." && pwd)"
+
+  local ts
+  ts="$(now_ts)"
+
+  python3 - "$BOARD_DIR" "$repo_root" "$area_a" "$area_b" "$area_ziel" "$ts" <<'PYEOF'
+import sys, os, re, json, yaml, tempfile
+
+board_dir  = sys.argv[1]
+repo_root  = sys.argv[2]
+area_a     = sys.argv[3]
+area_b     = sys.argv[4]
+area_ziel  = sys.argv[5]
+ts         = sys.argv[6]
+
+areas_path   = os.path.join(board_dir, "areas.yaml")
+features_dir = os.path.join(board_dir, "features")
+specs_dir    = os.path.join(repo_root, "docs", "specs")
+ideas_path   = os.path.join(repo_root, "docs", "ideas-inbox.md")
+
+
+def err(msg):
+    print(f"FEHLER: area merge: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+# --- areas.yaml laden (einzige Quelle gueltiger Bereichs-ids) ---
+areas_list = []
+if os.path.isfile(areas_path):
+    try:
+        with open(areas_path, encoding="utf-8") as f:
+            loaded = yaml.safe_load(f)
+    except Exception as e:
+        err(f"areas.yaml nicht lesbar/parsebar ({e}) — 'board lint' zur Diagnose nutzen")
+        loaded = None  # unreachable, err() beendet den Prozess
+    if loaded is not None:
+        if not isinstance(loaded, list):
+            err("areas.yaml ist keine YAML-Liste (malformt) — 'board lint' zur Diagnose nutzen")
+        areas_list = loaded
+
+entries_by_id = {}
+for entry in areas_list:
+    if isinstance(entry, dict) and entry.get("id") is not None:
+        entries_by_id[str(entry["id"]).strip()] = entry
+
+known_ids = set(entries_by_id.keys())
+
+# --- E1: unbekannter Bereich ---
+if area_ziel not in known_ids and area_a not in known_ids and area_b not in known_ids:
+    err(f"weder '{area_a}' noch '{area_b}' noch '{area_ziel}' ist in areas.yaml bekannt")
+
+# --- <ziel>-Eintrag bestimmen/anlegen ---
+ziel_new = area_ziel not in known_ids
+new_ziel_entry = None
+if ziel_new:
+    # AC5-Garantie: eine NEU angelegte <ziel>-id muss dem Kebab-Case-Pattern
+    # aus board/areas.schema.json entsprechen (siehe coder/L31) — sonst
+    # entsteht ein schema-invalider Datensatz, den `board lint` erst beim
+    # naechsten Lauf erkennt statt beim Schreiben selbst.
+    ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+    if not ID_PATTERN.match(area_ziel):
+        err(f"'{area_ziel}' ist keine gueltige Bereichs-id (erwartet kebab-case: ^[a-z][a-z0-9]*(-[a-z0-9]+)*$)")
+
+    source_entry = entries_by_id.get(area_a) or entries_by_id.get(area_b)
+
+    def is_int_reihenfolge(v):
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    ordnungen = [e.get("reihenfolge") for e in areas_list if isinstance(e, dict)]
+    ordnungen = [o for o in ordnungen if is_int_reihenfolge(o)]
+    next_reihenfolge = (max(ordnungen) + 1) if ordnungen else 1
+
+    new_ziel_entry = {
+        "id":           area_ziel,
+        "titel":        source_entry.get("titel"),
+        "beschreibung": source_entry.get("beschreibung"),
+        "reihenfolge":  next_reihenfolge,
+    }
+
+# --- alte Labels, die auf <ziel> umgeschrieben werden ---
+old_labels = {area_a, area_b} - {area_ziel}
+
+# --- neue areas.yaml-Liste berechnen ---
+new_areas_list = [
+    e for e in areas_list
+    if not (isinstance(e, dict) and str(e.get("id", "")).strip() in old_labels)
+]
+if ziel_new:
+    new_areas_list.append(new_ziel_entry)
+
+areas_changed = (new_areas_list != areas_list)
+
+# --- Feature-Dateien: area-Etikett umschreiben ---
+feature_writes = []
+if os.path.isdir(features_dir):
+    for fname in sorted(os.listdir(features_dir)):
+        if not fname.endswith(".yaml"):
+            continue
+        fpath = os.path.join(features_dir, fname)
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                fdata = yaml.safe_load(f) or {}
+        except Exception as e:
+            err(f"Feature-Datei {fpath} nicht lesbar ({e})")
+        area_val = fdata.get("area")
+        if area_val is not None and str(area_val).strip() in old_labels:
+            fdata["area"] = area_ziel
+            fdata["updated_at"] = ts
+            new_text = yaml.dump(fdata, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            feature_writes.append((fpath, new_text))
+
+# --- Spec-Frontmatter: area-Etikett umschreiben ---
+FRONTMATTER_BLOCK = re.compile(r"^(---\s*\n)(.*?)(\n---\s*\n)", re.DOTALL)
+AREA_LINE = re.compile(r"^(area:)\s*(.+?)\s*$", re.MULTILINE)
+
+spec_writes = []
+if os.path.isdir(specs_dir):
+    for fname in sorted(os.listdir(specs_dir)):
+        if not fname.endswith(".md"):
+            continue
+        spath = os.path.join(specs_dir, fname)
+        try:
+            with open(spath, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception as e:
+            err(f"Spec-Datei {spath} nicht lesbar ({e})")
+        fm_match = FRONTMATTER_BLOCK.match(content)
+        if not fm_match:
+            continue
+        fm_body = fm_match.group(2)
+        area_match = AREA_LINE.search(fm_body)
+        if not area_match:
+            continue
+        area_val = area_match.group(2).split("#", 1)[0].strip()
+        if area_val not in old_labels:
+            continue
+        new_fm_body = AREA_LINE.sub(lambda m: f"{m.group(1)} {area_ziel}", fm_body, count=1)
+        new_content = content[:fm_match.start(2)] + new_fm_body + content[fm_match.end(2):]
+        spec_writes.append((spath, new_content))
+
+# --- Ideen-Inbox: "- area: <bereich>"-Eintraege umschreiben ---
+IDEA_AREA_LINE = re.compile(r"^(- area:)\s*(.+?)\s*$", re.MULTILINE)
+ideas_write = None
+if os.path.isfile(ideas_path):
+    try:
+        with open(ideas_path, encoding="utf-8", errors="replace") as f:
+            ideas_content = f.read()
+    except Exception as e:
+        err(f"Ideen-Inbox {ideas_path} nicht lesbar ({e})")
+
+    def repl(m):
+        val = m.group(2).split("#", 1)[0].strip()
+        if val in old_labels:
+            return f"{m.group(1)} {area_ziel}"
+        return m.group(0)
+
+    new_ideas_content = IDEA_AREA_LINE.sub(repl, ideas_content)
+    if new_ideas_content != ideas_content:
+        ideas_write = new_ideas_content
+
+# --- Ab hier: nur noch Schreiben (Validierung/Berechnung ist abgeschlossen) ---
+
+def atomic_write(path, text):
+    d = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=os.path.basename(path) + ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+if areas_changed:
+    atomic_write(areas_path, yaml.dump(new_areas_list, allow_unicode=True, default_flow_style=False, sort_keys=False))
+
+for fpath, text in feature_writes:
+    atomic_write(fpath, text)
+
+for spath, text in spec_writes:
+    atomic_write(spath, text)
+
+if ideas_write is not None:
+    atomic_write(ideas_path, ideas_write)
+
+print(area_ziel)
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
 # Verb: ready — AC12 (F-008 „Autonome Board-Abarbeitung")
 #
 # Prüft je To-Do-Story, ob sie „ready" für autonome Abarbeitung ist.
@@ -1423,6 +1703,15 @@ case "$VERB" in
     ;;
   export-github)
     cmd_export_github "$@"
+    ;;
+  area)
+    [[ $# -ge 1 ]] || die "area: Unterbefehl 'list' oder 'merge' erwartet"
+    AREA_SUB="$1"; shift
+    case "$AREA_SUB" in
+      list)  cmd_area_list "$@"  ;;
+      merge) cmd_area_merge "$@" ;;
+      *) die "area: unbekannter Unterbefehl '${AREA_SUB}' (erwartet 'list' oder 'merge')" ;;
+    esac
     ;;
   --help|-h|help)
     usage
