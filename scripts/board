@@ -5,7 +5,8 @@
 #                         rollup (AC7), lint (AC8, delegiert an board-lint.sh),
 #                         ready (AC12, F-008 „Autonome Board-Abarbeitung"),
 #                         export-github (AC11, Stub/Registrierung — #129),
-#                         area list/merge (board-area-ops AC1/AC2/AC5, S-036)
+#                         area list/merge (board-area-ops AC1/AC2/AC5, S-036),
+#                         area split (board-area-ops AC4/AC5, S-037)
 # Single-Writer-Erzwingung: AC9
 #
 # Requires: bash >= 4.0, python3 mit PyYAML
@@ -45,6 +46,7 @@ Verwendung:
   board export-github
   board area list
   board area merge <a> <b> <ziel>
+  board area split <a> <a1> <a2>
 EOF
   exit 1
 }
@@ -1403,6 +1405,418 @@ PYEOF
 }
 
 # ---------------------------------------------------------------------------
+# Verb: area split — AC4/AC5 (docs/specs/board-area-ops.md)
+#
+# `board area split <a> <a1> <a2>` ist ASSISTIERT (im Unterschied zu merge,
+# das vollautomatisch ist): es listet alle Artefakte von <a> —
+#   - Specs mit `area: <a>`-Frontmatter
+#   - Features mit `area: <a>` (+ ihre Storys, informativ)
+#   - Ideen-Inbox-Eintraege mit `- area: <a>`
+# — mit einem Ziel-Vorschlag (<a1>|<a2>) + Konfidenz (token-freie,
+# deterministische Wort-Ueberlappungs-Heuristik der Artefakt-Bezeichner gegen
+# id/titel/beschreibung der beiden Ziel-Bereiche). Eindeutige Faelle werden
+# SOFORT umgeschrieben (Etikett); mehrdeutige (Punktegleichstand, inkl. 0:0)
+# landen als maschinenlesbarer Fragenkatalog ({stage,id,frage,quelle,
+# optionen}, board/fragenkatalog.schema.json, stage="split").
+#
+# Spec-Praezisierung (bindender Kontext-Abschnitt von board-area-ops.md):
+# NUR Feature-`area`, Spec-`area`-Frontmatter und Ideen-Inbox-`- area:` sind
+# schreibbare Bereichs-Etiketten (identisch zu merge, AC2). Eine Story TRAEGT
+# KEIN eigenes `area`-Feld — ihre Bereichszugehoerigkeit haengt an ihrem
+# Eltern-Feature. Storys erscheinen im Report daher NUR informativ (mit dem
+# Ziel/Konfidenz-Ergebnis IHRES Eltern-Features); sie werden nicht separat
+# befragt oder geschrieben (kein Story-Reparenting — Kern-CRUD ist laut Spec
+# ein Nicht-Ziel dieser Operation).
+#
+# E2: neue Ziel-Bereiche <a1>/<a2> werden — sofern noch unbekannt — SOFORT in
+# areas.yaml angelegt (Platzhalter-`beschreibung` + naechste `reihenfolge`),
+# damit kein zugeordnetes Artefakt je auf einen fehlenden Bereich zeigt
+# (kein AREA-UNKNOWN-Zwischenzustand). Der Quell-Bereich <a> wird nur
+# entfernt, wenn ALLE schreibbaren Artefakte zugeordnet sind (Fragenkatalog
+# leer) UND <a> nicht selbst als <a1>/<a2> weiterverwendet wird.
+#
+# AC5: saemtliche Validierung + Heuristik laeuft VOR jedem Schreibzugriff im
+# Python-Prozess (err() beendet ohne Datei beruehrt zu haben); jede
+# tatsaechlich veraenderte Datei wird einzeln atomar geschrieben. <a1>==<a2>
+# ist eine ungueltige Eingabe (kein sinnvoller Split) -> Fehler, kein
+# Schreiben, Exit != 0. Unbekannter Quell-Bereich <a> -> E1, kein Schreiben,
+# Exit != 0 (Ziel-Bereiche duerfen dagegen neu sein, E2).
+# ---------------------------------------------------------------------------
+cmd_area_split() {
+  [[ $# -eq 3 ]] || die "area split: Verwendung: board area split <a> <a1> <a2>"
+
+  local area_a="$1" area_a1="$2" area_a2="$3"
+  [[ -n "$area_a" && -n "$area_a1" && -n "$area_a2" ]] || \
+    die "area split: <a>/<a1>/<a2> duerfen nicht leer sein"
+  [[ "$area_a1" != "$area_a2" ]] || \
+    die "area split: <a1> und <a2> muessen unterschiedlich sein"
+
+  require_board
+
+  local repo_root
+  repo_root="$(cd "${BOARD_DIR}/.." && pwd)"
+
+  # Board-Verzeichnis absolut auf DENSELBEN Pfad-Stamm wie repo_root aufloesen
+  # (beide via `pwd` im selben Shell-Prozess) — sonst weichen relative
+  # BOARD_DIR-Pfade und repo_root bei symlinked /tmp (macOS: /tmp -> /private/tmp)
+  # auseinander und os.path.relpath() im Report ergibt Muell (nur kosmetisch,
+  # betrifft nicht die Schreib-Pfade selbst, aber die Report-„quelle"-Felder).
+  local board_dir_abs
+  board_dir_abs="$(cd "$BOARD_DIR" && pwd)"
+
+  local ts
+  ts="$(now_ts)"
+
+  python3 - "$board_dir_abs" "$repo_root" "$area_a" "$area_a1" "$area_a2" "$ts" <<'PYEOF'
+import sys, os, re, json, yaml, tempfile
+
+board_dir = sys.argv[1]
+repo_root = sys.argv[2]
+area_a    = sys.argv[3]
+area_a1   = sys.argv[4]
+area_a2   = sys.argv[5]
+ts        = sys.argv[6]
+
+areas_path   = os.path.join(board_dir, "areas.yaml")
+features_dir = os.path.join(board_dir, "features")
+stories_dir  = os.path.join(board_dir, "stories")
+specs_dir    = os.path.join(repo_root, "docs", "specs")
+ideas_path   = os.path.join(repo_root, "docs", "ideas-inbox.md")
+
+
+def err(msg):
+    print(f"FEHLER: area split: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def atomic_write(path, text):
+    d = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=os.path.basename(path) + ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
+# --- areas.yaml laden (einzige Quelle gueltiger Bereichs-ids) ---
+areas_list = []
+if os.path.isfile(areas_path):
+    try:
+        with open(areas_path, encoding="utf-8") as f:
+            loaded = yaml.safe_load(f)
+    except Exception as e:
+        err(f"areas.yaml nicht lesbar/parsebar ({e}) — 'board lint' zur Diagnose nutzen")
+        loaded = None  # unreachable, err() beendet den Prozess
+    if loaded is not None:
+        if not isinstance(loaded, list):
+            err("areas.yaml ist keine YAML-Liste (malformt) — 'board lint' zur Diagnose nutzen")
+        areas_list = loaded
+
+entries_by_id = {}
+for entry in areas_list:
+    if isinstance(entry, dict) and entry.get("id") is not None:
+        entries_by_id[str(entry["id"]).strip()] = entry
+
+known_ids = set(entries_by_id.keys())
+
+# --- E1: unbekannter Quell-Bereich ---
+if area_a not in known_ids:
+    err(f"Quell-Bereich '{area_a}' ist nicht in areas.yaml bekannt")
+
+# --- AC5: neue Ziel-ids muessen kebab-case sein (identisch zu merge) ---
+ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+a1_new = area_a1 not in known_ids
+a2_new = area_a2 not in known_ids
+if a1_new and not ID_PATTERN.match(area_a1):
+    err(f"'{area_a1}' ist keine gueltige Bereichs-id (erwartet kebab-case: ^[a-z][a-z0-9]*(-[a-z0-9]+)*$)")
+if a2_new and not ID_PATTERN.match(area_a2):
+    err(f"'{area_a2}' ist keine gueltige Bereichs-id (erwartet kebab-case: ^[a-z][a-z0-9]*(-[a-z0-9]+)*$)")
+
+# --- Heuristik: token-freie, deterministische Wort-Ueberlappung ---
+STOPWORDS = {
+    "und", "der", "die", "das", "fuer", "mit", "von", "den", "des", "dem",
+    "ein", "eine", "einer", "eines", "im", "in", "auf", "zu", "ist", "als",
+    "aus", "sind", "wird", "werden", "sich", "nicht", "oder", "auch", "the",
+    "and", "for", "are", "was",
+}
+
+WORD_RE = re.compile(r"[a-zA-Z0-9äöüÄÖÜß]+")
+
+
+def tokens(*texts):
+    out = set()
+    for text in texts:
+        if not text:
+            continue
+        for w in WORD_RE.findall(str(text).lower()):
+            if len(w) >= 3 and w not in STOPWORDS:
+                out.add(w)
+    return out
+
+
+def target_tokens(area_id):
+    toks = tokens(area_id.replace("-", " "))
+    entry = entries_by_id.get(area_id)
+    if entry:
+        toks |= tokens(entry.get("titel"), entry.get("beschreibung"))
+    return toks
+
+
+tokens_a1 = target_tokens(area_a1)
+tokens_a2 = target_tokens(area_a2)
+
+
+def propose(art_tokens):
+    """Liefert (ziel|None, konfidenz) fuer ein Artefakt (token-freie Heuristik)."""
+    s1 = len(art_tokens & tokens_a1)
+    s2 = len(art_tokens & tokens_a2)
+    if s1 > s2 and s1 > 0:
+        return area_a1, ("hoch" if s2 == 0 else "mittel")
+    if s2 > s1 and s2 > 0:
+        return area_a2, ("hoch" if s1 == 0 else "mittel")
+    return None, "niedrig"
+
+
+zuordnungen = []       # Report-Zeilen: {typ,id,quelle,ziel_vorschlag,konfidenz,zugeordnet}
+fragenkatalog = []     # {stage,id,frage,quelle,optionen} — board/fragenkatalog.schema.json
+spec_writes = []       # (pfad, neuer inhalt)
+feature_writes = []    # (pfad, neuer inhalt)
+idea_lines_changed = False
+idea_lines = None
+
+frage_counter = 0
+
+
+def next_frage_id():
+    global frage_counter
+    frage_counter += 1
+    return f"split-{frage_counter}"
+
+
+def add_row(typ, ident, quelle, ziel, konfidenz, zugeordnet):
+    zuordnungen.append({
+        "typ": typ, "id": ident, "quelle": quelle,
+        "ziel_vorschlag": ziel, "konfidenz": konfidenz, "zugeordnet": zugeordnet,
+    })
+
+
+def add_frage(typ, ident, quelle):
+    fragenkatalog.append({
+        "stage": "split",
+        "id": next_frage_id(),
+        "frage": f"Zu welchem Bereich gehoert {typ} {ident}?",
+        "quelle": quelle,
+        "optionen": [area_a1, area_a2],
+    })
+
+
+# --- 1) Specs mit area=<a>-Frontmatter ---
+FRONTMATTER_BLOCK = re.compile(r"^(---\s*\n)(.*?)(\n---\s*\n)", re.DOTALL)
+AREA_LINE = re.compile(r"^(area:)\s*(.+?)\s*$", re.MULTILINE)
+
+if os.path.isdir(specs_dir):
+    for fname in sorted(os.listdir(specs_dir)):
+        if not fname.endswith(".md"):
+            continue
+        spath = os.path.join(specs_dir, fname)
+        rel_spath = os.path.relpath(spath, repo_root)
+        try:
+            with open(spath, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception as e:
+            err(f"Spec-Datei {spath} nicht lesbar ({e})")
+        fm_match = FRONTMATTER_BLOCK.match(content)
+        if not fm_match:
+            continue
+        fm_body = fm_match.group(2)
+        area_match = AREA_LINE.search(fm_body)
+        if not area_match:
+            continue
+        area_val = area_match.group(2).split("#", 1)[0].strip()
+        if area_val != area_a:
+            continue
+        try:
+            fm_data = yaml.safe_load(fm_body) or {}
+        except Exception:
+            fm_data = {}
+        if not isinstance(fm_data, dict):
+            fm_data = {}
+        spec_id = fm_data.get("id") or os.path.splitext(fname)[0]
+        spec_title = fm_data.get("title") or ""
+        art_tokens = tokens(spec_id, spec_title, os.path.splitext(fname)[0])
+        ziel, konf = propose(art_tokens)
+        if ziel is not None:
+            new_fm_body = AREA_LINE.sub(lambda m: f"{m.group(1)} {ziel}", fm_body, count=1)
+            new_content = content[:fm_match.start(2)] + new_fm_body + content[fm_match.end(2):]
+            spec_writes.append((spath, new_content))
+            add_row("spec", spec_id, rel_spath, ziel, konf, True)
+        else:
+            add_row("spec", spec_id, rel_spath, None, konf, False)
+            add_frage("Spec", spec_id, rel_spath)
+
+# --- 2) Features mit area=<a> (+ ihre Storys, informativ — kein eigenes area-Feld) ---
+stories_by_parent = {}
+if os.path.isdir(stories_dir):
+    for sfname in sorted(os.listdir(stories_dir)):
+        if not sfname.endswith(".yaml"):
+            continue
+        spath = os.path.join(stories_dir, sfname)
+        try:
+            with open(spath, encoding="utf-8") as f:
+                sdata = yaml.safe_load(f) or {}
+        except Exception as e:
+            err(f"Story-Datei {spath} nicht lesbar ({e})")
+        if not isinstance(sdata, dict):
+            continue
+        parent = sdata.get("parent")
+        if parent is None:
+            continue
+        stories_by_parent.setdefault(str(parent), []).append((spath, sdata))
+
+if os.path.isdir(features_dir):
+    for fname in sorted(os.listdir(features_dir)):
+        if not fname.endswith(".yaml"):
+            continue
+        fpath = os.path.join(features_dir, fname)
+        rel_fpath = os.path.relpath(fpath, repo_root)
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                fdata = yaml.safe_load(f) or {}
+        except Exception as e:
+            err(f"Feature-Datei {fpath} nicht lesbar ({e})")
+        if not isinstance(fdata, dict):
+            continue
+        area_val = fdata.get("area")
+        if area_val is None or str(area_val).strip() != area_a:
+            continue
+        feature_id = fdata.get("id") or os.path.splitext(fname)[0]
+        art_tokens = tokens(feature_id, fdata.get("title"), fdata.get("goal"))
+        ziel, konf = propose(art_tokens)
+        if ziel is not None:
+            new_fdata = dict(fdata)
+            new_fdata["area"] = ziel
+            new_fdata["updated_at"] = ts
+            new_text = yaml.dump(new_fdata, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            feature_writes.append((fpath, new_text))
+            add_row("feature", feature_id, rel_fpath, ziel, konf, True)
+        else:
+            add_row("feature", feature_id, rel_fpath, None, konf, False)
+            add_frage("Feature", feature_id, rel_fpath)
+
+        # Storys unter diesem Feature: rein informativ (kein eigenes area-Feld,
+        # keine separate Schreib-/Frage-Aktion — sie folgen der Feature-Entscheidung).
+        for story_path, sdata in stories_by_parent.get(str(feature_id), []):
+            story_id = sdata.get("id") or os.path.splitext(os.path.basename(story_path))[0]
+            rel_story = os.path.relpath(story_path, repo_root)
+            add_row("story", story_id, rel_story, ziel, konf, ziel is not None)
+
+# --- 3) Ideen-Inbox: "- area: <a>"-Eintraege ---
+if os.path.isfile(ideas_path):
+    try:
+        with open(ideas_path, encoding="utf-8", errors="replace") as f:
+            ideas_content = f.read()
+    except Exception as e:
+        err(f"Ideen-Inbox {ideas_path} nicht lesbar ({e})")
+    rel_ideas = os.path.relpath(ideas_path, repo_root)
+    idea_lines = ideas_content.split("\n")
+    heading_re = re.compile(r"^###\s+(.*)$")
+    idea_area_re = re.compile(r"^(- area:)\s*(.+?)\s*$")
+    current_heading = None
+    for idx, line in enumerate(idea_lines):
+        hm = heading_re.match(line)
+        if hm:
+            current_heading = hm.group(1).strip()
+            continue
+        am = idea_area_re.match(line)
+        if not am:
+            continue
+        val = am.group(2).split("#", 1)[0].strip()
+        if val != area_a:
+            continue
+        titel = current_heading or "(ohne Titel)"
+        art_tokens = tokens(titel)
+        ziel, konf = propose(art_tokens)
+        if ziel is not None:
+            idea_lines[idx] = f"{am.group(1)} {ziel}"
+            idea_lines_changed = True
+            add_row("idee", titel, rel_ideas, ziel, konf, True)
+        else:
+            add_row("idee", titel, rel_ideas, None, konf, False)
+            add_frage("Idee", titel, rel_ideas)
+
+# --- areas.yaml: neue Ziel-Bereiche anlegen (E2), Quelle ggf. entfernen ---
+def is_int_reihenfolge(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+ordnungen = [e.get("reihenfolge") for e in areas_list if isinstance(e, dict)]
+ordnungen = [o for o in ordnungen if is_int_reihenfolge(o)]
+next_reihenfolge = (max(ordnungen) + 1) if ordnungen else 1
+
+new_entries = []
+if a1_new:
+    new_entries.append({
+        "id":           area_a1,
+        "titel":        area_a1.replace("-", " ").title(),
+        "beschreibung": f"TODO: Beschreibung nach Split von '{area_a}' ergaenzen.",
+        "reihenfolge":  next_reihenfolge,
+    })
+    next_reihenfolge += 1
+if a2_new:
+    new_entries.append({
+        "id":           area_a2,
+        "titel":        area_a2.replace("-", " ").title(),
+        "beschreibung": f"TODO: Beschreibung nach Split von '{area_a}' ergaenzen.",
+        "reihenfolge":  next_reihenfolge,
+    })
+    next_reihenfolge += 1
+
+fully_assigned = len(fragenkatalog) == 0
+remove_source = fully_assigned and area_a not in (area_a1, area_a2)
+
+new_areas_list = list(areas_list)
+if remove_source:
+    new_areas_list = [
+        e for e in new_areas_list
+        if not (isinstance(e, dict) and str(e.get("id", "")).strip() == area_a)
+    ]
+new_areas_list = new_areas_list + new_entries
+
+areas_changed = (new_areas_list != areas_list)
+
+# --- Ab hier: nur noch Schreiben (Validierung/Berechnung ist abgeschlossen) ---
+
+if areas_changed:
+    atomic_write(areas_path, yaml.dump(new_areas_list, allow_unicode=True, default_flow_style=False, sort_keys=False))
+
+for spath, text in spec_writes:
+    atomic_write(spath, text)
+
+for fpath, text in feature_writes:
+    atomic_write(fpath, text)
+
+if idea_lines_changed:
+    atomic_write(ideas_path, "\n".join(idea_lines))
+
+report = {
+    "quell_bereich": area_a,
+    "ziel_a1": area_a1,
+    "ziel_a2": area_a2,
+    "zuordnungen": zuordnungen,
+    "fragenkatalog": fragenkatalog,
+    "quell_bereich_entfernt": remove_source,
+}
+print(json.dumps(report, ensure_ascii=False))
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
 # Verb: ready — AC12 (F-008 „Autonome Board-Abarbeitung")
 #
 # Prüft je To-Do-Story, ob sie „ready" für autonome Abarbeitung ist.
@@ -1705,12 +2119,13 @@ case "$VERB" in
     cmd_export_github "$@"
     ;;
   area)
-    [[ $# -ge 1 ]] || die "area: Unterbefehl 'list' oder 'merge' erwartet"
+    [[ $# -ge 1 ]] || die "area: Unterbefehl 'list', 'merge' oder 'split' erwartet"
     AREA_SUB="$1"; shift
     case "$AREA_SUB" in
       list)  cmd_area_list "$@"  ;;
       merge) cmd_area_merge "$@" ;;
-      *) die "area: unbekannter Unterbefehl '${AREA_SUB}' (erwartet 'list' oder 'merge')" ;;
+      split) cmd_area_split "$@" ;;
+      *) die "area: unbekannter Unterbefehl '${AREA_SUB}' (erwartet 'list', 'merge' oder 'split')" ;;
     esac
     ;;
   --help|-h|help)

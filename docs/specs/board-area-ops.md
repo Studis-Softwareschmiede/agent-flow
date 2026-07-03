@@ -77,6 +77,21 @@ board archive-done-stories             → Liste archivierter Story-IDs
 ```
 *(Konservative Annahme: `stage` nutzt den Wert `split`; sollte das etablierte Enum in `board/fragenkatalog.schema.json` `split` nicht führen, wird es dort um `split` ergänzt — die Feldmenge `{stage,id,frage,quelle,optionen}` bleibt der bindende Vertrag.)*
 
+### `split`-Zuordnungs-Report (Implementierungsdetail, nicht Teil des Fragenkatalog-Schemas)
+```json
+{
+  "quell_bereich": "<a>",
+  "ziel_a1": "<a1>",
+  "ziel_a2": "<a2>",
+  "zuordnungen": [
+    {"typ": "spec|feature|story|idee", "id": "…", "quelle": "…", "ziel_vorschlag": "<a1>|<a2>|null", "konfidenz": "hoch|mittel|niedrig", "zugeordnet": true}
+  ],
+  "fragenkatalog": [ ],
+  "quell_bereich_entfernt": true
+}
+```
+*(Feldnamen des Reports selbst sind Implementierungsfreiheit — nur die `fragenkatalog`-Einträge folgen dem bindenden Vertrag oben. `typ: "story"` ist rein informativ: Storys tragen kein eigenes `area`-Feld, siehe Edge-Cases.)*
+
 ### Archiv-Ablage
 ```
 board/stories/archive/S-###-<slug>.yaml   # verschobene Done-Storys (aus aktivem View entfernt)
@@ -89,6 +104,9 @@ board/stories/archive/S-###-<slug>.yaml   # verschobene Done-Storys (aus aktivem
 - **`merge`-Gültigkeitsprüfung („unbekannter Bereich", E1) — Spec-Präzisierung:** `areas.yaml` ist die einzige Quelle gültiger Bereichs-`id`s (AC1). Ein Aufruf gilt nur dann als **unbekannter Bereich** (Fehler, kein Schreiben, Exit ≠ 0), wenn **weder** `<a>` **noch** `<b>` **noch** `<ziel>` aktuell als Eintrag in `areas.yaml` existiert. Ist mindestens einer der drei bekannt (z. B. `<ziel>` existiert bereits aus einem vorherigen Merge-Lauf, oder `<a>`==`<ziel>` und bekannt), läuft der Merge durch; ein bereits fehlender `<a>`/`<b>`-Eintrag gilt dabei als „nichts mehr zu entfernen" (kein Fehler). Diese Regel macht einen zweiten, identischen Aufruf idempotent (AC2), ohne die Kernaussage von E1 (garantiert unbekannte Eingabe → Fehler) zu verletzen.
 - **`archive-done-stories` ohne `Done`-Storys** → leere Ausgabe, Exit 0 (nichts zu tun).
 - **`split` mit offenen Fragen** → der Quell-Bereich `<a>` bleibt in `areas.yaml`, bis alle Artefakte zugeordnet sind (kein Datenverlust).
+- **`split`-Ziel-Bereiche, die noch nicht existieren** → `<a1>`/`<a2>` werden — unabhängig von offenen Fragen — sofort in `areas.yaml` angelegt (Platzhalter-`beschreibung`, nächste `reihenfolge` je Ziel), damit ein bereits zugeordnetes Artefakt nie auf einen fehlenden Bereich zeigt (kein `AREA-UNKNOWN`-Zwischenzustand). Ist `<a1>` oder `<a2>` identisch mit `<a>`, wird `<a>` beim Entfernen übersprungen (der wiederverwendete Bereich bleibt bestehen).
+- **`split`-Artefakttyp Story — Spec-Präzisierung (bindend an Kontext-Abschnitt oben):** Nur Feature-`area`, Spec-`area`-Frontmatter und Ideen-Inbox-`- area:`-Einträge sind schreibbare Bereichs-Etiketten (wie bei `merge`, AC2). Eine Story trägt **kein** eigenes `area`-Feld — ihre Bereichszugehörigkeit hängt an ihrem Eltern-Feature. Storys erscheinen im `split`-Report daher **nur informativ**, mit demselben Ziel-Vorschlag/Konfidenz-Ergebnis wie ihr Eltern-Feature; sie werden nicht separat befragt oder umgeschrieben (kein Story-Reparenting — Kern-CRUD-Verben sind laut Nicht-Ziele dieser Spec ausgeschlossen).
+- **`split`, wenn `<a1>`==`<a2>`** → ungültige Eingabe (kein sinnvoller Split), Fehler, kein Schreiben, Exit ≠ 0 (AC5).
 - **Story ist bereits in `archive/`** → wird von `list`/`next`/`rollup` ignoriert; erneutes `archive-done-stories` fasst sie nicht an.
 - **`merge`/`split` ändern nie Story-`status` oder Spec-`id`** → Drift-Gate bleibt intakt.
 

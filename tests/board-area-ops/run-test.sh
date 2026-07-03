@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/board-area-ops/run-test.sh
 #
-# Covers (board-area-ops): AC1, AC2, AC5
+# Covers (board-area-ops): AC1, AC2, AC4, AC5
 #   AC1 — `board area list` gibt board/areas.yaml als sortiertes JSON-Array
 #         (id, titel, beschreibung, reihenfolge) aus; fehlt areas.yaml -> []
 #         Exit 0 (Tests 1-2).
@@ -11,14 +11,22 @@
 #         Ideen-Inbox-Eintraege) von a/b auf ziel umgeschrieben; idempotent;
 #         verschiebt keine Dateien/aendert keine Spec-IDs; unbekannter
 #         Bereich -> kein Schreiben, Exit != 0 (Tests 3-8).
+#   AC4 — `board area split <a> <a1> <a2>` ist assistiert: listet Specs/
+#         Features(+Storys informativ)/Ideen-Inbox-Eintraege von <a> mit
+#         Ziel-Vorschlag + Konfidenz; eindeutige Faelle werden direkt
+#         umgeschrieben, unklare landen als Fragenkatalog
+#         ({stage,id,frage,quelle,optionen}, stage="split"); verschiebt keine
+#         Dateien/aendert keine Spec-IDs; unbekannter Quell-Bereich -> kein
+#         Schreiben, Exit != 0 (Tests 10-15).
 #   AC5 — atomares Schreiben (kein halber Zustand bei Fehler); ungueltige
 #         Eingabe -> NICHTS geschrieben, Exit != 0 (Test 6 — unbekannter
 #         Bereich; Test 9 — neuer <ziel>-Slug verletzt Kebab-Case-Pattern
-#         aus board/areas.schema.json).
+#         aus board/areas.schema.json; Test 10/11 — split-Analoga; split-
+#         Heuristik ist token-frei/deterministisch — Tests 12-14).
 #
-# Self-Test fuer die `board area list`/`board area merge`-Erweiterung von
-# `scripts/board` (docs/specs/board-area-ops.md). Verwendet /tmp-Fixtures —
-# beruehrt NIEMALS das echte board/ des Repos.
+# Self-Test fuer die `board area list`/`board area merge`/`board area split`-
+# Erweiterung von `scripts/board` (docs/specs/board-area-ops.md). Verwendet
+# /tmp-Fixtures — beruehrt NIEMALS das echte board/ des Repos.
 #
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 
@@ -114,6 +122,72 @@ make_ideas_inbox() {
   local path="$1" area="$2"
   cat > "$path" <<MD
 ### Idee eins
+
+- status: Idee
+- created_at: 2026-01-01T00:00:00Z
+- begruendung: Testeintrag
+- area: ${area}
+
+Eine testweise Idee.
+MD
+}
+
+# --- Split-spezifische Fixture-Helfer (Titel/Goal frei waehlbar fuer die Heuristik) ---
+
+make_feature_titled() {
+  local work_dir="$1" fid="$2" area="$3" title="$4" goal="$5"
+  local slug
+  slug="$(echo "$fid" | tr '[:upper:]' '[:lower:]')"
+  cat > "${work_dir}/board/features/${fid}-${slug}.yaml" <<YAML
+id: ${fid}
+title: ${title}
+goal: ${goal}
+status: Active
+priority: P1
+spec: null
+definition_of_done: null
+labels: null
+depends: null
+owner: null
+area: ${area}
+stories: null
+progress: null
+created_at: '2026-01-01T00:00:00Z'
+updated_at: '2026-01-01T00:00:00Z'
+YAML
+}
+
+make_story_for() {
+  local work_dir="$1" sid="$2" parent="$3" title="$4"
+  local slug
+  slug="$(echo "$sid" | tr '[:upper:]' '[:lower:]')"
+  cat > "${work_dir}/board/stories/${sid}-${slug}.yaml" <<YAML
+id: ${sid}
+parent: ${parent}
+title: ${title}
+status: To Do
+priority: P2
+YAML
+}
+
+make_spec_titled() {
+  local path="$1" id="$2" title="$3" area="$4"
+  mkdir -p "$(dirname "$path")"
+  {
+    echo "---"
+    echo "id: ${id}"
+    echo "title: ${title}"
+    echo "status: active"
+    echo "area: ${area}"
+    echo "---"
+    echo "# ${title}"
+  } > "$path"
+}
+
+make_ideas_inbox_titled() {
+  local path="$1" heading="$2" area="$3"
+  cat > "$path" <<MD
+### ${heading}
 
 - status: Idee
 - created_at: 2026-01-01T00:00:00Z
@@ -481,6 +555,309 @@ if [[ "$T9_AREAS_BEFORE" == "$T9_AREAS_AFTER" && "$T9_F1_BEFORE" == "$T9_F1_AFTE
   pass "Test 9b: areas.yaml/Feature unveraendert bei ungueltigem <ziel>-Slug (AC5, atomar)"
 else
   fail "Test 9b: Dateien wurden trotz ungueltigem <ziel>-Slug veraendert"
+fi
+
+# ===========================================================================
+# Test 10: AC4/AC5 — split mit <a1>==<a2> ist ungueltige Eingabe -> Fehler, kein Schreiben
+# ===========================================================================
+echo ""
+echo "--- Test 10: AC4/AC5 — split <a1>==<a2> -> Fehler, kein Schreiben ---"
+
+T10_DIR="${TEST_WORK_DIR}/test10"
+setup_board "$T10_DIR"
+make_areas_yaml "$T10_DIR" \
+  "- id: alpha" \
+  "  titel: Alpha" \
+  "  beschreibung: Alpha-Bereich." \
+  "  reihenfolge: 1"
+make_feature "$T10_DIR" "F-001" "alpha"
+
+T10_AREAS_BEFORE="$(cat "$T10_DIR/board/areas.yaml")"
+T10_F1_BEFORE="$(cat "$T10_DIR/board/features/F-001-f-001.yaml")"
+
+T10_EXIT=0
+set +e
+T10_OUTPUT="$(cd "$T10_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split alpha vorne vorne 2>&1)"
+T10_EXIT=$?
+set -e
+
+if [[ $T10_EXIT -ne 0 ]]; then
+  pass "Test 10a: Exit != 0 bei <a1>==<a2> (AC5)"
+else
+  fail "Test 10a: Exit 0 (erwartet != 0), Output: ${T10_OUTPUT}"
+fi
+
+T10_AREAS_AFTER="$(cat "$T10_DIR/board/areas.yaml")"
+T10_F1_AFTER="$(cat "$T10_DIR/board/features/F-001-f-001.yaml")"
+if [[ "$T10_AREAS_BEFORE" == "$T10_AREAS_AFTER" && "$T10_F1_BEFORE" == "$T10_F1_AFTER" ]]; then
+  pass "Test 10b: nichts geschrieben bei <a1>==<a2> (AC5, atomar)"
+else
+  fail "Test 10b: Dateien trotz ungueltiger Eingabe veraendert"
+fi
+
+# ===========================================================================
+# Test 11: AC4/E1 — split mit unbekanntem Quell-Bereich -> Fehler, kein Schreiben
+# ===========================================================================
+echo ""
+echo "--- Test 11: AC4/E1 — split unbekannter Quell-Bereich -> Fehler, kein Schreiben ---"
+
+T11_DIR="${TEST_WORK_DIR}/test11"
+setup_board "$T11_DIR"
+make_areas_yaml "$T11_DIR" \
+  "- id: alpha" \
+  "  titel: Alpha" \
+  "  beschreibung: Alpha-Bereich." \
+  "  reihenfolge: 1"
+
+T11_AREAS_BEFORE="$(cat "$T11_DIR/board/areas.yaml")"
+
+T11_EXIT=0
+set +e
+T11_OUTPUT="$(cd "$T11_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split nirgendwo vorne hinten 2>&1)"
+T11_EXIT=$?
+set -e
+
+if [[ $T11_EXIT -ne 0 ]]; then
+  pass "Test 11a: Exit != 0 bei unbekanntem Quell-Bereich (E1)"
+else
+  fail "Test 11a: Exit 0 (erwartet != 0), Output: ${T11_OUTPUT}"
+fi
+
+T11_AREAS_AFTER="$(cat "$T11_DIR/board/areas.yaml")"
+if [[ "$T11_AREAS_BEFORE" == "$T11_AREAS_AFTER" ]]; then
+  pass "Test 11b: areas.yaml unveraendert bei unbekanntem Quell-Bereich (AC5, atomar)"
+else
+  fail "Test 11b: areas.yaml trotz unbekanntem Quell-Bereich veraendert"
+fi
+
+# ===========================================================================
+# Test 12: AC4/A1 — alle Artefakte eindeutig -> leerer Fragenkatalog, direkte
+# Zuordnung (Feature/Spec/Idee), Quell-Bereich entfernt, Storys informativ
+# ===========================================================================
+echo ""
+echo "--- Test 12: AC4/A1 — alles eindeutig -> [] Fragenkatalog, direkte Zuordnung ---"
+
+T12_DIR="${TEST_WORK_DIR}/test12"
+setup_board "$T12_DIR"
+make_areas_yaml "$T12_DIR" \
+  "- id: alpha" \
+  "  titel: Alpha" \
+  "  beschreibung: Alpha-Bereich mit Frontend und Backend." \
+  "  reihenfolge: 1"
+make_feature_titled "$T12_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
+make_feature_titled "$T12_DIR" "F-002" "alpha" "Backend Api Service" "Backend-Testfeature"
+make_story_for "$T12_DIR" "S-010" "F-001" "Dashboard Redesign"
+make_spec_titled "${T12_DIR}/docs/specs/frontend-widgets.md" "frontend-widgets" "Frontend Widgets" "alpha"
+make_ideas_inbox_titled "${T12_DIR}/docs/ideas-inbox.md" "Backend Cronjob Idee" "alpha"
+
+T12_OUT="$(cd "$T12_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split alpha frontend backend)"
+
+T12_KATALOG="$(echo "$T12_OUT" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["fragenkatalog"]))')"
+if [[ "$T12_KATALOG" == "0" ]]; then
+  pass "Test 12a: leerer Fragenkatalog, wenn alle Artefakte eindeutig (A1)"
+else
+  fail "Test 12a: Fragenkatalog nicht leer (${T12_KATALOG} Eintraege)"
+  echo "$T12_OUT"
+fi
+
+T12_ENTFERNT="$(echo "$T12_OUT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["quell_bereich_entfernt"])')"
+if [[ "$T12_ENTFERNT" == "True" ]]; then
+  pass "Test 12b: quell_bereich_entfernt=true, wenn alles zugeordnet ist"
+else
+  fail "Test 12b: quell_bereich_entfernt=${T12_ENTFERNT} (erwartet True)"
+fi
+
+T12_AREAS="$(cat "$T12_DIR/board/areas.yaml")"
+if echo "$T12_AREAS" | grep -q "id: frontend" && echo "$T12_AREAS" | grep -q "id: backend" && ! echo "$T12_AREAS" | grep -q "id: alpha"; then
+  pass "Test 12c: areas.yaml enthaelt frontend/backend, alpha entfernt"
+else
+  fail "Test 12c: areas.yaml falsch"
+  echo "$T12_AREAS"
+fi
+
+T12_F1_AREA="$(grep '^area:' "$T12_DIR/board/features/F-001-f-001.yaml")"
+T12_F2_AREA="$(grep '^area:' "$T12_DIR/board/features/F-002-f-002.yaml")"
+if [[ "$T12_F1_AREA" == "area: frontend" && "$T12_F2_AREA" == "area: backend" ]]; then
+  pass "Test 12d: Feature-area-Etiketten korrekt auf frontend/backend umgeschrieben (AC4)"
+else
+  fail "Test 12d: Feature-area falsch (F-001: ${T12_F1_AREA}, F-002: ${T12_F2_AREA})"
+fi
+
+T12_SPEC_AREA="$(grep '^area:' "${T12_DIR}/docs/specs/frontend-widgets.md")"
+if [[ "$T12_SPEC_AREA" == "area: frontend" ]]; then
+  pass "Test 12e: Spec-area-Frontmatter korrekt auf frontend umgeschrieben (AC4)"
+else
+  fail "Test 12e: Spec-area falsch (${T12_SPEC_AREA})"
+fi
+
+T12_IDEA_AREA="$(grep '^- area:' "${T12_DIR}/docs/ideas-inbox.md")"
+if [[ "$T12_IDEA_AREA" == "- area: backend" ]]; then
+  pass "Test 12f: Ideen-Inbox-area korrekt auf backend umgeschrieben (AC4)"
+else
+  fail "Test 12f: Ideen-Inbox-area falsch (${T12_IDEA_AREA})"
+fi
+
+# Story traegt kein eigenes area-Feld: Datei bleibt inhaltlich unveraendert,
+# folgt aber informativ der Feature-Entscheidung im Report (Spec-Praezisierung).
+T12_STORY_FILE="$(cat "$T12_DIR/board/stories/S-010-s-010.yaml")"
+if ! echo "$T12_STORY_FILE" | grep -q "^area:"; then
+  pass "Test 12g: Story-Datei bleibt ohne eigenes area-Feld (kein Reparenting, Nicht-Ziel)"
+else
+  fail "Test 12g: Story-Datei wurde unerwartet um ein area-Feld ergaenzt"
+fi
+
+T12_STORY_ROW="$(echo "$T12_OUT" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+rows = [r for r in data["zuordnungen"] if r["typ"] == "story" and r["id"] == "S-010"]
+print(rows[0]["ziel_vorschlag"] if rows else "MISSING")
+')"
+if [[ "$T12_STORY_ROW" == "frontend" ]]; then
+  pass "Test 12h: Story erscheint im Report informativ mit dem Ziel ihres Eltern-Features (AC4)"
+else
+  fail "Test 12h: Story-Report-Zeile falsch (${T12_STORY_ROW}, erwartet 'frontend')"
+fi
+
+# ===========================================================================
+# Test 13: AC4 — unklarer Fall landet als Fragenkatalog; Quell-Bereich bleibt bestehen
+# ===========================================================================
+echo ""
+echo "--- Test 13: AC4 — unklarer Fall -> Fragenkatalog, Quell-Bereich bleibt bestehen ---"
+
+T13_DIR="${TEST_WORK_DIR}/test13"
+setup_board "$T13_DIR"
+make_areas_yaml "$T13_DIR" \
+  "- id: alpha" \
+  "  titel: Alpha" \
+  "  beschreibung: Alpha-Bereich mit Frontend und Backend." \
+  "  reihenfolge: 1"
+make_feature_titled "$T13_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
+make_spec_titled "${T13_DIR}/docs/specs/mystery-spec.md" "mystery-spec" "Voellig Unklare Anforderung" "alpha"
+
+T13_OUT="$(cd "$T13_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split alpha frontend backend)"
+
+T13_KATALOG_LEN="$(echo "$T13_OUT" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["fragenkatalog"]))')"
+if [[ "$T13_KATALOG_LEN" == "1" ]]; then
+  pass "Test 13a: unklares Artefakt landet im Fragenkatalog (1 Eintrag)"
+else
+  fail "Test 13a: Fragenkatalog hat ${T13_KATALOG_LEN} Eintraege (erwartet 1)"
+  echo "$T13_OUT"
+fi
+
+T13_FRAGE_JSON="$(echo "$T13_OUT" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["fragenkatalog"][0]))')"
+T13_STAGE="$(echo "$T13_FRAGE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["stage"])')"
+T13_ID="$(echo "$T13_FRAGE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+T13_OPTIONEN="$(echo "$T13_FRAGE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["optionen"])')"
+
+if [[ "$T13_STAGE" == "split" ]]; then
+  pass "Test 13b: Fragenkatalog-Eintrag traegt stage='split' (Schema-Erweiterung)"
+else
+  fail "Test 13b: stage='${T13_STAGE}' (erwartet 'split')"
+fi
+
+if [[ "$T13_ID" =~ ^split-[0-9]+$ ]]; then
+  pass "Test 13c: Fragenkatalog-id folgt Muster split-<n> (AC9-Vertrag)"
+else
+  fail "Test 13c: id='${T13_ID}' verletzt Muster split-<n>"
+fi
+
+if [[ "$T13_OPTIONEN" == "['frontend', 'backend']" ]]; then
+  pass "Test 13d: optionen listet <a1>/<a2>"
+else
+  fail "Test 13d: optionen='${T13_OPTIONEN}' (erwartet ['frontend', 'backend'])"
+fi
+
+T13_SPEC_AREA="$(grep '^area:' "${T13_DIR}/docs/specs/mystery-spec.md")"
+if [[ "$T13_SPEC_AREA" == "area: alpha" ]]; then
+  pass "Test 13e: unklare Spec bleibt bei area=alpha (keine Zuordnung ohne Klaerung)"
+else
+  fail "Test 13e: unklare Spec wurde veraendert (${T13_SPEC_AREA})"
+fi
+
+T13_AREAS="$(cat "$T13_DIR/board/areas.yaml")"
+if echo "$T13_AREAS" | grep -q "id: alpha"; then
+  pass "Test 13f: Quell-Bereich 'alpha' bleibt bestehen, solange offene Fragen (E2)"
+else
+  fail "Test 13f: 'alpha' faelschlich entfernt trotz offener Frage"
+  echo "$T13_AREAS"
+fi
+
+# frontend (eindeutig zugeordnetes Feature) wird trotzdem schon angelegt/geschrieben.
+T13_F1_AREA="$(grep '^area:' "$T13_DIR/board/features/F-001-f-001.yaml")"
+if [[ "$T13_F1_AREA" == "area: frontend" ]]; then
+  pass "Test 13g: eindeutiges Feature wird trotz offener Frage bei anderem Artefakt direkt zugeordnet"
+else
+  fail "Test 13g: Feature-area falsch (${T13_F1_AREA})"
+fi
+
+# ===========================================================================
+# Test 14: AC4/E2 — neue Ziel-Bereiche werden mit Platzhalter + naechster reihenfolge angelegt
+# ===========================================================================
+echo ""
+echo "--- Test 14: AC4/E2 — neue Ziel-Bereiche in areas.yaml (Platzhalter, reihenfolge) ---"
+
+T14_DIR="${TEST_WORK_DIR}/test14"
+setup_board "$T14_DIR"
+make_areas_yaml "$T14_DIR" \
+  "- id: alpha" \
+  "  titel: Alpha" \
+  "  beschreibung: Alpha-Bereich." \
+  "  reihenfolge: 5"
+make_feature_titled "$T14_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
+
+(cd "$T14_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split alpha frontend backend >/dev/null)
+
+T14_AREAS="$(cat "$T14_DIR/board/areas.yaml")"
+if echo "$T14_AREAS" | grep -A3 "id: frontend" | grep -q "reihenfolge: 6"; then
+  pass "Test 14a: neuer Ziel-Bereich 'frontend' erhaelt naechste reihenfolge (6)"
+else
+  fail "Test 14a: reihenfolge falsch"
+  echo "$T14_AREAS"
+fi
+
+if echo "$T14_AREAS" | grep -A3 "id: backend" | grep -q "reihenfolge: 7"; then
+  pass "Test 14b: neuer Ziel-Bereich 'backend' erhaelt naechste reihenfolge (7)"
+else
+  fail "Test 14b: reihenfolge falsch"
+  echo "$T14_AREAS"
+fi
+
+if echo "$T14_AREAS" | grep -q "TODO: Beschreibung nach Split von ''alpha'' ergaenzen."; then
+  pass "Test 14c: neue Ziel-Bereiche erhalten Platzhalter-beschreibung (E2)"
+else
+  fail "Test 14c: Platzhalter-beschreibung fehlt"
+  echo "$T14_AREAS"
+fi
+
+# ===========================================================================
+# Test 15: AC5 — split-Heuristik ist deterministisch (zweiter identischer
+# Aufruf auf denselben Ausgangszustand liefert dasselbe Ergebnis)
+# ===========================================================================
+echo ""
+echo "--- Test 15: AC5 — split-Heuristik ist deterministisch ---"
+
+T15_DIR_A="${TEST_WORK_DIR}/test15a"
+T15_DIR_B="${TEST_WORK_DIR}/test15b"
+for T15_DIR in "$T15_DIR_A" "$T15_DIR_B"; do
+  setup_board "$T15_DIR"
+  make_areas_yaml "$T15_DIR" \
+    "- id: alpha" \
+    "  titel: Alpha" \
+    "  beschreibung: Alpha-Bereich mit Frontend und Backend." \
+    "  reihenfolge: 1"
+  make_feature_titled "$T15_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
+  make_feature_titled "$T15_DIR" "F-002" "alpha" "Backend Api Service" "Backend-Testfeature"
+done
+
+T15_OUT_A="$(cd "$T15_DIR_A" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split alpha frontend backend)"
+T15_OUT_B="$(cd "$T15_DIR_B" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split alpha frontend backend)"
+
+if [[ "$T15_OUT_A" == "$T15_OUT_B" ]]; then
+  pass "Test 15: split-Heuristik ist deterministisch (identischer Ausgangszustand -> identisches Ergebnis, AC5)"
+else
+  fail "Test 15: split-Ergebnis weicht bei identischem Ausgangszustand ab"
+  echo "A: $T15_OUT_A"
+  echo "B: $T15_OUT_B"
 fi
 
 # ===========================================================================
