@@ -1,0 +1,30 @@
+id: F-016
+title: Bereichs-Features statt Auftrags-Features (Prozess/Schema)
+goal: 'Features werden von Auftrags-Containern zur stabilen Strukturkarte der Applikation
+  (Produktbereiche/Kacheln): board/areas.yaml als eine Wahrheit, Feature-Bereichs-Kopplung,
+  Bereichs-Lint, requirement-Eingangs-Gate, Bereichs-CLI-Operationen (merge/split/archive)
+  und die Bestandsmigration von agent-flow. Storys docken an Bereiche an; neue Features
+  nur bei echten neuen Produktbereichen.'
+status: Backlog
+priority: P1
+spec: null
+definition_of_done: null
+labels:
+- board
+- areas
+- process
+depends: null
+owner: null
+stories:
+- S-034
+- S-035
+- S-036
+- S-037
+- S-038
+- S-039
+- S-040
+- S-041
+- S-042
+progress: 0/9 done
+created_at: '2026-07-03T11:19:29Z'
+updated_at: '2026-07-03T11:21:17Z'

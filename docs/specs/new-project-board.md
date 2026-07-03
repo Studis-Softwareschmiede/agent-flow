@@ -48,6 +48,9 @@ Die Skelett-Anlage geht — wo verfügbar — über die `board`-CLI ([[board-cli
 ### V7 — Doku-Anschluss
 Die Bootstrap-Doku/Templates (z.B. `templates/`, `new-project`-Skill) beschreiben das File-Board als Standard; Erwähnungen von `gh project create` im Bootstrap-Kontext werden auf das File-Board umgestellt.
 
+### V8 — Start-`areas.yaml` scaffolden
+`new-project` (analog `adopt`) legt eine initiale `board/areas.yaml` an, deren Bereiche aus dem Konzept des neuen Projekts abgeleitet werden (die im Bootstrap erhobenen Produktbereiche/Kacheln), konform zum Feldformat aus [[board-areas]] (`id` kebab-case, `titel`, `beschreibung` 1 Satz, `reihenfolge`). Lässt sich aus dem Konzept (noch) kein Bereich ableiten, wird eine minimale `areas.yaml` mit einem Platzhalter-Bereich (`id: kern`) angelegt bzw. der Schritt dokumentiert übersprungen — das leere/minimale Board bleibt `board lint`-grün.
+
 ## Acceptance-Kriterien
 
 - **AC1** — `new-project` legt `board/board.yaml`, `board/features/` und `board/stories/` an; leere Ordner werden (z.B. via `.gitkeep`) committet. *(V1)*
@@ -57,6 +60,7 @@ Die Bootstrap-Doku/Templates (z.B. `templates/`, `new-project`-Skill) beschreibe
 - **AC5** — Direkt nach dem Bootstrap (leeres Board) ist `board lint` grün (Exit 0). *(V5)*
 - **AC6** — Die Skelett-Anlage nutzt die `board`-CLI, wo ein Init-Verb verfügbar ist; sonst schreibt der Bootstrap minimales `board.yaml` strikt nach [[board-schema]] V1. *(V6)*
 - **AC7** — Bootstrap-Doku/Templates beschreiben das File-Board als Standard; `gh project create`-Erwähnungen im Bootstrap-Kontext sind auf das File-Board umgestellt. *(V7)*
+- **AC8** — `new-project`/`adopt` scaffolden eine initiale `board/areas.yaml` aus dem Konzept (Bereiche = erhobene Produktbereiche/Kacheln), konform zum Feldformat aus [[board-areas]]; ist kein Bereich ableitbar, entsteht eine minimale `areas.yaml` mit Platzhalter-Bereich (oder der Schritt wird dokumentiert übersprungen), und das Board bleibt `board lint`-grün. *(V8)*
 
 ## Verträge
 
@@ -97,4 +101,5 @@ board: file             # statt einer GitHub-Projekt-Nummer
 
 - [[board-schema]] — `board.yaml`-Format des Skeletts.
 - [[board-cli]] — Anlage über CLI (sofern Init-Verb vorhanden).
+- [[board-areas]] — Feldformat der `board/areas.yaml`, die V8 scaffoldet.
 - `docs/architecture/board-subsystem.md` §6, §8 — bindendes Detailkonzept.
