@@ -63,6 +63,9 @@ Fehlt ein Pflichtfeld (V2/V3) oder verletzt ein Feld die Typ-/Enum-Konformität 
 ### V11 — Determinismus & Fehlerausgabe
 `board lint` ist deterministisch (gleiche Dateien → gleiches Ergebnis), gibt je Verstoss eine Zeile `FEHLER|WARN <regel-id> <datei> <feld/detail>` aus und endet mit Exit-Code ≠ 0 bei mindestens einem Fehler, 0 bei nur Warnungen/grün.
 
+### V12 — Optionales Story-Feld `abgenommen_at` (Owner-Abnahme)
+Story-YAML kennt das **optionale** Feld `abgenommen_at` (ISO-8601-UTC-Timestamp | null). **Semantik:** manuelle **Owner-Abnahme** einer bereits `Done`-Story (die menschliche Abnahme *nach* dem technischen Abschluss). **Schreiber ist ausschließlich die dev-gui-Oberfläche** — **kein** Agent (auch **nicht** `/flow`) setzt `abgenommen_at`; es ist damit vom Single-Writer-Status-Feld (`status`) getrennt und ändert den Story-Status **nicht**. `board lint` validiert bei **gesetztem** Wert **nur das Format** (ISO-8601-UTC); das Feld ist **kein Pflichtfeld** — fehlend/`null` ist rückwärtskompatibel (Alt-Story bleibt gültig, kein `lint`-Fehler). Ein gesetzter, format-verletzender Wert → `lint`-Fehler `ABGENOMMEN-FORMAT <datei>`.
+
 ## Acceptance-Kriterien
 
 - **AC1** — `board/board.yaml` enthält `schema_version` (int), `project_slug` und je einen ID-Zähler `next_feature_id`/`next_story_id`; ohne `board.yaml` gilt das Board als nicht initialisiert. *(V1)*
@@ -76,6 +79,7 @@ Fehlt ein Pflichtfeld (V2/V3) oder verletzt ein Feld die Typ-/Enum-Konformität 
 - **AC9** — `lint` meldet fehlende Pflichtfelder/Enum-Verletzungen mit Datei + Feldname. *(V9)*
 - **AC10** — Inkonsistente abgeleitete Felder (`stories[]`/`progress`) sind eine `lint`-**Warnung**, kein Fehler. *(V10)*
 - **AC11** — `lint` ist deterministisch, gibt je Verstoss `FEHLER|WARN <regel-id> <datei> <detail>` aus und endet mit Exit ≠ 0 nur bei ≥1 Fehler. *(V11)*
+- **AC12** — Story-YAML kennt das optionale Feld `abgenommen_at` (ISO-8601-UTC-Timestamp | null; Semantik: manuelle Owner-Abnahme *nach* `Done`); Schreiber ist **ausschließlich** die dev-gui-Oberfläche, **kein** Agent setzt es (auch nicht `/flow`), und der Story-`status` bleibt davon unberührt. `board/story.schema.json` kennt das Feld (String ISO-8601-UTC | null). `board lint` validiert bei gesetztem Wert **nur das Format** (kein Pflichtfeld; fehlend/`null` → kein Fehler); ein gesetzter, format-verletzender Wert → Fehler `ABGENOMMEN-FORMAT <datei>`. *(V12)*
 
 ## Verträge
 
@@ -127,13 +131,14 @@ tok_est: null                         # optional  Ganzzahl|null  (A-priori-Token
 branch: null                          # optional
 pr: null                              # optional
 blocked_reason: null                  # optional
+abgenommen_at: null                   # optional  ISO-8601-UTC|null (Owner-Abnahme nach Done; Schreiber NUR dev-gui, kein Agent)
 created_at: 2026-06-14T00:00:00Z
 updated_at: 2026-06-14T00:00:00Z
 done_at: null
 ```
 
 ### `lint`-Regel-IDs (stabil, für CLI-Ausgabe)
-`ID-DUP` (V5) · `PARENT-MISSING` (V6) · `DEPENDS-UNRESOLVED` / `DEPENDS-CYCLE` (V7) · `AC-MISSING` / `SPEC-MISSING` (V8) · `FIELD-REQUIRED` / `ENUM-INVALID` (V9) · `ROLLUP-STALE` (V10, Warnung) · `STORY-UNSPEC` (V3, Warnung — importierte Story ohne `spec`/`implements`).
+`ID-DUP` (V5) · `PARENT-MISSING` (V6) · `DEPENDS-UNRESOLVED` / `DEPENDS-CYCLE` (V7) · `AC-MISSING` / `SPEC-MISSING` (V8) · `FIELD-REQUIRED` / `ENUM-INVALID` (V9) · `ROLLUP-STALE` (V10, Warnung) · `STORY-UNSPEC` (V3, Warnung — importierte Story ohne `spec`/`implements`) · `ABGENOMMEN-FORMAT` (V12, Fehler — gesetztes `abgenommen_at` verletzt das ISO-8601-UTC-Format).
 
 ## Edge-Cases & Fehlerverhalten
 
@@ -144,6 +149,7 @@ done_at: null
 - **Verwaiste Datei** (z.B. Story-Datei, deren `parent` archiviert wurde) → `parent` existiert noch als Datei → kein Fehler; ist das Feature gelöscht → `PARENT-MISSING`.
 - **Dateiname-Slug ≠ `title`-Slug** → kein Fehler (Slug ist nur Komfort; Body-`id` zählt).
 - **Doppelte `depends`-Einträge** → dedupliziert behandelt, kein Fehler.
+- **`abgenommen_at` fehlt / `null`** → kein Fehler (optional, rückwärtskompatibel). **Gesetzt + gültiges ISO-8601-UTC** → kein Fehler. **Gesetzt + Format verletzt** → `ABGENOMMEN-FORMAT` (V12). Ein gesetztes `abgenommen_at` bei einer Story mit `status ≠ Done` ist **kein** `lint`-Fehler (die Abnahme-Semantik erzwingt `lint` nicht; die dev-gui setzt es nur nach Done).
 
 ## NFRs
 
