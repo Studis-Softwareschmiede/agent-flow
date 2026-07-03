@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** 2026-07-02 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-07-03 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -42,9 +42,11 @@
 
 **`frontier`-Spalte (Variante b „Selektiv", Designentscheidung D1):** nur die Top-Reasoning-Rollen
 (`architekt`, `requirement`, `reviewer`, `coder`) laufen auf `fable`; die übrigen behalten ihren
-`max-quality`-Wert. Begründung: `fable` ist ~2× teurer (Kontingent) und hat **kein** Extended
-Thinking, während `opus` ein Adaptive/Extended-Reasoning-Profil hat — „fable überall" ist daher
-nicht pauschal besser. Spec: `docs/specs/frontier-cost-mode.md` (V3/AC3).
+`max-quality`-Wert. Begründung: `fable` ist ~2× teurer (Kontingent) als `opus` — laut Models
+overview haben Fable 5 UND Opus 4.8 gleichermaßen **kein** Extended Thinking (beide nur Adaptive
+Thinking); die Differenzierung ist **preis-/verfügbarkeits-basiert**, nicht Reasoning-Profil-basiert
+(siehe Abschnitt „Modell-Klasse `fable`" unten) — „fable überall" ist daher nicht pauschal besser.
+Spec: `docs/specs/frontier-cost-mode.md` (V3/AC3).
 
 **Lesart.** Spalte `balanced` == das `model:`-Frontmatter jedes Agenten (kein Regress). Im Modus
 `balanced` gibt der Skill **keinen** `model`-Override mit — der Agent läuft auf seinem Frontmatter-Wert.
