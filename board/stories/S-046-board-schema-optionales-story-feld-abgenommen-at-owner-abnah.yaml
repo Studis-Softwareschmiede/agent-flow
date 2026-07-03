@@ -2,7 +2,7 @@ id: S-046
 parent: F-001
 title: 'Board-Schema: optionales Story-Feld abgenommen_at (Owner-Abnahme nach Done,
   Schreiber nur dev-gui), board-lint Format-Validierung'
-status: In Progress
+status: Done
 priority: P2
 spec: docs/specs/board-schema.md
 implements:
@@ -12,15 +12,15 @@ labels:
 - board
 size_est: M
 dispo_est: '3.0'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '3'
+dispo_forecast: '0'
 estimate_note: S/M-Heuristik (score 5); dispo_est aus baseline md|balanced|M (n=8);
   keine Baseline-Tokens (tok_total null)
 confidence: medium
 tok_est: null
 branch: feat/S-046-abgenommen-at
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/256
 blocked_reason: null
 created_at: '2026-07-03T13:16:02Z'
-updated_at: '2026-07-03T16:52:52Z'
-done_at: null
+updated_at: '2026-07-03T17:03:06Z'
+done_at: '2026-07-03T17:02:12Z'
