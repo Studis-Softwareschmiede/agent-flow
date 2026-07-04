@@ -11,7 +11,10 @@
 #       reale Projekt-Docs/Board — reine Lektuere der eingecheckten Skill-Datei.
 #
 # Covers (obsidian-ingest): AC11, AC12, AC13, AC14
-# Covers (from-notes-areas): AC1, AC2, AC3, AC4
+# Covers (from-notes-areas): AC1, AC2, AC3, AC4, AC5
+#   AC5 — Re-Sync-Modus respektiert bestehende areas.yaml: unassignierte Themen
+#         als Fragenkatalog-Punkte (stage:sync) mit Bereichs-Zuordnungs-Optionen
+#         vorgeschlagen; niemals selbst Bereich angelegt (nur Owner-Entscheid).
 #   AC11 — Fabrik-Befehl /agent-flow:from-notes orchestriert drei Stufen IN REIHE:
 #          (a) Korpus -> docs/concept.md, (b) Konzept -> docs/specs/<feature>.md
 #          (+ architekt/dba), (c) Spec(s) -> Board-Items ueber den bestehenden
@@ -45,7 +48,7 @@
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 #
 # @trace obsidian-ingest#AC11,AC12,AC13,AC14
-# @trace from-notes-areas#AC1,AC2,AC3,AC4
+# @trace from-notes-areas#AC1,AC2,AC3,AC4,AC5
 
 set -uo pipefail
 
@@ -200,6 +203,22 @@ has 'kein.*Item.*ohne.*Bereich|keine autonome.*Bereichs-Erfindung' \
 has 'Edge-Case E1|E1.*Bereich|areas\.yaml.*fehlt.*Gate|keine.*Bereiche.*Gate' \
                                               "@trace from-notes-areas#AC4" "Edge-Case E1: areas.yaml fehlt/leer (AC4)"
 has 'Ideen-Inbox|bereichsfremd'               "@trace from-notes-areas#AC4" "Bereichsfremde Specs in Ideen-Inbox (AC4)"
+
+# ===========================================================================
+# AC5 (from-notes-areas) — Re-Sync respektiert bestehende areas.yaml, schlägt unassignierte Themen vor
+# ===========================================================================
+has 'sync.*areas\.yaml|Re-Sync.*areas\.yaml' \
+                                              "@trace from-notes-areas#AC5" "Re-Sync-Modus respektiert bestehende areas.yaml (AC5)"
+has 'bereichsfremd.*Thema|Thema.*bereichsfremd' \
+                                              "@trace from-notes-areas#AC5" "Bereichsfremde Themen im Notiz-Stand erkannt (AC5)"
+has 'Fragenkatalog-Punkt.*sync|stage:.*sync.*Bereich' \
+                                              "@trace from-notes-areas#AC5" "Unassignierte Themen als Fragenkatalog-Punkte (stage:sync) vorgeschlagen (AC5)"
+has 'nie.*selbst.*Bereich.*anlegen|nie.*auto|invertierte Autorität' \
+                                              "@trace from-notes-areas#AC5" "Niemals selbst Bereich anlegen — nur Owner-Entscheid (AC5)"
+has 'neuer-bereich.*Owner-Entscheid|Owner-Entscheid.*neuer-bereich' \
+                                              "@trace from-notes-areas#AC5" "Option 'neuer-bereich' für Owner-Entscheid, nicht auto-Erstellung (AC5)"
+has 'Rauscharmut|keine.*bereichsfremd.*keine.*Katalog' \
+                                              "@trace from-notes-areas#AC5" "Kein Katalog-Punkt wenn keine bereichsfremden Themen (Rauscharmut, AC5)"
 
 # ===========================================================================
 # Schema-Kompatibilität: a-<n>-Muster gegen echten Validator (Critical Fix Iter-2)
