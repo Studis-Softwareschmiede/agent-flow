@@ -21,3 +21,4 @@ cloudflare
 *.swp
 .idea/
 .vscode/
+.claude/worktrees/
