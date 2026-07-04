@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** 2026-06-15 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-07-03 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -42,9 +42,11 @@
 
 **`frontier`-Spalte (Variante b „Selektiv", Designentscheidung D1):** nur die Top-Reasoning-Rollen
 (`architekt`, `requirement`, `reviewer`, `coder`) laufen auf `fable`; die übrigen behalten ihren
-`max-quality`-Wert. Begründung: `fable` ist ~2× teurer (Kontingent) und hat **kein** Extended
-Thinking, während `opus` ein Adaptive/Extended-Reasoning-Profil hat — „fable überall" ist daher
-nicht pauschal besser. Spec: `docs/specs/frontier-cost-mode.md` (V3/AC3).
+`max-quality`-Wert. Begründung: `fable` ist ~2× teurer (Kontingent) als `opus` — laut Models
+overview haben Fable 5 UND Opus 4.8 gleichermaßen **kein** Extended Thinking (beide nur Adaptive
+Thinking); die Differenzierung ist **preis-/verfügbarkeits-basiert**, nicht Reasoning-Profil-basiert
+(siehe Abschnitt „Modell-Klasse `fable`" unten) — „fable überall" ist daher nicht pauschal besser.
+Spec: `docs/specs/frontier-cost-mode.md` (V3/AC3).
 
 **Lesart.** Spalte `balanced` == das `model:`-Frontmatter jedes Agenten (kein Regress). Im Modus
 `balanced` gibt der Skill **keinen** `model`-Override mit — der Agent läuft auf seinem Frontmatter-Wert.
@@ -129,8 +131,18 @@ No, Adaptive Thinking = Yes — identisch zu Claude Mythos 5). Quellen:
 
 **Status:** `fable` ist als reguläre Klasse über den opt-in-Modus **`frontier`** eingebunden (Spalte
 oben, Klassen-Ordnung `haiku < sonnet < opus < fable`). Bewusst **getrennt** von `max-quality`
-(bleibt `opus`): Fable 5 hat **kein** Extended Thinking, während Opus 4.8 ein Adaptive/Extended-
-Reasoning-Profil hat — `frontier` ist daher kein pauschales „besser als max-quality", sondern eine
-opt-in Frontier-Wahl. Verfügbarkeit als `model`-Override empirisch bestätigt (2026-06-10).
+(bleibt `opus`) — aber **nicht** aus Extended-Thinking-Gründen: laut aktueller Models-overview-
+Tabelle (Stand 2026-07-02) hat **weder** Fable 5 **noch** Opus 4.8 Extended Thinking (beide „No",
+beide nur Adaptive Thinking „Yes"/„always on") — die frühere Formulierung „Opus 4.8 hat ein
+Adaptive/Extended-Reasoning-Profil" war nicht (mehr) durch die Primärquelle gedeckt und wurde
+korrigiert (`/train model-tiers`-Zyklus 2026-07-02, kein Klassen-/Tier-Trigger i.S.v. AC3, da sich
+dadurch keine Rollen-Einordnung ändert). Die tatsächliche Differenzierung ist **preis-/
+Verfügbarkeits-basiert**: Fable 5 kostet $10/$50 MTok (Input/Output) gegenüber Opus 4.8 $5/$25
+MTok (~2× teurer) und ist laut Models overview „Anthropic's most capable widely released model" —
+`frontier` bleibt daher ein bewusstes Kosten-Opt-in, kein pauschales „besser als max-quality".
+Verfügbarkeit als `model`-Override empirisch bestätigt (2026-06-10).
 Spec der Einbindung: `docs/specs/frontier-cost-mode.md`. *(Der frühere Scope-Cut-Hinweis ist mit
 dieser Einbindung aufgelöst.)*
+Quelle: [Models overview — Latest models comparison](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)
+(Tabellen-Zeilen „Extended thinking"/„Adaptive thinking": Fable 5 = No/Yes(always on), Opus 4.8 =
+No/Yes) · [Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing).
