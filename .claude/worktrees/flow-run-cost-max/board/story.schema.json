@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "board/story.schema.json",
+  "title": "Story YAML (board/stories/S-###-<slug>.yaml)",
+  "description": "Schema fuer ein Story-Item im board/-Verzeichnis (board-subsystem §4.2).",
+  "type": "object",
+  "required": ["id", "parent", "title", "status", "priority", "created_at", "updated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^S-\\d{3,}$",
+      "description": "Stabile Story-ID, projektweit eindeutig. Muster: S-### (min. 3 Ziffern)."
+    },
+    "parent": {
+      "type": "string",
+      "pattern": "^F-\\d{3,}$",
+      "description": "PFLICHT: genau ein Parent-Feature (F-###)."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Kurztitel der Story."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["To Do", "In Progress", "Blocked", "In Review", "Done", "Verworfen"],
+      "description": "Story-Lebenszyklus-Status. Einziger Schreiber: /flow. Terminale Menge = {Done, Verworfen}; Verworfen (Won't-Do/Obsolete) ist terminal, aber nie erfolgreich (kein done_at, zaehlt nicht in done/total)."
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["P0", "P1", "P2", "P3"],
+      "description": "Reihenfolge innerhalb der To-Do-Queue."
+    },
+    "spec": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Pfad zur Spec-Datei unter docs/specs/ (Source of Truth fuer AC)."
+    },
+    "implements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^AC\\d+$"
+      },
+      "minItems": 1,
+      "description": "Pflicht fuer native Stories: Liste der AC-Tokens (AC1, AC2, …) die diese Story erfuellt."
+    },
+    "depends": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "pattern": "^S-\\d{3,}$"
+      },
+      "description": "Optionale Abhaengigkeiten auf andere Stories (Reihenfolge-Gate)."
+    },
+    "labels": {
+      "type": ["array", "null"],
+      "items": {"type": "string"},
+      "description": "Optionale Labels (steuern Dispatch, z.B. db → dba)."
+    },
+    "size_est": {
+      "type": ["string", "null"],
+      "enum": ["S", "M", "L", "XL", null],
+      "description": "Optionale Groessenabschaetzung."
+    },
+    "dispo_est": {
+      "type": ["string", "null"],
+      "description": "Optionaler geschaetzter Aufwand in EP (Sicht; SoT=Ledger)."
+    },
+    "dispo_act": {
+      "type": ["string", "null"],
+      "description": "Optionaler tatsaechlicher Aufwand in EP (Sicht; SoT=Ledger)."
+    },
+    "dispo_forecast": {
+      "type": ["string", "null"],
+      "description": "Optionale Prognose-Abweichung +/-% (abgeleitet)."
+    },
+    "estimate_note": {
+      "type": ["string", "null"],
+      "description": "Optionale Begruendung des Schaetz-Agenten (bei L/XL)."
+    },
+    "confidence": {
+      "type": ["string", "null"],
+      "enum": ["high", "medium", "low", null],
+      "description": "Optionales Vertrauensniveau der Schaetzung."
+    },
+    "branch": {
+      "type": ["string", "null"],
+      "description": "Optionaler Branch-Name (von /flow gesetzt)."
+    },
+    "pr": {
+      "type": ["string", "null"],
+      "description": "Optionaler PR-URL (bei pr-Policy)."
+    },
+    "blocked_reason": {
+      "type": ["string", "null"],
+      "description": "Optionaler Blockierungsgrund (bei status=Blocked)."
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "Erstellungszeitstempel ISO-8601-UTC (z.B. 2026-06-14T00:00:00Z)."
+    },
+    "updated_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "Letzter Aenderungszeitstempel ISO-8601-UTC."
+    },
+    "done_at": {
+      "type": ["string", "null"],
+      "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)?$",
+      "description": "Optionaler Abschlusszeitstempel ISO-8601-UTC (null bis Story Done)."
+    },
+    "github_issue": {
+      "type": ["integer", "null"],
+      "description": "Optionaler GitHub-Issue-Nummer (nur bei importierten Stories via board export-github gesetzt). Marker fuer importierte Story: lint meldet fehlende spec/implements als WARN STORY-UNSPEC statt FEHLER FIELD-REQUIRED."
+    }
+  },
+  "if": {
+    "properties": {
+      "github_issue": { "type": "integer" }
+    },
+    "required": ["github_issue"]
+  },
+  "then": {
+    "description": "Importierte Story (github_issue gesetzt): spec und implements sind optional (WARN STORY-UNSPEC via board-lint.sh)."
+  },
+  "else": {
+    "description": "Native Story (kein github_issue oder null): spec und implements sind Pflichtfelder.",
+    "required": ["spec", "implements"]
+  }
+}

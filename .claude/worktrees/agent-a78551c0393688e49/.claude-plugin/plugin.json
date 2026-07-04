@@ -1,0 +1,8 @@
+{
+  "name": "agent-flow",
+  "description": "Selbst-verbessernde Coder->Reviewer->Tester-Softwarefabrik: generische Rollen-Agenten + Knowledge Packs, Board-getriebener /flow, PR+Gate-Self-Improvement. Sprach-/projekt-neutral.",
+  "author": { "name": "Studis-Softwareschmiede" },
+  "homepage": "https://github.com/Studis-Softwareschmiede/agent-flow",
+  "repository": "https://github.com/Studis-Softwareschmiede/agent-flow",
+  "license": "UNLICENSED"
+}

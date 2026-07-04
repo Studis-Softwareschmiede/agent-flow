@@ -1,0 +1,28 @@
+id: F-004
+title: Mehr-Pack-Train mit parallelem Agenten-Fan-out
+goal: '/train nimmt mehrere Pack-IDs in einem Aufruf entgegen und startet pro Pack
+  einen train-Agenten parallel (Fan-out via Task-Tool in einer Runde), jeder mit eigenem
+  PR (ein PR pro Pack, wie heute). Additiv und rückwärtskompatibel: der Einzel-Pack-Aufruf
+  bleibt unverändert. Fundamentarbeit für den "Parallel"-Modus der dev-gui-Train-Auswahl
+  (team-train-trigger), wo "parallel" parallele Agenten in EINER Claude-Session meint
+  — nicht mehrere Sessions.'
+status: Done
+priority: P2
+spec: docs/specs/train-multi-pack.md
+definition_of_done: train-multi-pack.md approved; /train akzeptiert mehrere Pack-IDs
+  und dispatcht pro aufgelöstem Pack einen train-Agenten in einer parallelen Task-Runde
+  mit eigenem PR; Cost-Mode einmal aufgelöst und an alle weitergereicht; Fehler-Isolation
+  (unauflösbare ID übersprungen statt Abbruch) bei Mehr-Pack; Einzel-Aufruf bitgenau
+  wie heute (inkl. hartem Stopp bei Ambiguität); Sondermodi (model-tiers/--bootstrap)
+  mit Mehr-Pack abgelehnt; Sammel-Übersicht am Ende. AC1-AC10 grün.
+labels:
+- train
+- knowledge
+- parallel
+depends: null
+owner: alex
+created_at: '2026-06-19T00:00:00Z'
+updated_at: '2026-07-02T05:27:22Z'
+stories:
+- S-005
+progress: 1/1 done

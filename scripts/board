@@ -6,7 +6,8 @@
 #                         ready (AC12, F-008 „Autonome Board-Abarbeitung"),
 #                         export-github (AC11, Stub/Registrierung — #129),
 #                         area list/merge (board-area-ops AC1/AC2/AC5, S-036),
-#                         area split (board-area-ops AC4/AC5, S-037)
+#                         area split (board-area-ops AC4/AC5, S-037),
+#                         archive-done-stories (board-area-ops AC3/AC5, S-038)
 # Single-Writer-Erzwingung: AC9
 #
 # Requires: bash >= 4.0, python3 mit PyYAML
@@ -47,6 +48,7 @@ Verwendung:
   board area list
   board area merge <a> <b> <ziel>
   board area split <a> <a1> <a2>
+  board archive-done-stories
 EOF
   exit 1
 }
@@ -102,9 +104,9 @@ all_features() {
   find "$FEATURES_DIR" -name "F-*.yaml" -print 2>/dev/null | sort
 }
 
-# Alle Story-Dateien einsammeln (sortiert)
+# Alle Story-Dateien einsammeln (sortiert), archive/ ignorieren
 all_stories() {
-  find "$STORIES_DIR" -name "S-*.yaml" -print 2>/dev/null | sort
+  find "$STORIES_DIR" -name "S-*.yaml" -not -path "*/archive/*" -print 2>/dev/null | sort
 }
 
 # YAML-Datei als JSON ausgeben (alle Felder, null-sicher)
@@ -682,7 +684,7 @@ cmd_list() {
     if [[ -d "$STORIES_DIR" ]]; then
       while IFS= read -r -d '' f; do
         all_files+=("$f")
-      done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null | sort -z)
+      done < <(find "$STORIES_DIR" -name "S-*.yaml" -not -path "*/archive/*" -print0 2>/dev/null | sort -z)
     fi
   fi
 
@@ -768,12 +770,12 @@ cmd_next() {
   # KEIN require_board — next ist ein lesendes Verb; fehlendes Board/Verzeichnis → leere
   # Ausgabe + Exit 0 (board-cli-Spec AC6 Edge-Case; coder/L15).
 
-  # Alle Dateien einsammeln
+  # Alle Dateien einsammeln (archive/ ausgeschlossen)
   local story_files=()
   if [[ -d "$STORIES_DIR" ]]; then
     while IFS= read -r -d '' f; do
       story_files+=("$f")
-    done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null | sort -z)
+    done < <(find "$STORIES_DIR" -name "S-*.yaml" -not -path "*/archive/*" -print0 2>/dev/null | sort -z)
   fi
 
   local feature_files=()
@@ -957,12 +959,12 @@ _rollup_one() {
   local ts
   ts="$(now_ts)"
 
-  # Alle Kind-Stories einsammeln
+  # Alle Kind-Stories einsammeln (archive/ ausgeschlossen)
   local story_files=()
   if [[ -d "$STORIES_DIR" ]]; then
     while IFS= read -r -d '' f; do
       story_files+=("$f")
-    done < <(find "$STORIES_DIR" -name "S-*.yaml" -print0 2>/dev/null | sort -z)
+    done < <(find "$STORIES_DIR" -name "S-*.yaml" -not -path "*/archive/*" -print0 2>/dev/null | sort -z)
   fi
 
   # Atomar: temp-Datei in gleichem Verzeichnis wie Feature-Datei
@@ -2076,6 +2078,210 @@ PYEOF
 }
 
 # ---------------------------------------------------------------------------
+# Verb: archive-done-stories — AC3 (board-area-ops)
+#
+# Verschiebt alle Stories mit status=Done nach board/stories/archive/ (git-erhalten),
+# aktualisiert betroffene Feature-Rollups.
+# Storys mit anderem Status bleiben unangetastet.
+# Idempotent: zweiter Aufruf hat keine Wirkung, leere Ausgabe, Exit 0.
+# Ausgabe: Liste archivierter Story-IDs (eine pro Zeile).
+# ---------------------------------------------------------------------------
+cmd_archive_done_stories() {
+  [[ $# -eq 0 ]] || die "archive-done-stories: nimmt keine Argumente entgegen"
+
+  # Lesend: keine require_board() nötig (graceful bei fehlendem Board)
+  if [[ ! -d "$STORIES_DIR" ]]; then
+    # Kein Stories-Verzeichnis — nichts zu archivieren
+    exit 0
+  fi
+
+  # Python: Phasen 1-2 — Validierung + Verschieben mit Rollback bei Fehler
+  #          Phase 3 — Rollup-Targets sammeln für Bash-Ausführung
+  local archive_output
+  archive_output=$(python3 - "$BOARD_DIR" "$STORIES_DIR" 2>&1 <<'PYEOF'
+import sys, os, subprocess, yaml
+
+board_dir   = sys.argv[1]
+stories_dir = sys.argv[2]
+repo_root   = os.path.dirname(os.path.abspath(board_dir))
+
+def err(msg):
+    print(f"FEHLER: archive-done-stories: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+# --- Phase 1: Validierung & Sammlung (OHNE zu verschieben) ---
+archive_dir = os.path.join(stories_dir, "archive")
+
+# Archiv-Verzeichnis erstellen falls nötig
+if not os.path.isdir(archive_dir):
+    try:
+        os.makedirs(archive_dir, exist_ok=True)
+    except Exception as e:
+        err(f"archive-Verzeichnis konnte nicht erstellt werden ({e})")
+
+# Alle Done-Stories sammeln
+done_stories = []
+try:
+    for fname in sorted(os.listdir(stories_dir)):
+        if not fname.endswith(".yaml"):
+            continue
+        if fname.startswith("."):
+            continue
+
+        fpath = os.path.join(stories_dir, fname)
+
+        # Archiv-Unterverzeichnis ist ein Verzeichnis — überspringen
+        if os.path.isdir(fpath):
+            continue
+
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception:
+            continue
+
+        status = data.get("status")
+        if status != "Done":
+            continue
+
+        story_id = data.get("id") or os.path.splitext(fname)[0]
+        parent = data.get("parent")
+
+        done_stories.append({
+            "fname": fname,
+            "fpath": fpath,
+            "story_id": story_id,
+            "parent": parent
+        })
+
+except Exception as e:
+    err(f"Stories-Verzeichnis konnte nicht gescannt werden ({e})")
+
+# --- Phase 2: Verschiebe alle Done-Stories (mit Rollback bei Fehler) ---
+archived_ids = []
+affected_parent_ids = set()
+moved_files = []  # Zur Rollback im Fehlerfall
+
+try:
+    for story in done_stories:
+        fpath = story["fpath"]
+        fname = story["fname"]
+        archive_path = os.path.join(archive_dir, fname)
+
+        # Guard: archive_path darf nicht als Verzeichnis existieren
+        if os.path.isdir(archive_path):
+            err(f"Archive-Pfad {archive_path} ist ein Verzeichnis, nicht eine Datei")
+
+        # Story bereits archiviert? Idempotent überspringen
+        if os.path.exists(archive_path) and not os.path.exists(fpath):
+            archived_ids.append(story["story_id"])
+            if story["parent"]:
+                affected_parent_ids.add(str(story["parent"]).strip())
+            continue
+
+        # Story noch in stories/ — verschiebe sie
+        if not os.path.exists(fpath):
+            continue
+
+        try:
+            # git mv — git erklärt das Rename als Rename statt Delete+Add
+            subprocess.run(
+                ["git", "-C", repo_root, "mv", fpath, archive_path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except subprocess.CalledProcessError:
+            # Fallback auf os.rename falls git fehlschlägt
+            try:
+                os.rename(fpath, archive_path)
+            except Exception as e:
+                # Fehler bei Move: Rollback aller bisherigen Moves
+                for rolled_back in moved_files:
+                    try:
+                        orig_path = os.path.join(stories_dir, rolled_back["fname"])
+                        arch_path = os.path.join(archive_dir, rolled_back["fname"])
+                        if os.path.exists(arch_path):
+                            try:
+                                subprocess.run(
+                                    ["git", "-C", repo_root, "mv", arch_path, orig_path],
+                                    check=True,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL
+                                )
+                            except subprocess.CalledProcessError:
+                                os.rename(arch_path, orig_path)
+                    except Exception:
+                        pass  # Best-effort Rollback
+
+                err(f"Story-Datei {fname} konnte nicht archiviert werden ({e}). Rollback durchgeführt.")
+
+        moved_files.append({"fname": fname})
+        archived_ids.append(story["story_id"])
+        if story["parent"]:
+            affected_parent_ids.add(str(story["parent"]).strip())
+
+except Exception as e:
+    err(f"Fehler während des Archivierens ({e})")
+
+# --- Phase 3: Betroffene Features sammeln (für Rollup im Bash-Teil) ---
+features_dir = os.path.join(board_dir, "features")
+
+if os.path.isdir(features_dir):
+    for fid in sorted(affected_parent_ids):
+        for fname in sorted(os.listdir(features_dir)):
+            if not fname.endswith(".yaml"):
+                continue
+            fpath = os.path.join(features_dir, fname)
+            try:
+                with open(fpath, encoding="utf-8") as f:
+                    fdata = yaml.safe_load(f) or {}
+            except Exception:
+                continue
+
+            if fdata.get("id") == fid:
+                # Feature gefunden — Rollup-Target für Bash-Teil
+                print(f"ROLLUP_FEATURE: {fpath}")
+                break
+
+# --- Ausgabe: archivierte Story-IDs ---
+for sid in archived_ids:
+    print(sid)
+
+PYEOF
+) || {
+    echo "$archive_output" >&2
+    return 1
+  }
+
+  # Ausgabe splitten: archivierte IDs + Rollup-Targets
+  local archived_ids=()
+  local rollup_feature_files=()
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^ROLLUP_FEATURE: ]]; then
+      rollup_feature_files+=("${line#ROLLUP_FEATURE: }")
+    elif [[ -n "$line" && ! "$line" =~ ^FEHLER ]]; then
+      archived_ids+=("$line")
+    fi
+  done <<<"$archive_output"
+
+  # --- Phase 3: Rollups für betroffene Features ausführen (AC3-Garantie) ---
+  for feat_file in "${rollup_feature_files[@]}"; do
+    if [[ -f "$feat_file" ]]; then
+      _rollup_one "$feat_file" >/dev/null || true
+    fi
+  done
+
+  # Gebe archivierte Story-IDs aus
+  for sid in "${archived_ids[@]}"; do
+    echo "$sid"
+  done
+
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 [[ $# -ge 1 ]] || usage
@@ -2127,6 +2333,9 @@ case "$VERB" in
       split) cmd_area_split "$@" ;;
       *) die "area: unbekannter Unterbefehl '${AREA_SUB}' (erwartet 'list', 'merge' oder 'split')" ;;
     esac
+    ;;
+  archive-done-stories)
+    cmd_archive_done_stories "$@"
     ;;
   --help|-h|help)
     usage

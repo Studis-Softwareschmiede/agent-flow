@@ -1,0 +1,24 @@
+id: S-002
+parent: F-002
+title: Schätzung bei Story-Anlage — requirement produziert, /flow konsumiert (atomar)
+status: Done
+priority: P1
+spec: docs/specs/metrics-estimation.md
+implements: [AC7, AC8, AC9, AC10]
+depends: null
+labels: [process, estimation, metrics]
+size_est: M
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Cold-Start: keine baseline.json vorhanden, S/M-Lookup liefert null
+  (erwarteter Zustand, AC3/AC7). M-Einstufung heuristisch (Prozess-Story über
+  requirement + /flow + Spec, ohne db/security/ui-Bump). dispo_est=null bis genug
+  Historie.'
+confidence: low
+branch: null
+pr: null
+blocked_reason: null
+created_at: 2026-06-16T00:00:00Z
+updated_at: '2026-06-19T11:30:00Z'
+done_at: null

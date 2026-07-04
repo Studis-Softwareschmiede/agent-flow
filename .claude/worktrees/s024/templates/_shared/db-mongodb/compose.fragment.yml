@@ -1,0 +1,55 @@
+# compose.fragment.yml — db-mongodb template (Welle 2, Spec §5 + §6 + §16-R4)
+#
+# Kein vollständiger compose-file — nur die MongoDB-Service-Blöcke, die
+# beim Scaffold (/new-project, /adopt) ans Projekt-`docker-compose.yml`
+# angehängt werden. Das Projekt-Default-Netzwerk (compose-implicit) wird
+# benutzt; die App-Services müssen im selben Compose-Projekt liegen, um
+# `db` per DNS aufzulösen.
+#
+# Pflicht-Felder (Spec §5):
+#   - restart: unless-stopped
+#   - healthcheck via mongosh adminCommand ping
+#   - eindeutiges named volume `db_data`
+#   - Port-Mapping via env (Preview-Konflikt-Vermeidung; auskommentiert)
+#   - Passwort via env_file (NIE hardkodiert; .env.gpg ist Source of Truth)
+#
+# Migrations-Service (Spec §16-R4):
+#   - separates one-shot Image (gleicher mongo:7-Tag → image-reuse)
+#   - bringt mongosh mit, ohne dass die App-Images einen DB-Client backen müssen
+#   - läuft NACH `db: service_healthy`, BEVOR App-Services starten
+
+services:
+  db:
+    image: mongo:7
+    container_name: ${PROJECT_NAME:-app}_db
+    restart: unless-stopped
+    env_file:
+      - .env.db
+    volumes:
+      - db_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # ports:
+    #   - "${MONGO_PORT:-27017}:27017"
+    # ^ Preview/Dev nur. In Production ENTFERNEN (Spec §15-R7).
+
+  migrations:
+    image: mongo:7
+    container_name: ${PROJECT_NAME:-app}_migrations
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.db
+    environment:
+      MONGO_HOST: db
+    entrypoint: ["/db_scripts/run-migrations.sh"]
+    volumes:
+      - ./db_scripts:/db_scripts:ro
+
+volumes:
+  db_data: {}

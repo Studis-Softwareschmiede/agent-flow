@@ -1,0 +1,33 @@
+id: F-012
+title: Obsidian-Notizen als Requirement-Quelle (Ingest-Pipeline + Re-Sync)
+goal: Ein Obsidian-Projektordner (mehrere freie .md-Notizen aus der Ideen-/Konzeptphase)
+  wird als zusaetzliche Requirement-Eingabe in den bestehenden Fabrik-Pfad Konzept
+  -> Spezifikation -> Story einspeisbar (neben der getippten vagen Anforderung). Fabrik-Befehl
+  /agent-flow:from-notes verarbeitet die Notizen in drei Stufen (a Notiz->concept.md,
+  b Konzept->specs/, c Spec->Board via requirement); jede Stufe laeuft bei klaren
+  Notizen automatisch durch und haelt bei Unklarheiten mit GENAU EINEM gesammelten
+  Fragenkatalog an (Stufe a mit niedrigster Nachfrage-Schwelle -> keine Fehlerfortpflanzung).
+  Der Ordner bleibt am Projekt vermerkt (profile.obsidian_source); ein Re-Sync-Modus
+  (--sync) zeigt spaeter Widersprueche Notiz<->Konzept/Spec auf und ueberschreibt
+  - anders als reconcile - NICHTS automatisch (je Divergenz ein Mensch-Entscheid).
+  NUR die agent-flow-seitige Pipeline-Faehigkeit; Button/GUI + Fragenkatalog-Anzeige
+  sind separate dev-gui-Story (Schnittstelle hier nur beschrieben).
+status: Backlog
+priority: P2
+spec: docs/specs/obsidian-ingest.md
+definition_of_done: null
+labels:
+- process
+- docs
+- cross-repo
+depends: null
+owner: null
+stories:
+- S-020
+- S-021
+- S-022
+- S-023
+- S-024
+progress: 0/5 done
+created_at: '2026-07-02T05:26:28Z'
+updated_at: '2026-07-02T05:27:23Z'

@@ -1,0 +1,25 @@
+id: F-009
+title: Story-Status "Verworfen" (Wont-Do/Obsolete) — Enum-Erweiterung + terminale
+  Semantik
+goal: 'Neuen terminalen Story-Status "Verworfen" ins Board-Schema aufnehmen (Ergaenzung
+  zu To Do|In Progress|Blocked|In Review|Done). Bedeutet: bewusst nicht mehr umgesetzt,
+  weil nicht mehr noetig (Abgrenzung zu Done=erfolgreich, Blocked=temporaer). Loest
+  die informelle [DEFERRED]-Titelkonvention ab. Basis fuer die parallele dev-gui-Schwester-Story
+  (Dropdown/Kanban/Feature-Status-Ableitung) — exakter Name "Verworfen" ist Cross-Repo-Vertrag.'
+status: Backlog
+priority: P1
+spec: docs/specs/story-status-verworfen.md
+definition_of_done: null
+labels:
+- board
+- schema
+- cross-repo
+depends: null
+owner: null
+stories:
+- S-015
+- S-016
+- S-017
+progress: 0/3 done
+created_at: '2026-07-02T05:07:54Z'
+updated_at: '2026-07-02T05:27:23Z'

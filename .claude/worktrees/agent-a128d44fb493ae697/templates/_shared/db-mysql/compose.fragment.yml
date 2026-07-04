@@ -1,0 +1,53 @@
+# Compose-Fragment für MariaDB-DB (Spec §5 + §6 + Welle 2).
+# Anhängen an docker-compose.yml beim Scaffold/Adopt.
+# MariaDB statt MySQL: Open-Source-freundlich, MySQL-Wire-Protocol-kompatibel,
+# Client-Tools (mariadb, mariadb-dump, healthcheck.sh) sind 1:1 austauschbar.
+#
+# Pflicht (Review-Kriterien Spec §5):
+#  - restart: unless-stopped
+#  - healthcheck definiert
+#  - eindeutiges named-Volume
+#  - Port via env-Var (Konflikt-Vermeidung mehrerer Previews)
+#  - keine hartkodierten Passwörter (.env.db pflicht; bricht compose ab wenn fehlend)
+#
+# WARNUNG (Spec §15-R7): `ports:` ist NUR für Preview/Dev gedacht.
+# In Production ENTFERNEN — DB darf nicht direkt nach außen mappen.
+
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    env_file:
+      - .env.db
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      # MariaDB 11 bringt /usr/local/bin/healthcheck.sh mit; --innodb_initialized
+      # stellt sicher, dass die Engine wirklich startklar ist (mariadb-admin ping
+      # antwortet bereits vor Schema-Recovery → nicht ausreichend).
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    ports:
+      # NUR für Preview/Dev — in Production entfernen (Spec §15-R7).
+      - "${DB_PORT:-3306}:3306"
+
+  # One-shot Migrations-Runner (Spec §6 + §16-R4: separates Image, nicht im App-Image).
+  # Läuft via `docker compose run --rm migrations`, oder als depends_on-Init im
+  # Stack vor dem App-Container.
+  migrations:
+    image: mariadb:11
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.db
+    volumes:
+      - ./db_scripts:/db_scripts:ro
+    entrypoint: ["/db_scripts/run-migrations.sh"]
+
+volumes:
+  db_data: {}
