@@ -6,7 +6,7 @@ goal: '/train nimmt mehrere Pack-IDs in einem Aufruf entgegen und startet pro Pa
   bleibt unverändert. Fundamentarbeit für den "Parallel"-Modus der dev-gui-Train-Auswahl
   (team-train-trigger), wo "parallel" parallele Agenten in EINER Claude-Session meint
   — nicht mehrere Sessions.'
-status: Done
+status: Archived
 priority: P2
 spec: docs/specs/train-multi-pack.md
 definition_of_done: train-multi-pack.md approved; /train akzeptiert mehrere Pack-IDs
@@ -22,7 +22,6 @@ labels:
 depends: null
 owner: alex
 created_at: '2026-06-19T00:00:00Z'
-updated_at: '2026-07-02T05:27:22Z'
-stories:
-- S-005
-progress: 1/1 done
+updated_at: '2026-07-04T07:53:19Z'
+stories: null
+progress: 0/0 done

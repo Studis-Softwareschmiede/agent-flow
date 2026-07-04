@@ -2,6 +2,7 @@
 id: metrics-retro-aggregation
 title: retro — Ledger-Aggregation + EP-Kalibrierung (baseline.json)
 status: active
+area: metriken-schaetzung
 version: 1
 ---
 

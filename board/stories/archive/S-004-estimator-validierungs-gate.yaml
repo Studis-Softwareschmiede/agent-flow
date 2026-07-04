@@ -1,0 +1,32 @@
+id: S-004
+parent: F-023
+title: Estimator-Validierungs-Gate (AC10) — Kalibrierung erst nach ≥10 L/XL-Stories
+  als validiert/verworfen markieren
+status: Done
+priority: P2
+spec: docs/specs/estimator.md
+implements:
+- AC10
+depends: null
+labels:
+- estimation
+- metrics
+- retro
+size_est: S
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Restarbeit aus geschlossenem GitHub-Issue #125 (estimator — retro-Selbstverbesserung).
+  Bereits live: automatische Bias-Korrektur (scripts/metrics-aggregate.sh → baseline.json.estimator_bias)
+  + Regel, dass Anker/Anweisungen nur per PR+Gate geändert werden (agents/retro.md).
+  Offen ist ausschliesslich das Validierungs-Gate (estimator.md AC10): eine Kalibrierung
+  erst nach >=10 abgeschlossenen L/XL-Stories anhand gemessener MAE-Reduktion als
+  validated/reverted markieren. Daten-blockiert: aktivier- und testbar erst, wenn
+  genügend grosse Stories Historie vorliegt.'
+confidence: low
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-06-17T00:00:00Z'
+updated_at: '2026-07-04T07:52:41Z'
+done_at: null

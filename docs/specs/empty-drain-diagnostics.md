@@ -2,6 +2,7 @@
 id: empty-drain-diagnostics
 title: Leerer Drain nie stumm — aggregierte NOT-READY-Diagnose
 status: active
+area: anforderung-intake
 version: 1
 spec_format: use-case-2.0
 ---

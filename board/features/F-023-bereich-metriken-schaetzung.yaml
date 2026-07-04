@@ -1,0 +1,15 @@
+id: F-023
+title: Metriken-Schaetzung
+goal: Ledger, Baseline, Kalibrierung und Token-Erfassung.
+status: Active
+priority: P2
+spec: null
+definition_of_done: null
+labels: []
+depends: null
+owner: null
+area: metriken-schaetzung
+stories: null
+progress: 0/0 done
+created_at: '2026-07-04T07:52:41Z'
+updated_at: '2026-07-04T07:53:21Z'

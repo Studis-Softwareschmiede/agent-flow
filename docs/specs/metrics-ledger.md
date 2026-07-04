@@ -2,6 +2,7 @@
 id: metrics-ledger
 title: Metrik-Ledger + Erfassung in /flow (Phase 0, Fundament)
 status: active
+area: metriken-schaetzung
 version: 1
 ---
 

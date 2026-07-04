@@ -1,0 +1,28 @@
+id: S-001
+parent: F-017
+title: Board-Dateiformat — Feature/Story-YAML + board.yaml + Integritaetsregeln
+status: Done
+priority: P0
+spec: docs/specs/board-schema.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC9
+depends: null
+labels:
+- board
+- schema
+size_est: M
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: 2026-06-14 00:00:00+00:00
+updated_at: '2026-07-04T07:52:41Z'
+done_at: null

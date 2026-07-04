@@ -1,0 +1,40 @@
+- id: board
+  titel: Board
+  beschreibung: Schema, board-CLI, Lint, GitHub-Export und die Bereichsliste.
+  reihenfolge: 1
+- id: flow-orchestrierung
+  titel: Flow-Orchestrierung
+  beschreibung: flow-Skill, Session-Rotation, Gates, Item-Auswahl und Leerlauf-Diagnose.
+  reihenfolge: 2
+- id: rollen-agenten
+  titel: Rollen-Agenten
+  beschreibung: Agent-Definitionen und Handoff-Verträge der Fabrik-Rollen.
+  reihenfolge: 3
+- id: anforderung-intake
+  titel: Anforderung-Intake
+  beschreibung: requirement mit Eingangs-Gate, estimator, Ideen-Inbox und from-notes.
+  reihenfolge: 4
+- id: wissen-packs
+  titel: Wissen-Packs
+  beschreibung: Knowledge Packs, train sowie Modell-Matrix und Cost-Modes.
+  reihenfolge: 5
+- id: lernen-retro
+  titel: Lernen-Retro
+  beschreibung: retro, Lessons-Lebenszyklus und Write-back.
+  reihenfolge: 6
+- id: metriken-schaetzung
+  titel: Metriken-Schaetzung
+  beschreibung: Ledger, Baseline, Kalibrierung und Token-Erfassung.
+  reihenfolge: 7
+- id: vorlagen-scaffolding
+  titel: Vorlagen-Scaffolding
+  beschreibung: templates, new-project und adopt.
+  reihenfolge: 8
+- id: auslieferung
+  titel: Auslieferung
+  beschreibung: cicd, Landen, CI-Watch, Rollout und preview.
+  reihenfolge: 9
+- id: doku-reconcile
+  titel: Doku-Reconcile
+  beschreibung: Konzept-/Architektur-Pflege, reconcile und Spec-Lebenszyklus.
+  reihenfolge: 10

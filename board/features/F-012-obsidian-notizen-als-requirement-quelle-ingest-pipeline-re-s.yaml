@@ -12,7 +12,7 @@ goal: Ein Obsidian-Projektordner (mehrere freie .md-Notizen aus der Ideen-/Konze
   - anders als reconcile - NICHTS automatisch (je Divergenz ein Mensch-Entscheid).
   NUR die agent-flow-seitige Pipeline-Faehigkeit; Button/GUI + Fragenkatalog-Anzeige
   sind separate dev-gui-Story (Schnittstelle hier nur beschrieben).
-status: Backlog
+status: Archived
 priority: P2
 spec: docs/specs/obsidian-ingest.md
 definition_of_done: null
@@ -22,12 +22,7 @@ labels:
 - cross-repo
 depends: null
 owner: null
-stories:
-- S-020
-- S-021
-- S-022
-- S-023
-- S-024
-progress: 0/5 done
+stories: null
+progress: 0/0 done
 created_at: '2026-07-02T05:26:28Z'
-updated_at: '2026-07-02T05:27:23Z'
+updated_at: '2026-07-04T07:53:20Z'

@@ -9,7 +9,7 @@ goal: 'Der --bootstrap-Modus legt heute nur Cut-orientiert an (Skelett = Kopie e
   Sektion A/Regeln daraus (3-Regel-Cap gelockert), schützt vor Kollision/leeren Packs
   und liefert per PR + Gate. Enabler für "Knowledge hinzufügen" aus der dev-gui (team-knowledge-add).
   Owner-Entscheid: Thema + Quellen (Web-Recherche), kein mitgegebener Eigen-Inhalt.'
-status: Done
+status: Archived
 priority: P2
 spec: docs/specs/train-bootstrap-new-pack.md
 definition_of_done: train-bootstrap-new-pack.md approved; /train --bootstrap <pack-id>
@@ -25,7 +25,6 @@ labels:
 depends: null
 owner: alex
 created_at: '2026-06-19T00:00:00Z'
-updated_at: '2026-07-02T05:27:22Z'
-stories:
-- S-007
-progress: 1/1 done
+updated_at: '2026-07-04T07:53:19Z'
+stories: null
+progress: 0/0 done

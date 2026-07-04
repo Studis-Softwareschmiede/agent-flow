@@ -1,0 +1,26 @@
+id: S-038
+parent: F-017
+title: board archive-done-stories + Story-Archiv-Semantik
+status: Done
+priority: P2
+spec: docs/specs/board-area-ops.md
+implements:
+- AC3
+depends:
+- S-034
+labels:
+- board
+size_est: M
+dispo_est: '3.0'
+dispo_act: '3'
+dispo_forecast: null
+estimate_note: S/M-Heuristik; dispo_est aus baseline md|balanced|M (n=8); keine Baseline-Tokens
+  (tok_total null)
+confidence: medium
+tok_est: null
+branch: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/272
+blocked_reason: null
+created_at: '2026-07-03T11:19:58Z'
+updated_at: '2026-07-04T07:52:41Z'
+done_at: '2026-07-04T07:46:59Z'

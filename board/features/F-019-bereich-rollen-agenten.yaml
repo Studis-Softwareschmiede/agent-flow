@@ -1,0 +1,15 @@
+id: F-019
+title: Rollen-Agenten
+goal: Agent-Definitionen und Handoff-Verträge der Fabrik-Rollen.
+status: Active
+priority: P2
+spec: null
+definition_of_done: null
+labels: []
+depends: null
+owner: null
+area: rollen-agenten
+stories: null
+progress: 0/0 done
+created_at: '2026-07-04T07:52:41Z'
+updated_at: '2026-07-04T07:53:20Z'

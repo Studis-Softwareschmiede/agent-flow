@@ -2,6 +2,7 @@
 id: spec-format-field
 title: spec_format-Versionsstempel im Spec-Frontmatter
 status: draft
+area: doku-reconcile
 version: 1
 spec_format: use-case-2.0
 ---

@@ -4,7 +4,7 @@ goal: 'Sicherstellen, dass die /flow-Ledger-Schreibpfade dem bindenden metrics-s
   entsprechen (Feldtypen, Single-Writer) und die Aggregation robust gegen Alt-/Fehldaten
   ist. Anlass: Schema-Drift beim item-Feld (String-Story-ID statt int) blockierte
   die EP-Aggregation.'
-status: Done
+status: Archived
 priority: P2
 spec: docs/specs/metrics-ledger.md
 definition_of_done: null
@@ -12,8 +12,7 @@ labels:
 - metrics
 depends: null
 owner: null
-stories:
-- S-003
-progress: 1/1 done
+stories: null
+progress: 0/0 done
 created_at: '2026-06-16T18:53:09Z'
-updated_at: '2026-07-02T05:27:22Z'
+updated_at: '2026-07-04T07:53:19Z'

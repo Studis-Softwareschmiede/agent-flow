@@ -5,7 +5,7 @@ goal: 'Features werden von Auftrags-Containern zur stabilen Strukturkarte der Ap
   Bereichs-Lint, requirement-Eingangs-Gate, Bereichs-CLI-Operationen (merge/split/archive)
   und die Bestandsmigration von agent-flow. Storys docken an Bereiche an; neue Features
   nur bei echten neuen Produktbereichen.'
-status: Backlog
+status: Archived
 priority: P1
 spec: null
 definition_of_done: null
@@ -15,19 +15,7 @@ labels:
 - process
 depends: null
 owner: null
-stories:
-- S-034
-- S-035
-- S-036
-- S-037
-- S-038
-- S-039
-- S-040
-- S-041
-- S-042
-- S-043
-- S-044
-- S-045
-progress: 0/12 done
+stories: null
+progress: 0/0 done
 created_at: '2026-07-03T11:19:29Z'
-updated_at: '2026-07-03T13:16:41Z'
+updated_at: '2026-07-04T07:53:20Z'

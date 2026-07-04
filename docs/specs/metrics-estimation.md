@@ -2,6 +2,7 @@
 id: metrics-estimation
 title: A-priori-Schätzung + Soll-Ist-Abrechnung (Forecast-Fehler)
 status: active
+area: metriken-schaetzung
 version: 2
 ---
 

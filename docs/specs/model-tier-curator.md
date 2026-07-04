@@ -2,6 +2,7 @@
 id: model-tier-curator
 title: Model-Tier-Curator (/train model-tiers)
 status: draft
+area: wissen-packs
 version: 1
 ---
 

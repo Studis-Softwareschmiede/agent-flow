@@ -1,0 +1,15 @@
+id: F-020
+title: Anforderung-Intake
+goal: requirement mit Eingangs-Gate, estimator, Ideen-Inbox und from-notes.
+status: Active
+priority: P2
+spec: null
+definition_of_done: null
+labels: []
+depends: null
+owner: null
+area: anforderung-intake
+stories: null
+progress: 0/0 done
+created_at: '2026-07-04T07:52:41Z'
+updated_at: '2026-07-04T07:53:20Z'

@@ -6,7 +6,7 @@ goal: 'Neuen terminalen Story-Status "Verworfen" ins Board-Schema aufnehmen (Erg
   weil nicht mehr noetig (Abgrenzung zu Done=erfolgreich, Blocked=temporaer). Loest
   die informelle [DEFERRED]-Titelkonvention ab. Basis fuer die parallele dev-gui-Schwester-Story
   (Dropdown/Kanban/Feature-Status-Ableitung) — exakter Name "Verworfen" ist Cross-Repo-Vertrag.'
-status: Backlog
+status: Archived
 priority: P1
 spec: docs/specs/story-status-verworfen.md
 definition_of_done: null
@@ -16,10 +16,7 @@ labels:
 - cross-repo
 depends: null
 owner: null
-stories:
-- S-015
-- S-016
-- S-017
-progress: 0/3 done
+stories: null
+progress: 0/0 done
 created_at: '2026-07-02T05:07:54Z'
-updated_at: '2026-07-02T05:27:23Z'
+updated_at: '2026-07-04T07:53:20Z'

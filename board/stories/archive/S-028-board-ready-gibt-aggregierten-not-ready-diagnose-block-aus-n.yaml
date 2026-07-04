@@ -1,0 +1,28 @@
+id: S-028
+parent: F-020
+title: board ready gibt aggregierten NOT-READY-Diagnose-Block aus (nach Grund gruppiert)
+status: Done
+priority: P2
+spec: docs/specs/empty-drain-diagnostics.md
+implements:
+- AC1
+- AC2
+- AC5
+depends: null
+labels:
+- process
+size_est: M
+dispo_est: '3.0'
+dispo_act: '4'
+dispo_forecast: '-0.25'
+estimate_note: 'Heuristik-Score 6 (3 AC + 3 Komponenten: scripts/board cmd_ready,
+  docs/specs/board-cli.md, tests; label_bump 0) -> M. Echte Bash/python3-Aenderung
+  an board ready plus Smoke. S/M -> kein estimator; baseline md|balanced|M ep=3.0
+  (n=8) -> dispo_est 3.0, confidence medium.'
+confidence: medium
+branch: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/240
+blocked_reason: null
+created_at: '2026-07-02T10:26:25Z'
+updated_at: '2026-07-04T07:52:41Z'
+done_at: '2026-07-02T18:32:01Z'

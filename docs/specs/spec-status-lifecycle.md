@@ -2,6 +2,7 @@
 id: spec-status-lifecycle
 title: Spec-Status-Lebenszyklus (draft → active → superseded)
 status: active
+area: doku-reconcile
 version: 1
 ---
 

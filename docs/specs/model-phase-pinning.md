@@ -2,6 +2,7 @@
 id: model-phase-pinning
 title: Phasen-Pinning der Design-Rollen auf die Qualitäts-Modellstufe
 status: active
+area: flow-orchestrierung
 version: 1
 spec_format: use-case-2.0
 ---

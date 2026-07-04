@@ -1,0 +1,32 @@
+id: S-032
+parent: F-023
+title: 'Metrik-Schreibpfad am Board-Repo verankern: METRICS_ROOT einmalig beim Start,
+  alle Ledger-Writes + Token-Collect absolut (nie Plugin-Root/Worktree)'
+status: Done
+priority: P1
+spec: docs/specs/metrics-repo-anchor.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+depends: null
+labels:
+- process
+- docs
+size_est: M
+dispo_est: '3.0'
+dispo_act: '3'
+dispo_forecast: '0'
+estimate_note: 'Heuristik: 5 AC, 2 Komponenten (skills/flow/SKILL.md Metrik-Bloecke,
+  docs/architecture/board-subsystem.md) -> M. Pfad-Anker + Plausibilitaets-Gate als
+  Skill-Text, keine neuen Skripte. baseline md|balanced|M ep=3.0 -> dispo_est 3.0,
+  confidence medium.'
+confidence: medium
+branch: feat/S-032-metrics-repo-anchor
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/246
+blocked_reason: null
+created_at: '2026-07-02T19:52:18Z'
+updated_at: '2026-07-04T07:52:41Z'
+done_at: '2026-07-02T20:10:42Z'

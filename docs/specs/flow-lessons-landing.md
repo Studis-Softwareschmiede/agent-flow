@@ -2,6 +2,7 @@
 id: flow-lessons-landing
 title: Lessons überleben das Worktree-Landen — cicd trägt .claude/lessons/*.md IMMER mit
 status: active
+area: lernen-retro
 version: 1
 spec_format: use-case-2.0
 ---

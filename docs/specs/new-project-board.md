@@ -2,6 +2,7 @@
 id: new-project-board
 title: Projekt-Bootstrap mit File-Board — board/-Skelett statt gh project create
 status: active
+area: board
 version: 1
 ---
 

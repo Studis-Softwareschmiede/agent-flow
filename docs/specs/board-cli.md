@@ -2,6 +2,7 @@
 id: board-cli
 title: Board-Abstraktion (scripts/board) — Verben, Queue-Logik, Single-Writer
 status: active
+area: board
 version: 1
 ---
 

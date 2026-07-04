@@ -5,7 +5,7 @@ goal: Design-Rollen (requirement/architekt/designer/dba-Design) laufen unabhäng
   gelandeten Story (SR1-Batch zählt als eine Runde), Rotation übernimmt die äußere
   Drain-Schleife. Owner-Entscheidung 2026-07-02 nach Token-Analyse (Session-Limit-Vorfall,
   Kontext-Wachstum 3.6x in Mehr-Story-Session).
-status: Backlog
+status: Archived
 priority: P1
 spec: null
 definition_of_done: null
@@ -14,9 +14,7 @@ labels:
 - docs
 depends: null
 owner: null
-stories:
-- S-030
-- S-031
-progress: 0/2 done
+stories: null
+progress: 0/0 done
 created_at: '2026-07-02T19:12:37Z'
-updated_at: '2026-07-02T19:12:37Z'
+updated_at: '2026-07-04T07:53:20Z'

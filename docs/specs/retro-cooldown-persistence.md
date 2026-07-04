@@ -2,6 +2,7 @@
 id: retro-cooldown-persistence
 title: Retro-Cooldown-Stempel zuverlässig im geharvesteten Projekt-Repo persistieren (Schutzgitter G3)
 status: draft
+area: lernen-retro
 version: 1
 ---
 

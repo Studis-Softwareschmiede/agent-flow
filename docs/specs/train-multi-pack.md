@@ -2,6 +2,7 @@
 id: train-multi-pack
 title: Mehr-Pack-Train mit parallelem Agenten-Fan-out (`/train <pack-a> <pack-b> …`)
 status: draft
+area: wissen-packs
 version: 1
 ---
 

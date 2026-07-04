@@ -1,0 +1,15 @@
+id: F-025
+title: Auslieferung
+goal: cicd, Landen, CI-Watch, Rollout und preview.
+status: Active
+priority: P2
+spec: null
+definition_of_done: null
+labels: []
+depends: null
+owner: null
+area: auslieferung
+stories: null
+progress: 0/0 done
+created_at: '2026-07-04T07:52:41Z'
+updated_at: '2026-07-04T07:53:21Z'
