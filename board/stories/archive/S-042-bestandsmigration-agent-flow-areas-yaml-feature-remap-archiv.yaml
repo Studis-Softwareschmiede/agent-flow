@@ -2,7 +2,7 @@ id: S-042
 parent: F-017
 title: Bestandsmigration agent-flow — areas.yaml + Feature-Remap + Archiv + Spec-Stempel
   (ein PR)
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/board-areas.md
 implements:
@@ -14,7 +14,7 @@ labels:
 - migration
 size_est: L
 dispo_est: '7.0'
-dispo_act: null
+dispo_act: '4'
 dispo_forecast: null
 estimate_note: estimator nicht verfuegbar (kein Task-Tool im Lauf); dispo_est+tok_est
   aus baseline md|balanced|L (n=4) | depends S-034/S-035/S-038 erfüllt (Done+archiviert)
@@ -22,8 +22,8 @@ estimate_note: estimator nicht verfuegbar (kein Task-Tool im Lauf); dispo_est+to
 confidence: low
 tok_est: '3263685'
 branch: null
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/273
 blocked_reason: null
 created_at: '2026-07-03T11:19:59Z'
-updated_at: '2026-07-04T07:53:21Z'
-done_at: null
+updated_at: '2026-07-04T07:54:20Z'
+done_at: '2026-07-04T07:54:20Z'
