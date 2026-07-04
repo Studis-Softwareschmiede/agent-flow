@@ -62,7 +62,7 @@ Der Notiz-Ingest darf nicht am Board vorbeiarbeiten: wie `new-project`/`adopt` d
 
 - **Skill-Befehl:** `/agent-flow:from-notes [<ordnerpfad>]` (Ingest, AC1–AC4) und `/agent-flow:from-notes --sync` (Re-Sync, AC5) — dieselbe Pipeline, additive Bereichs-Erzeugung. Kein neuer Skill.
 - **Bereichs-Entwurf (Reader→Gate):** eine Liste von Bereichs-Objekten je `{ id, titel, beschreibung, reihenfolge }` konform [[board-areas]] AC1. Aus dem Konzept abgeleitet, in den Stufe-a-Katalog eingebettet.
-- **Fragenkatalog-Einträge (Bereichs-Bestätigung):** `{ stage:"a", id:"a-area-<n>", frage:<Bereich streichen/ergänzen/bestätigen?>, quelle:<Konzept-/Notiz-Fundstelle>, optionen:["bestätigen","streichen","ändern"] }` — wiederverwendetes Format `board/fragenkatalog.schema.json` (AC2). Im `--sync`-Fall `stage:"sync"` (AC5).
+- **Fragenkatalog-Einträge (Bereichs-Bestätigung):** `{ stage:"a", id:"a-<n>" (fortlaufender Stufe-a-Zähler, schema-konform zu `^[a-z]+-[0-9]+$`), frage:<Bereich streichen/ergänzen/bestätigen?>, quelle:<Konzept-/Notiz-Fundstelle>, optionen:["bestätigen","streichen","ändern"] }` — wiederverwendetes Format `board/fragenkatalog.schema.json` (AC2). Im `--sync`-Fall `stage:"sync"` (AC5).
 - **Schreib-Ziel:** ausschließlich `board/areas.yaml` (+ die von Stufe a/c ohnehin geschriebenen `docs/`/Board-Artefakte). **Nie** in den Notiz-Ordner (AC3, [[obsidian-ingest]] AC6).
 - **Wiederverwendete Bausteine:** Notiz-Korpus-Reader + Fragenkatalog-Gate ([[obsidian-ingest]] AC4–AC9), `requirement`-Zerlegung (Stufe c), `board/areas.yaml`-Format + Lint ([[board-areas]]). Kein zweiter Zerlege-/Gate-/Bereichs-Pfad.
 
