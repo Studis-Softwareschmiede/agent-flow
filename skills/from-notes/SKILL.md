@@ -147,7 +147,7 @@ Bereit für /agent-flow:flow.
    - **Exit 0** → `$CORPUS_FILE` (`mktemp`, **nie** committet — AC6) hält den Korpus; die Herkunfts-Marker `===== NOTE: <pfad> =====` liefern das `notiz_fundstelle`-/`quelle`-Feld.
 3. **Doku-Stand lesen (rechte Vergleichsseite)** — der **aktuelle** `docs/concept.md` **+ alle** `docs/specs/*`, **rein lesend**.
 
-### 5.2 Divergenzen erkennen + priorisierter Bericht (AC2 — reiner Bericht, kein Gate)
+### 5.2 Divergenzen erkennen + unassignierte Themen erkennen + priorisierter Bericht (AC2, AC5 — reiner Bericht, kein Gate)
 
 Beide Seiten abgleichen und **Divergenzen** sammeln. Je Fund **genau diese Felder** (Bericht-Format, Vertrag der Spec):
 
@@ -156,31 +156,75 @@ Beide Seiten abgleichen und **Divergenzen** sammeln. Je Fund **genau diese Felde
 - **`divergenz_art`** — Art der Divergenz, z.B. *Notiz widerspricht Konzept-Aussage* · *Notiz enthält Neues, das die Spec nicht abbildet* · *Doku enthält, was die Notiz nicht mehr trägt*,
 - **`richtungsvorschlag`** — unverbindlicher Vorschlag, welche Richtung plausibel ist.
 
+**Zusätzlich (AC5 — from-notes-areas):** nach dem Inhalts-Abgleich auch **Topics/Themen im aktuellen Notiz-Stand** gegen **bestätigte Bereiche in `board/areas.yaml`** prüfen. Erkennt `--sync` im Notiz-Stand ein **Produktbereich-Thema, das keinem bestehenden Bereich in `board/areas.yaml` zugeordnet ist** (bereichsfremd), wird es separat gemäß Abschnitt 5.2a als **Fragenkatalog-Punkt** (`stage:"sync"`) mit Bereichs-Zuordnungs-Optionen erfasst (nie selbst Bereich angelegt, AC5). **Kein** bereichsfremdes Thema gefunden → kein zusätzlicher Katalog-Punkt, **Rauscharmut** (AC5).
+
 Der Bericht ist **priorisiert** (klarste/wichtigste Widersprüche zuerst) und **rein informativ**: **kein** Gate, **keine** automatischen Board-Items, **kein** `/flow`-Start (AC2/AC6). Widerspricht ein Notiz-Stand **mehreren** Doku-Stellen → **mehrere Funde**, aber in **einem** Bericht/Katalog (nie verstreute Einzel-Prompts).
 
-### 5.3 Deckungsgleich → Ende ohne Katalog/Änderung (AC5, *deckt A1*)
+### 5.2a Unassignierte Produktbereich-Themen als Fragenkatalog-Punkte (AC5 — from-notes-areas)
 
-Findet 5.2 **keine** Divergenz → **kein** Fragenkatalog, **keine** Doku-Änderung. Klare **„deckungsgleich"**-Meldung ausgeben und **enden** (Rauscharmut, AC5). Der Notiz-Ordner bleibt unangetastet.
+**Nur wenn `board/areas.yaml` bereits existiert** (Re-Ingest-Szenario mit bestätigten Bereichen):
 
-### 5.4 Genau EIN Fragenkatalog, gerichteter Entscheid (AC4)
+1. **Themen aus Notiz-Stand extrahieren:** aus dem Notiz-Korpus (linke Seite) diejenigen **Produktbereich-Themen** identifizieren, die im Konzept/in den Notizen als konzeptionelle Bereiche/Domänen erwähnt sind — analog der AC1-Ableitung aus dem Konzept (Scope, Produktabgrenzung).
 
-Bei ≥1 Divergenz **alle** als **genau EINEN** Fragenkatalog aufbauen — gleiches maschinenlesbares Rückgabeformat wie `[[obsidian-ingest]]` AC9 (`board/fragenkatalog.schema.json`), je Frage: `stage:"sync"`, `id`-Muster `sync-<n>` (katalog-eindeutig), `frage` (die Divergenz in Alltagssprache), `quelle` = `notiz_fundstelle` + `doku_ziel`, und `optionen:["uebernehmen","behalten","manuell"]` (je Divergenz **eine** Frage mit genau diesen drei Richtungen). Den Katalog durch den **wiederverwendeten** Gate-Validator prüfen:
+2. **Gegen bestätigte Bereiche abgleichen:** jedes identifizierte Thema gegen die Liste der `id`-Felder in der existierenden `board/areas.yaml` prüfen. **Bereichsfremd** = Thema kommt in den Notizen vor, sein `id` (oder ein sinngemäßes Äquivalent) fehlt in `areas.yaml`.
+
+3. **Keine Automatic, nur Vorschlag (AC5, invertierte Autorität):** Findet der Abgleich **bereichsfremde Themen:**
+   - **nicht** selbst einen neuen Bereich anlegen (AC5 / [[requirement-area-intake]] AC3),
+   - stattdessen: für **jedes** bereichsfremde Thema **genau einen** Fragenkatalog-Punkt (Abschnitt 5.4 — Format `{stage:"sync", id:"sync-<n>", …}`) mit:
+     - `frage`: "Notiz-Thema ‚<Thema-Name>' — einem bestehenden Bereich zuordnen, neuen Bereich als Owner-Entscheid erstellen oder skippen?"
+     - `quelle`: Notiz-Fundstelle(n), wo das Thema genannt wurde,
+     - **`optionen`**: min. `["bereich-<id>", "bereich-<id>", …, "neuer-bereich", "skippen"]` — konkrete bestätigte Bereich-IDs aus `areas.yaml` **+ Option „neuer-bereich" (Owner-Entscheid, wird nicht auto-erstellt)** + Option „skippen" (Thema ignorieren); **nie** blind „neuer Bereich wird jetzt angelegt".
+
+4. **Rauscharmut (AC5):** Findet der Abgleich **kein** bereichsfremdes Thema (alle Notiz-Themen sind bereits in `areas.yaml` zugeordnet) → **kein zusätzlicher Fragenkatalog-Punkt**, kein Katalog-Eintrag für Bereichs-Zuordnung (bestätigter Zustand, Deckungsgleichheit in der Bereichs-Dimension, AC5).
+
+### 5.3 Deckungsgleich → Ende ohne Katalog/Änderung (AC5, from-notes-areas — *deckt A1*)
+
+Finden 5.2 + 5.2a **zusammen** (a) **keine** Divergenzen im Inhalts-Abgleich **und** (b) **keine** bereichsfremden Themen → **kein** Fragenkatalog, **keine** Doku-Änderung, **keine** Bereichs-Katalog-Punkte. Klare **„deckungsgleich"**-Meldung ausgeben und **enden** (Rauscharmut, AC5). Der Notiz-Ordner bleibt unangetastet.
+
+### 5.4 Genau EIN Fragenkatalog, gerichteter Entscheid (AC4/AC5, from-notes-areas)
+
+Bei ≥1 Divergenz **oder** ≥1 bereichsfremdes Thema **alle zusammen** als **genau EINEN** Fragenkatalog aufbauen — gleiches maschinenlesbares Rückgabeformat wie `[[obsidian-ingest]]` AC9 (`board/fragenkatalog.schema.json`):
+- **Content-Divergenzen:** je Frage `stage:"sync"`, `id`-Muster `sync-<n>` (katalog-eindeutig), `frage` (die Divergenz in Alltagssprache), `quelle` = `notiz_fundstelle` + `doku_ziel`, und `optionen:["uebernehmen","behalten","manuell"]` (je Divergenz **eine** Frage mit genau diesen drei Richtungen).
+- **Unassignierte Themen ((AC5, from-notes-areas)):** je Thema ebenfalls `stage:"sync"`, `id`-Muster `sync-<n>` (Fortlauf über alle Katalog-Punkte), `frage` = „Notiz-Thema ‚<name>' — Bereichs-Zuordnung?", `quelle` = Notiz-Fundstelle(n), `optionen:["bereich-<id>", "bereich-<id>", …, "neuer-bereich", "skippen"]` (konkrete Bereichs-IDs aus `areas.yaml` + Owner-Entscheid-Optionen).
+
+Den Katalog durch den **wiederverwendeten** Gate-Validator prüfen:
    ```bash
    printf '%s' "$KATALOG_SYNC_JSON" | bash "$CLAUDE_PLUGIN_ROOT/scripts/obsidian-fragenkatalog-validate.sh"
    ```
-   - **`valid`** → dem User **am Stück** vorlegen (Terminal: `AskUserQuestion`, ein Prompt für alle Divergenzen; dev-gui rendert denselben JSON-Katalog und reicht die Antworten über die `id`-Zuordnung zurück). **Nie** Einzel-Prompt je Fund verstreut (AC4/Edge).
-   - **`empty`** darf hier **nicht** auftreten (bei ≥1 Divergenz ist der Katalog nicht leer); erscheint es doch → es lag Deckungsgleichheit vor → 5.3.
+   - **`valid`** → dem User **am Stück** vorlegen (Terminal: `AskUserQuestion`, ein Prompt für alle Punkte; dev-gui rendert denselben JSON-Katalog und reicht die Antworten über die `id`-Zuordnung zurück). **Nie** Einzel-Prompt je Fund verstreut (AC4/Edge).
+   - **`empty`** darf hier **nicht** auftreten (bei ≥1 Fund aus 5.2+5.2a ist der Katalog nicht leer); erscheint es doch → es lag Deckungsgleichheit vor → 5.3.
    - **Exit 1/2** (Vertragsverletzung / Aufrufproblem) → den selbst erzeugten Katalog korrigieren und erneut validieren (nie einen ungültigen Katalog vorlegen).
 
-### 5.5 Selektiv schreiben — nur „übernehmen" (AC3/AC4, *deckt A2*)
+### 5.5 Selektiv schreiben — nur „übernehmen"/„neuer-bereich" (AC3/AC4, (AC5, from-notes-areas), *deckt A2*)
 
-Erst **nach** vollständiger Beantwortung, **je Divergenz** streng nach Entscheid:
+Erst **nach** vollständiger Beantwortung, **je Divergenz/Thema** streng nach Entscheid:
 
+**Content-Divergenzen:**
 - **`uebernehmen`** → die Notiz-Aussage in das jeweilige `doku_ziel` (`docs/concept.md` bzw. `docs/specs/<feature>.md`) **schreiben**.
 - **`behalten`** → **nichts** ändern; die bestehende `concept.md`/Spec bleibt unverändert (*deckt A2*).
 - **`manuell`** → **nichts** automatisch ändern; als offener Punkt dem User überlassen.
 
-**Schreib-Umfang (hart, AC3/AC4):** ausschließlich `docs/concept.md` / `docs/specs/*` und **ausschließlich** die als „übernehmen" gewählten Divergenzen — **nie** automatisch, **nie** in den Notiz-Ordner (AC6). Jede geschriebene Änderung ist auf eine `notiz_fundstelle` + einen expliziten User-Entscheid rückführbar (NFR Nachvollziehbarkeit). Gibt es ≥1 „übernehmen", fahren die Änderungen in **einen** durable Commit (`docs/`); Branch-Protection → docs-only-PR + Self-Merge (analog Ingest §1.4).
+**Unassignierte Themen ((AC5, from-notes-areas)):**
+- **`bereich-<id>`** (bestehender Bereich gewählt) → **nichts schreiben** — die Zuordnung ist dokumentiert (Owner-Entscheid im Katalog), keine Aktualisierung von `board/areas.yaml` erforderlich (der Bereich existiert bereits).
+- **`neuer-bereich`** (Owner-Entscheid) → **`board/areas.yaml` append-only** (invertierte Autorität: ein expliziter Owner-Entscheid IST die Freigabe): Bereich mit Feldern `id` (kebab-case, eindeutig), `titel`, `beschreibung` (genau 1 Satz), `reihenfolge` (nächster freier int) aus dem Thema abgeleitet (konform [[board-areas]] AC1) an `board/areas.yaml` anhängen. Bestehendes wird **nie** blind überschrieben (append-only, nicht-destruktiv). `board lint` (`AREA-FIELD`) fängt Formatfehler ab. Der Write fahrt im **Sync-Commit** mit (siehe 5.5a).
+- **`skippen`** → **nichts** schreiben; Thema wird nicht weiter berücksichtigt.
+
+**Schreib-Umfang (hart, AC3/AC4/AC5):** **Content-Divergenzen** — ausschließlich die als „übernehmen" gewählten Einträge in `docs/concept.md` / `docs/specs/*` schreiben, **nie** automatisch, **nie** ungefragt, **nie** in den Notiz-Ordner (AC6). **Unassignierte Produktbereich-Themen** — keine Aktualisierung von `board/areas.yaml` für „bereich-<id>"- oder „skippen"-Entscheidungen (Zuordnung ist dokumentiert, Thema wird ignoriert). **Einzige Ausnahme** (AC5): bei explizitem Owner-Entscheid **„neuer-bereich"** einen neuen Bereich (konform [[board-areas]] AC1: `id`/`titel`/`beschreibung`/`reihenfolge` aus dem Thema abgeleitet) **append-only** an `board/areas.yaml` anhängen — **nie** blind überschreiben, **nur** wenn der Owner diesen Entscheid im beantwortetenen Katalog trifft (invertierte Autorität: Entscheid IST Freigabe). Jede geschriebene Änderung ist auf eine `notiz_fundstelle` + einen expliziten User-Entscheid rückführbar (NFR Nachvollziehbarkeit). Gibt es ≥1 „übernehmen" (Content) **oder** ≥1 „neuer-bereich" (Thema), fahren die Änderungen in **einen** durable **Sync-Commit** (siehe 5.5a); Branch-Protection → docs-only-PR + Self-Merge (analog Ingest §1.4).
+
+### 5.5a Sync-Commit — durable Landung bei Schreiben (AC3, AC5)
+
+Erst **nach** vollständiger Schreib-Phase (5.5: alle „übernehmen" + „neuer-bereich" durchgeführt):
+
+```bash
+git add docs/ board/areas.yaml && git commit -m "notes(sync): Obsidian-Re-Sync — Divergenzen uebernommen, Bereiche ggf. erweitert (obsidian-sync)
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>" && git push
+```
+
+- **`docs/`** immer adden, wenn ≥1 „übernehmen" (Content-Schreiben).
+- **`board/areas.yaml`** nur adden, wenn ≥1 „neuer-bereich" gewählt wurde (neue Bereiche appended).
+- Gibt es **weder** „übernehmen" **noch** „neuer-bereich" → **kein Commit** (Deckungsgleichheit oder nur „behalten"/„skippen", siehe 5.3).
+- Lehnt Branch-Protection den Direkt-Push ab → docs-only-PR öffnen + selbst mergen (analog Ingest §1.4).
 
 ### 5.6 Kein Folge-Automatismus (AC6)
 
