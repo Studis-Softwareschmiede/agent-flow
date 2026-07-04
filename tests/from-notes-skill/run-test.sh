@@ -11,7 +11,7 @@
 #       reale Projekt-Docs/Board — reine Lektuere der eingecheckten Skill-Datei.
 #
 # Covers (obsidian-ingest): AC11, AC12, AC13, AC14
-# Covers (from-notes-areas): AC1, AC2, AC3
+# Covers (from-notes-areas): AC1, AC2, AC3, AC4
 #   AC11 — Fabrik-Befehl /agent-flow:from-notes orchestriert drei Stufen IN REIHE:
 #          (a) Korpus -> docs/concept.md, (b) Konzept -> docs/specs/<feature>.md
 #          (+ architekt/dba), (c) Spec(s) -> Board-Items ueber den bestehenden
@@ -35,10 +35,17 @@
 #         unstrittig + eindeutig -> Auto-Durchlauf.
 #   AC3 — Nach Beantwortung/Bestaetigung board/areas.yaml mit bestaetigung Bereichen
 #         schreiben; Schreibvorgang im Stufe-a-Commit; Notiz-Ordner nie beschrieben.
+#   AC4 — Board-Stufe c legt Storys ausschliesslich unter Bereichs-Features bestätigter
+#         Bereiche an (Story-parent = Bereichs-Feature, neue Spec mit area:<bereich>);
+#         kein Item ohne Bereich, keine autonome Bereichs-Erfindung (requirement führt
+#         Bereichs-Gate durch, liest bestätigte Bereiche aus areas.yaml). Edge-Case E1:
+#         fehlt areas.yaml oder keine Bereiche bestätigt -> verhält sich wie ohne
+#         Bereichs-Gate und vermerkt das im Output (no-op, keine Specs ohne area).
 #
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 #
 # @trace obsidian-ingest#AC11,AC12,AC13,AC14
+# @trace from-notes-areas#AC1,AC2,AC3,AC4
 
 set -uo pipefail
 
@@ -174,6 +181,25 @@ has 'board/areas\.yaml.*schreiben|areas\.yaml.*Commit' \
 has 'best.{0,3}tigt.*Bereich|best.{0,3}tigte' "@trace from-notes-areas#AC3" "Nur bestaatigte Bereiche in areas.yaml (AC3)"
 has 'Stufe.*a.*Commit.*areas|notes\(a\).*areas' \
                                               "@trace from-notes-areas#AC3" "Schreiben faehrt im Stufe-a-Commit (AC3)"
+
+# ===========================================================================
+# AC4 (from-notes-areas) — Stufe c mit Bereichs-Gate (bestätigte Bereiche)
+# ===========================================================================
+has 'Stufe c.*Bereichs-Gate|Bereichs-Gate.*Stufe c|bestätigt.*Bereiche.*Stufe c' \
+                                              "@trace from-notes-areas#AC4" "Stufe c mit Bereichs-Gate (AC4)"
+has 'requirement.*Bereichs-Gate|requirement.*bestätigt' \
+                                              "@trace from-notes-areas#AC4" "requirement-Agent führt Bereichs-Gate durch (AC4)"
+has 'areas\.yaml.*liest|liest.*areas\.yaml|bestätigt.*Bereich.*aus.*areas' \
+                                              "@trace from-notes-areas#AC4" "Bestätigte Bereiche aus areas.yaml gelesen (AC4)"
+has 'Story.*parent.*Bereichs-Feature|parent.*Bereichs-Feature' \
+                                              "@trace from-notes-areas#AC4" "Story-parent = Bereichs-Feature (AC4)"
+has 'area:.*bereich|area.*Frontmatter|area.*stempel' \
+                                              "@trace from-notes-areas#AC4" "Neue Specs mit area:<bereich> gestempelt (AC4)"
+has 'kein.*Item.*ohne.*Bereich|keine autonome.*Bereichs-Erfindung' \
+                                              "@trace from-notes-areas#AC4" "Kein Item ohne Bereich, keine autonome Erfindung (AC4)"
+has 'Edge-Case E1|E1.*Bereich|areas\.yaml.*fehlt.*Gate|keine.*Bereiche.*Gate' \
+                                              "@trace from-notes-areas#AC4" "Edge-Case E1: areas.yaml fehlt/leer (AC4)"
+has 'Ideen-Inbox|bereichsfremd'               "@trace from-notes-areas#AC4" "Bereichsfremde Specs in Ideen-Inbox (AC4)"
 
 # ===========================================================================
 # Schema-Kompatibilität: a-<n>-Muster gegen echten Validator (Critical Fix Iter-2)
