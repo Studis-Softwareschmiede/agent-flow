@@ -2,6 +2,7 @@
 id: obsidian-ingest
 title: Obsidian-Ingest — Notiz-Ordner als Requirement-Quelle (Notiz → Konzept → Spec → Stories)
 status: active
+area: anforderung-intake
 version: 1
 spec_format: use-case-2.0
 ---

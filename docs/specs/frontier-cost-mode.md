@@ -2,6 +2,7 @@
 id: frontier-cost-mode
 title: Vierter Cost-Modus `frontier` (opt-in, Modell-Klasse fable)
 status: active
+area: wissen-packs
 version: 1
 ---
 

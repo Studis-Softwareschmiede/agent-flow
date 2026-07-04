@@ -9,7 +9,7 @@ goal: 'Das Metrik-Ledger wird für aktuelle Stories nicht befüllt — darum ble
   (drift-arm, weiter K3/nicht-blockierend), kanonisches item-Format S-###, Token-Erfassung
   im GUI-/Container-Kontext, und ein sichtbarer Self-Check beim Done, der fehlende
   Zeilen meldet statt sie still zu schlucken. Keine Rückbefüllung alter Stories.'
-status: Done
+status: Archived
 priority: P2
 spec: docs/specs/metrics-recording-reliability.md
 definition_of_done: metrics-recording-reliability.md approved; /flow schreibt je Done
@@ -25,7 +25,6 @@ labels:
 depends: null
 owner: alex
 created_at: '2026-06-19T00:00:00Z'
-updated_at: '2026-07-02T05:27:22Z'
-stories:
-- S-006
-progress: 1/1 done
+updated_at: '2026-07-04T07:53:19Z'
+stories: null
+progress: 0/0 done

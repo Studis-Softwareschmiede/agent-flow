@@ -2,6 +2,7 @@
 id: apriori-token-estimate
 title: Token-Erwartung bei Story-Anlage (requirement) — Schätzspalte nie leer
 status: active
+area: metriken-schaetzung
 version: 1
 spec_format: use-case-2.0
 ---

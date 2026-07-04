@@ -2,6 +2,7 @@
 id: reconcile
 title: Reconcile — Doku per /agent-flow:reconcile wieder mit der Realität in Deckung bringen
 status: draft
+area: doku-reconcile
 version: 2
 spec_format: use-case-2.0
 ---

@@ -9,7 +9,7 @@ goal: 'Nur coder und reviewer haben heute eine Tier-1-Write-back-Instruktion (sy
   und liest die fuer sie relevanten projekt-lokalen Lessons. Eigenstaendige Root Cause
   gegenueber F-010 (dort: Lessons gehen beim Landen verloren; hier: manche Rollen
   schreiben nie welche) — thematisch benachbart, aber kein Hard-Depend.'
-status: Backlog
+status: Archived
 priority: P2
 spec: docs/specs/lessons-writeback-coverage.md
 definition_of_done: null
@@ -18,10 +18,7 @@ labels:
 - docs
 depends: null
 owner: null
-stories:
-- S-019
-- S-025
-- S-026
-progress: 0/3 done
+stories: null
+progress: 0/0 done
 created_at: '2026-07-02T05:53:09Z'
-updated_at: '2026-07-02T06:08:18Z'
+updated_at: '2026-07-04T07:53:20Z'

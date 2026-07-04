@@ -2,6 +2,7 @@
 id: metrics-repo-anchor
 title: Metrik-Schreibpfad am Projekt-Repo verankern (nie Plugin-Root, nie Worktree)
 status: active
+area: metriken-schaetzung
 version: 1
 spec_format: use-case-2.0
 ---

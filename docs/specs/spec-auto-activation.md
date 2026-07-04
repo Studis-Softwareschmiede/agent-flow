@@ -2,6 +2,7 @@
 id: spec-auto-activation
 title: requirement aktiviert neu angelegte Specs automatisch (draft → active)
 status: active
+area: anforderung-intake
 version: 1
 spec_format: use-case-2.0
 ---

@@ -1,0 +1,31 @@
+id: S-039
+parent: F-017
+title: Requirement-Eingangs-Gate — Bereichs-Zuordnung, Begruendung, Owner-Schwelle
+status: Done
+priority: P1
+spec: docs/specs/requirement-area-intake.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC5
+- AC6
+depends:
+- S-034
+- S-036
+labels:
+- process
+size_est: L
+dispo_est: '7.0'
+dispo_act: '3'
+dispo_forecast: '1.3333'
+estimate_note: estimator nicht verfuegbar (kein Task-Tool im Lauf); dispo_est+tok_est
+  aus baseline md|balanced|L (n=4)
+confidence: low
+tok_est: '3263685'
+branch: feat/S-039-requirement-area-intake
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/260
+blocked_reason: null
+created_at: '2026-07-03T11:19:58Z'
+updated_at: '2026-07-04T07:52:41Z'
+done_at: '2026-07-03T17:45:02Z'

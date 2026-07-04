@@ -1,0 +1,43 @@
+id: S-019
+parent: F-022
+title: Tier-1-Write-back + Lessons-Read in tester.md, dba.md (Review), cicd.md (AC1-AC11;
+  4 weitere Rollen ausgegliedert in S-025/S-026)
+status: Done
+priority: P2
+spec: docs/specs/lessons-writeback-coverage.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+- AC6
+- AC7
+- AC8
+- AC9
+- AC10
+- AC11
+depends: null
+labels:
+- process
+- docs
+size_est: L
+dispo_est: '7.0'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Scope UNVERAENDERT (3 Rollen tester/dba/cicd, AC1-AC11). Die vom Owner
+  2026-07-02 ergaenzten 4 Rollen (requirement/estimator/architekt/designer, AC12-AC22)
+  wurden bewusst NICHT hier reingezogen, sondern in S-025 (requirement+estimator)
+  und S-026 (architekt+designer+Querschnitt) ausgegliedert -> kleinere PRs, weniger
+  Reviewer-Overhead. Groesse korrigiert: Heuristik-Score 14 -> Tabelle XL, aber Repetitions-Rabatt
+  (3 strukturell identische kleine .md-Ergaenzungen) -> L; die dba-Blanket-Ausnahme->Domaenen-Trennung
+  (AC4) ist der einzige nicht-repetitive Semantik-Anteil. dispo_est via baseline md|balanced|L
+  ep=7.0 (n=4) als Fallback, da estimator-Dispatch im requirement-Subagent-Kontext
+  (kein Task-Tool) nicht verfuegbar -> confidence low.'
+confidence: low
+branch: feat/S-019-lessons-writeback-coverage
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/222
+blocked_reason: null
+created_at: '2026-07-02T05:53:14Z'
+updated_at: '2026-07-04T07:52:41Z'
+done_at: '2026-07-02T09:05:57Z'

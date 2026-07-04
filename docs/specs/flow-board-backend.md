@@ -2,6 +2,7 @@
 id: flow-board-backend
 title: /flow auf File-Board — board next/set statt gh + Story-ID-Brücke ins Ledger
 status: active
+area: board
 version: 1
 ---
 

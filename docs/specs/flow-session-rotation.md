@@ -2,6 +2,7 @@
 id: flow-session-rotation
 title: /flow Session-Rotation — eine gelandete Story (bzw. ein SR1-Batch) pro Session
 status: active
+area: flow-orchestrierung
 version: 1
 spec_format: use-case-2.0
 ---

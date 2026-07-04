@@ -2,6 +2,7 @@
 id: metrics-recording-reliability
 title: Zuverlässige Metrik-Erfassung im /flow (Ledger-Lücken, ID-Format, Token)
 status: draft
+area: metriken-schaetzung
 version: 1
 ---
 
