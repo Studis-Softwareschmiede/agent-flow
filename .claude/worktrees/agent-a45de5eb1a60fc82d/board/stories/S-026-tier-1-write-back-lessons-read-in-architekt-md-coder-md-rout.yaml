@@ -1,0 +1,38 @@
+id: S-026
+parent: F-011
+title: Tier-1-Write-back + Lessons-Read in architekt.md (coder.md-Routing) + designer.md
+  (nur Selbst) + AC11-Praezisierung
+status: To Do
+priority: P2
+spec: docs/specs/lessons-writeback-coverage.md
+implements:
+- AC16
+- AC17
+- AC18
+- AC19
+- AC20
+- AC21
+- AC22
+depends:
+- S-019
+labels:
+- process
+- docs
+size_est: M
+dispo_est: '3.0'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Heuristik-Score 12 (7 AC inkl. 3 Querschnitt + 5 Komponenten: architekt.md/designer.md
+  + Self-Lessons + coder.md) -> Tabelle L. Repetitions-Rabatt angewandt: ueberwiegend
+  gleichartige kleine Agent-Def-Ergaenzungen; einziges Extra ist die coder.md-Routung
+  des architekt (analog reviewer/dba) + Abgrenzungstext beim designer -> effektiv
+  M (oberes Ende). Querschnitt-ACs AC20/21/22 sind ueber dieselben Edits per Inspektion
+  pruefbar. S/M -> kein estimator-Dispatch; baseline md|balanced|M ep=3.0 (n=8) ->
+  dispo_est 3.0, confidence medium.'
+confidence: medium
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-02T06:07:17Z'
+updated_at: '2026-07-02T06:07:38Z'
+done_at: null

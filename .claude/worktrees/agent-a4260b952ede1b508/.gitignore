@@ -1,0 +1,23 @@
+# Plaintext-Secrets — NIE committen (nur .env.gpg ist versioniert)
+.env
+*.plain
+cloudflare
+
+# Metrik-Ledger (lokale, pro-Lauf wachsende Mess-Daten — docs/architecture/metrics-subsystem.md §11)
+# dispatches.jsonl + items.jsonl gitignored; baseline.json bleibt committet.
+.claude/metrics/dispatches.jsonl
+.claude/metrics/items.jsonl
+
+# (Hinweis: KEIN `specs/`-Ignore — seit CONCEPT §4d sind Specs durable und
+#  versioniert; `templates/_docs/specs/` und projekt-eigene `docs/specs/` werden committet.)
+
+# Projekt-lokale Lessons (Tier-1, von reviewer.md geschrieben) — NIE committen
+# Sie sind per Spec-Lifecycle projekt-lokal; retro promotet sie via PR ins
+# globale knowledge/ (4 Schutzgitter, siehe agents/retro.md).
+.claude/lessons/
+
+# OS / Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

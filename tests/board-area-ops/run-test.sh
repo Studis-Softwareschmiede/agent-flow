@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/board-area-ops/run-test.sh
 #
-# Covers (board-area-ops): AC1, AC2, AC4, AC5
+# Covers (board-area-ops): AC1, AC2, AC3, AC4, AC5
 #   AC1 — `board area list` gibt board/areas.yaml als sortiertes JSON-Array
 #         (id, titel, beschreibung, reihenfolge) aus; fehlt areas.yaml -> []
 #         Exit 0 (Tests 1-2).
@@ -11,18 +11,21 @@
 #         Ideen-Inbox-Eintraege) von a/b auf ziel umgeschrieben; idempotent;
 #         verschiebt keine Dateien/aendert keine Spec-IDs; unbekannter
 #         Bereich -> kein Schreiben, Exit != 0 (Tests 3-8).
+#   AC3 — `board archive-done-stories` verschiebt alle Stories mit status=Done
+#         nach board/stories/archive/, aktualisiert betroffene Feature-Rollups,
+#         anderer Status bleibt unangetastet, idempotent (Tests 9-13).
 #   AC4 — `board area split <a> <a1> <a2>` ist assistiert: listet Specs/
 #         Features(+Storys informativ)/Ideen-Inbox-Eintraege von <a> mit
 #         Ziel-Vorschlag + Konfidenz; eindeutige Faelle werden direkt
 #         umgeschrieben, unklare landen als Fragenkatalog
 #         ({stage,id,frage,quelle,optionen}, stage="split"); verschiebt keine
 #         Dateien/aendert keine Spec-IDs; unbekannter Quell-Bereich -> kein
-#         Schreiben, Exit != 0 (Tests 10-15).
+#         Schreiben, Exit != 0 (Tests 15-19).
 #   AC5 — atomares Schreiben (kein halber Zustand bei Fehler); ungueltige
 #         Eingabe -> NICHTS geschrieben, Exit != 0 (Test 6 — unbekannter
-#         Bereich; Test 9 — neuer <ziel>-Slug verletzt Kebab-Case-Pattern
-#         aus board/areas.schema.json; Test 10/11 — split-Analoga; split-
-#         Heuristik ist token-frei/deterministisch — Tests 12-14).
+#         Bereich; Test 14 — neuer <ziel>-Slug verletzt Kebab-Case-Pattern
+#         aus board/areas.schema.json; Tests 15/16 — split-Analoga; split-
+#         Heuristik ist token-frei/deterministisch — Tests 17-19).
 #
 # Self-Test fuer die `board area list`/`board area merge`/`board area split`-
 # Erweiterung von `scripts/board` (docs/specs/board-area-ops.md). Verwendet
@@ -514,10 +517,216 @@ else
 fi
 
 # ===========================================================================
-# Test 9: AC5 — neuer <ziel>-Slug verletzt Kebab-Case-Pattern -> Fehler, kein Schreiben
+# Test 9: AC3 — archive-done-stories verschiebt Done-Stories nach archive/
 # ===========================================================================
 echo ""
-echo "--- Test 9: AC5 — ungueltiger <ziel>-Slug (kein kebab-case) -> Fehler, kein Schreiben ---"
+echo "--- Test 9: AC3 — Done-Stories werden nach archive/ verschoben ---"
+
+T9_DIR="${TEST_WORK_DIR}/test9"
+setup_board "$T9_DIR"
+make_areas_yaml "$T9_DIR" \
+  "- id: board" \
+  "  titel: Board" \
+  "  beschreibung: Schema und CLI." \
+  "  reihenfolge: 1"
+make_feature "$T9_DIR" "F-001" "board"
+make_story_for "$T9_DIR" "S-001" "F-001" "Done Story"
+make_story_for "$T9_DIR" "S-002" "F-001" "Active Story"
+
+# Setze S-001 auf Done, S-002 auf Active
+sed -i.bak 's/status: To Do/status: Done/' "$T9_DIR/board/stories/S-001-s-001.yaml"
+sed -i.bak 's/status: To Do/status: In Progress/' "$T9_DIR/board/stories/S-002-s-002.yaml"
+
+T9_OUT="$(cd "$T9_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" archive-done-stories)"
+
+if echo "$T9_OUT" | grep -q "S-001"; then
+  pass "Test 9a: archivierte Story-ID wird ausgegeben (AC3)"
+else
+  fail "Test 9a: S-001 nicht in Ausgabe (Output: $T9_OUT)"
+fi
+
+if [[ -f "$T9_DIR/board/stories/archive/S-001-s-001.yaml" ]]; then
+  pass "Test 9b: Done-Story wurde nach archive/ verschoben (AC3)"
+else
+  fail "Test 9b: S-001 nicht in archive/"
+fi
+
+if [[ -f "$T9_DIR/board/stories/S-002-s-002.yaml" ]]; then
+  pass "Test 9c: In-Progress-Story bleibt im aktiven Board (AC3)"
+else
+  fail "Test 9c: S-002 wurde faelschlich verschoben"
+fi
+
+if ! echo "$T9_OUT" | grep -q "S-002"; then
+  pass "Test 9d: nicht-Done-Story wird nicht archiviert (AC3)"
+else
+  fail "Test 9d: S-002 in Ausgabe (sollte nicht archiviert werden)"
+fi
+
+# ===========================================================================
+# Test 10: AC3/AC5 — Feature-Rollup wird nach Archivierung aktualisiert
+# ===========================================================================
+echo ""
+echo "--- Test 10: AC3 — Feature-Rollup wird aktualisiert nach Archivierung ---"
+
+T10_DIR="${TEST_WORK_DIR}/test10"
+setup_board "$T10_DIR"
+make_areas_yaml "$T10_DIR" \
+  "- id: board" \
+  "  titel: Board" \
+  "  beschreibung: Schema und CLI." \
+  "  reihenfolge: 1"
+make_feature "$T10_DIR" "F-001" "board"
+make_story_for "$T10_DIR" "S-010" "F-001" "Story eins"
+make_story_for "$T10_DIR" "S-011" "F-001" "Story zwei"
+
+# Beide Stories auf Done setzen
+sed -i.bak 's/status: To Do/status: Done/' "$T10_DIR/board/stories/S-010-s-010.yaml"
+sed -i.bak 's/status: To Do/status: Done/' "$T10_DIR/board/stories/S-011-s-011.yaml"
+
+# Archivieren und Output erfassen
+T10_OUTPUT="$(cd "$T10_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" archive-done-stories)"
+
+# (a) EXAKTER Output-Check: nur S-010 und S-011, sortiert, keine Extrahzeilen
+T10_EXPECTED=$'S-010\nS-011'
+if [[ "$T10_OUTPUT" == "$T10_EXPECTED" ]]; then
+  pass "Test 10a: archive-done-stories Output exakt: Liste nur archivierter Story-IDs (AC3)"
+else
+  fail "Test 10a: Output weicht ab (erwartet: '$T10_EXPECTED', erhalten: '$T10_OUTPUT')"
+fi
+
+# (b) Feature-Rollup aktualisiert: stories und progress im Feature sollten sich geaendert haben
+T10_AFTER="$(cat "$T10_DIR/board/features/F-001-f-001.yaml")"
+
+# Prüfe stories-Feld: sollte jetzt null/leer sein (da alle Done und archiviert)
+if echo "$T10_AFTER" | grep -q "stories: null" || echo "$T10_AFTER" | grep -q "stories: \[\]"; then
+  pass "Test 10b: Feature stories-Feld nach Archivierung auf null/[] gesetzt (Rollup-Update)"
+else
+  fail "Test 10b: Feature stories-Feld nicht aktualisiert"
+  echo "$T10_AFTER"
+fi
+
+# Prüfe progress-Feld: sollte sich ebenfalls aktualisiert haben (0/0 done, null, oder {})
+if echo "$T10_AFTER" | grep -q "progress:" && echo "$T10_AFTER" | grep -qE "progress:\s*null|progress:\s*0/0|progress:\s*{}"; then
+  pass "Test 10c: Feature progress-Feld nach Rollup aktualisiert (AC3)"
+else
+  fail "Test 10c: Feature progress-Feld nicht korrekt aktualisiert"
+  echo "$T10_AFTER"
+fi
+
+if [[ -f "$T10_DIR/board/features/F-001-f-001.yaml" ]]; then
+  pass "Test 10d: Feature-Datei bleibt bestehen nach Archivierung (AC3)"
+else
+  fail "Test 10d: Feature-Datei wurde faelschlich geloescht"
+fi
+
+# ===========================================================================
+# Test 11: AC3 — archive-done-stories ist idempotent
+# ===========================================================================
+echo ""
+echo "--- Test 11: AC3 — zweiter Aufruf ist idempotent (leere Ausgabe) ---"
+
+T11_DIR="${TEST_WORK_DIR}/test11"
+setup_board "$T11_DIR"
+make_areas_yaml "$T11_DIR" \
+  "- id: board" \
+  "  titel: Board" \
+  "  beschreibung: Schema und CLI." \
+  "  reihenfolge: 1"
+make_feature "$T11_DIR" "F-001" "board"
+make_story_for "$T11_DIR" "S-100" "F-001" "Done Story"
+
+sed -i.bak 's/status: To Do/status: Done/' "$T11_DIR/board/stories/S-100-s-100.yaml"
+
+# Erster Aufruf
+T11_OUT1="$(cd "$T11_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" archive-done-stories)"
+
+if echo "$T11_OUT1" | grep -q "S-100"; then
+  pass "Test 11a: erstes Archivieren gibt Story-ID aus"
+else
+  fail "Test 11a: S-100 nicht in erstem Aufruf"
+fi
+
+# Zweiter Aufruf (idempotent)
+T11_OUT2="$(cd "$T11_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" archive-done-stories)"
+
+if [[ -z "$T11_OUT2" ]] || [[ "$T11_OUT2" =~ ^[[:space:]]*$ ]]; then
+  pass "Test 11b: zweiter Aufruf gibt leere Ausgabe (idempotent, AC3)"
+else
+  fail "Test 11b: zweiter Aufruf nicht leer (Output: '$T11_OUT2')"
+fi
+
+# ===========================================================================
+# Test 12: AC3 — keine Done-Stories -> leere Ausgabe, Exit 0
+# ===========================================================================
+echo ""
+echo "--- Test 12: AC3 — keine Done-Stories -> leere Ausgabe, Exit 0 ---"
+
+T12_DIR="${TEST_WORK_DIR}/test12"
+setup_board "$T12_DIR"
+make_areas_yaml "$T12_DIR" \
+  "- id: board" \
+  "  titel: Board" \
+  "  beschreibung: Schema und CLI." \
+  "  reihenfolge: 1"
+make_feature "$T12_DIR" "F-001" "board"
+make_story_for "$T12_DIR" "S-200" "F-001" "To Do Story"
+# Status ist bereits To Do
+
+T12_EXIT=0
+T12_OUT=""
+set +e
+T12_OUT="$(cd "$T12_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" archive-done-stories)"
+T12_EXIT=$?
+set -e
+
+if [[ $T12_EXIT -eq 0 ]]; then
+  pass "Test 12a: Exit 0 wenn keine Done-Stories (AC3)"
+else
+  fail "Test 12a: Exit ${T12_EXIT} (erwartet 0)"
+fi
+
+if [[ -z "$T12_OUT" ]] || [[ "$T12_OUT" =~ ^[[:space:]]*$ ]]; then
+  pass "Test 12b: leere Ausgabe wenn keine Done-Stories (AC3)"
+else
+  fail "Test 12b: Output nicht leer (${T12_OUT})"
+fi
+
+# ===========================================================================
+# Test 13: AC3 — list/next/rollup ignorieren archivierte Stories
+# ===========================================================================
+echo ""
+echo "--- Test 13: AC3 — list/next ignorieren archivierte Stories ---"
+
+T13_DIR="${TEST_WORK_DIR}/test13"
+setup_board "$T13_DIR"
+make_areas_yaml "$T13_DIR" \
+  "- id: board" \
+  "  titel: Board" \
+  "  beschreibung: Schema und CLI." \
+  "  reihenfolge: 1"
+make_feature "$T13_DIR" "F-001" "board"
+make_story_for "$T13_DIR" "S-300" "F-001" "Story wird archiviert"
+
+sed -i.bak 's/status: To Do/status: Done/' "$T13_DIR/board/stories/S-300-s-300.yaml"
+
+# Archivieren
+(cd "$T13_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" archive-done-stories >/dev/null)
+
+# next sollte die archivierte Story nicht auflisten
+T13_NEXT="$(cd "$T13_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" next 2>/dev/null || echo '')"
+
+if ! echo "$T13_NEXT" | grep -q "S-300"; then
+  pass "Test 13: archivierte Story wird von 'next' ignoriert (AC3)"
+else
+  fail "Test 13: archivierte Story noch in 'next' (Output: $T13_NEXT)"
+fi
+
+# ===========================================================================
+# Test 14: AC5 — neuer <ziel>-Slug verletzt Kebab-Case-Pattern -> Fehler, kein Schreiben
+# ===========================================================================
+echo ""
+echo "--- Test 14: AC5 — ungueltiger <ziel>-Slug (kein kebab-case) -> Fehler, kein Schreiben ---"
 
 T9_DIR="${TEST_WORK_DIR}/test9"
 setup_board "$T9_DIR"
@@ -561,7 +770,7 @@ fi
 # Test 10: AC4/AC5 — split mit <a1>==<a2> ist ungueltige Eingabe -> Fehler, kein Schreiben
 # ===========================================================================
 echo ""
-echo "--- Test 10: AC4/AC5 — split <a1>==<a2> -> Fehler, kein Schreiben ---"
+echo "--- Test 15: AC4/AC5 — split <a1>==<a2> -> Fehler, kein Schreiben ---"
 
 T10_DIR="${TEST_WORK_DIR}/test10"
 setup_board "$T10_DIR"
@@ -599,7 +808,7 @@ fi
 # Test 11: AC4/E1 — split mit unbekanntem Quell-Bereich -> Fehler, kein Schreiben
 # ===========================================================================
 echo ""
-echo "--- Test 11: AC4/E1 — split unbekannter Quell-Bereich -> Fehler, kein Schreiben ---"
+echo "--- Test 16: AC4/E1 — split unbekannter Quell-Bereich -> Fehler, kein Schreiben ---"
 
 T11_DIR="${TEST_WORK_DIR}/test11"
 setup_board "$T11_DIR"
@@ -635,7 +844,7 @@ fi
 # Zuordnung (Feature/Spec/Idee), Quell-Bereich entfernt, Storys informativ
 # ===========================================================================
 echo ""
-echo "--- Test 12: AC4/A1 — alles eindeutig -> [] Fragenkatalog, direkte Zuordnung ---"
+echo "--- Test 17: AC4/A1 — alles eindeutig -> [] Fragenkatalog, direkte Zuordnung ---"
 
 T12_DIR="${TEST_WORK_DIR}/test12"
 setup_board "$T12_DIR"
@@ -719,10 +928,10 @@ else
 fi
 
 # ===========================================================================
-# Test 13: AC4 — unklarer Fall landet als Fragenkatalog; Quell-Bereich bleibt bestehen
+# Test 18: AC4 — unklarer Fall landet als Fragenkatalog; Quell-Bereich bleibt bestehen
 # ===========================================================================
 echo ""
-echo "--- Test 13: AC4 — unklarer Fall -> Fragenkatalog, Quell-Bereich bleibt bestehen ---"
+echo "--- Test 18: AC4 — unklarer Fall -> Fragenkatalog, Quell-Bereich bleibt bestehen ---"
 
 T13_DIR="${TEST_WORK_DIR}/test13"
 setup_board "$T13_DIR"
@@ -791,10 +1000,10 @@ else
 fi
 
 # ===========================================================================
-# Test 14: AC4/E2 — neue Ziel-Bereiche werden mit Platzhalter + naechster reihenfolge angelegt
+# Test 19: AC4/E2 — neue Ziel-Bereiche werden mit Platzhalter + naechster reihenfolge angelegt
 # ===========================================================================
 echo ""
-echo "--- Test 14: AC4/E2 — neue Ziel-Bereiche in areas.yaml (Platzhalter, reihenfolge) ---"
+echo "--- Test 19: AC4/E2 — neue Ziel-Bereiche in areas.yaml (Platzhalter, reihenfolge) ---"
 
 T14_DIR="${TEST_WORK_DIR}/test14"
 setup_board "$T14_DIR"
@@ -830,11 +1039,11 @@ else
 fi
 
 # ===========================================================================
-# Test 15: AC5 — split-Heuristik ist deterministisch (zweiter identischer
+# Test 20: AC5 — split-Heuristik ist deterministisch (zweiter identischer
 # Aufruf auf denselben Ausgangszustand liefert dasselbe Ergebnis)
 # ===========================================================================
 echo ""
-echo "--- Test 15: AC5 — split-Heuristik ist deterministisch ---"
+echo "--- Test 20: AC5 — split-Heuristik ist deterministisch ---"
 
 T15_DIR_A="${TEST_WORK_DIR}/test15a"
 T15_DIR_B="${TEST_WORK_DIR}/test15b"

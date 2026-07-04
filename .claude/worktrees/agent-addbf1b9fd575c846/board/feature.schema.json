@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "board/feature.schema.json",
+  "title": "Feature YAML (board/features/F-###-<slug>.yaml)",
+  "description": "Schema fuer ein Feature-Item im board/-Verzeichnis (board-subsystem §4.1).",
+  "type": "object",
+  "required": ["id", "title", "goal", "status", "priority", "created_at", "updated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^F-\\d{3,}$",
+      "description": "Stabile Feature-ID, projektweit eindeutig. Muster: F-### (min. 3 Ziffern)."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Kurztitel des Features."
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1,
+      "description": "1-3 Saetze: Was und Warum (fachliches Ziel)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["Backlog", "Planned", "Active", "Done", "Archived"],
+      "description": "Feature-Lebenszyklus-Status."
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["P0", "P1", "P2", "P3"],
+      "description": "Roadmap-Reihenfolge."
+    },
+    "spec": {
+      "type": ["string", "null"],
+      "description": "Optionaler Pfad zur Feature-Concept-Spec unter docs/specs/."
+    },
+    "definition_of_done": {
+      "type": ["string", "null"],
+      "description": "Optionale, pruefbare Definition of Done auf Feature-Ebene."
+    },
+    "labels": {
+      "type": ["array", "null"],
+      "items": {"type": "string"},
+      "description": "Optionale fachliche Labels."
+    },
+    "depends": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "pattern": "^F-\\d{3,}$"
+      },
+      "description": "Optionale Abhaengigkeiten auf andere Features (grobe Reihenfolge)."
+    },
+    "owner": {
+      "type": ["string", "null"],
+      "description": "Optionaler Verantwortlicher."
+    },
+    "stories": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "pattern": "^S-\\d{3,}$"
+      },
+      "description": "Abgeleitet (nicht von Hand pflegen): Kind-Story-IDs."
+    },
+    "progress": {
+      "type": ["string", "null"],
+      "description": "Abgeleitet (nicht von Hand pflegen): Fortschritts-Zusammenfassung aus Kind-Story-Status."
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "Erstellungszeitstempel ISO-8601-UTC (z.B. 2026-06-14T00:00:00Z)."
+    },
+    "updated_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "Letzter Aenderungszeitstempel ISO-8601-UTC."
+    }
+  }
+}

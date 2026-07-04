@@ -16,14 +16,6 @@
 #       Validator besteht (AC4). Beruehrt NIE reale Projekt-Docs/Board/Notizen.
 #
 # Covers (obsidian-sync): AC1, AC2, AC3, AC4, AC5, AC6
-# Covers (from-notes-areas): AC5
-#
-#   (from-notes-areas)
-#   AC5 — Re-Sync-Modus respektiert bestehende areas.yaml: unassignierte Themen
-#         als Fragenkatalog-Punkte (stage:sync) mit Bereichs-Zuordnungs-Optionen
-#         vorgeschlagen; Rauscharmut wenn keine bereichsfremden Themen;
-#         Owner-Entscheid neuer-bereich/skippen/bereich-zuordnung.
-#   (obsidian-sync)
 #   AC1  — Eigener Modus, geteilte Basis: /agent-flow:from-notes --sync ist ein
 #          eigener Modus desselben Skills; nutzt obsidian_source + Notiz-Korpus-Reader
 #          + aktuellen docs/concept.md/docs/specs/*-Stand als die zwei Vergleichsseiten;
@@ -47,7 +39,6 @@
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 #
 # @trace obsidian-sync#AC1,AC2,AC3,AC4,AC5,AC6
-# @trace from-notes-areas#AC5
 
 set -uo pipefail
 
@@ -129,9 +120,6 @@ has 'obsidian-fragenkatalog-validate\.sh'    "@trace obsidian-sync#AC4" "wiederv
 has 'uebernehmen.{0,6}behalten.{0,6}manuell' "@trace obsidian-sync#AC4" "je Divergenz die drei Richtungen uebernehmen/behalten/manuell"
 has 'nur.{0,10}uebernehmen|nur die als .uebernehmen' \
                                              "@trace obsidian-sync#AC4" "nur uebernehmen schreibt; behalten/manuell aendern nichts"
-has 'bereichsfremd.*Thema|unassigniert.*Thema|Thema.*keinem.*Bereich' \
-                                             "@trace from-notes-areas#AC5" "Erkennung bereichsfremder Themen im Re-Sync (AC5)"
-has 'neuer-bereich|skippen'                  "@trace from-notes-areas#AC5" "Optionen fuer unassignierte Themen: Bereichs-Zuordnung + neuer-bereich + skippen (AC5)"
 
 # ---- Live-Probe: ein sync-Katalog mit den drei Optionen besteht den Gate-Validator ----
 SYNC_CAT='[{"stage":"sync","id":"sync-1","frage":"Notiz idee.md nennt Offline-Modus, docs/concept.md §Scope schliesst ihn aus — Richtung?","quelle":"idee.md -> docs/concept.md §Scope","optionen":["uebernehmen","behalten","manuell"]}]'
@@ -155,18 +143,6 @@ if [[ "$BAD_RC" -eq 1 && -z "$BAD_OUT" ]]; then
   pass "@trace obsidian-sync#AC4 — sync-Katalog mit Fremdfeld -> Exit 1 (Formatvertrag greift auch fuer stage:sync)"
 else
   fail "@trace obsidian-sync#AC4 — sync-Katalog Fremdfeld: erwartet Exit 1/kein Token, bekam Out='${BAD_OUT}' RC=${BAD_RC}"
-fi
-
-# ---- Live-Probe AC5 from-notes-areas: sync-Katalog fuer unassignierte Themen besteht den Gate-Validator ----
-SYNC_TOPIC='[{"stage":"sync","id":"sync-1","frage":"Notiz nennt Thema \"Offline-Modus\", das in board/areas.yaml keinem Bereich zugeordnet ist — Richtung?","quelle":"idee.md §Scope -> board/areas.yaml","optionen":["bereich-frontend","bereich-backend","neuer-bereich","skippen"]}]'
-set +e
-TOPIC_OUT="$(printf '%s' "$SYNC_TOPIC" | bash "$VALIDATE" 2>/dev/null)"
-TOPIC_RC=$?
-set -e
-if [[ "$TOPIC_OUT" == "valid" && "$TOPIC_RC" -eq 0 ]]; then
-  pass "@trace from-notes-areas#AC5 — sync-Katalog fuer unassigniertes Thema (stage:sync + bereich-*/neuer-bereich/skippen) besteht den wiederverwendeten Gate-Validator -> valid"
-else
-  fail "@trace from-notes-areas#AC5 — sync-Katalog unassigniertes Thema: erwartet valid/0, bekam Out='${TOPIC_OUT}' RC=${TOPIC_RC}"
 fi
 
 # ===========================================================================

@@ -1,0 +1,27 @@
+id: F-001
+title: Board-Dateiformat
+goal: 'Abloesung der GitHub-Projects-v2-Boards durch ein eigenes, zweistufiges Board
+  (Feature → Story) mit git-versionierten Dateien als Source of Truth. Ziel: menschenlesbares,
+  diff-freundliches YAML pro Feature/Story mit validierbaren Integritaetsregeln und
+  kollisionsfreier ID-Vergabe.
+
+  '
+status: Done
+priority: P0
+spec: docs/specs/board-schema.md
+definition_of_done: 'board/board.yaml existiert, Feature- und Story-YAML-Schemata
+  sind definiert, board lint meldet Pflichtfeld- und Enum-Fehler mit Datei + Feldname,
+  alle AC1-AC11 gruen.
+
+  '
+labels:
+- board
+- schema
+- cli
+depends: null
+owner: alex
+created_at: '2026-06-14T00:00:00Z'
+updated_at: '2026-07-02T05:27:22Z'
+stories:
+- S-001
+progress: 1/1 done
