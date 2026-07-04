@@ -58,20 +58,27 @@ bash "$CLAUDE_PLUGIN_ROOT/scripts/obsidian-corpus-read.sh" "<aufgelöster-ordner
 **Ziel:** den Notiz-Korpus zum Konzept konsolidieren (Problem · Nutzer · Ziele · Nicht-Ziele · Scope). Diese Stufe ist der **kritische Punkt** (Subsystem §1/§3): eine ungenaue Erst-Übersetzung vererbt Fehler an Spec und Stories.
 
 1. **Übersetzen (niedrigste Nachfrage-Schwelle, AC10):** Aus `$CORPUS_FILE` das Konzept nach `docs/concept.md` schreiben (Skelett `templates/_docs/concept.md`; existiert bereits ein Root-`CONCEPT.md`-Layout wie in manchen Projekten, dort die betroffenen Sektionen ergänzen statt einer neuen Datei — dieselbe Layout-Konvention wie `reconcile`). **Jede** relevante Mehrdeutigkeit/jeder Widerspruch im Ideen-Text wird zur **Frage** (Fragenkatalog-Eintrag), **nicht** zur stillen Annahme — die Schwelle ist hier bewusst niedrig (AC10). Jeder Katalog-Eintrag trägt im `quelle`-Feld den Herkunfts-Marker der Quellnotiz.
-2. **Fragenkatalog-Gate (AC7/AC8/AC9):** Alle offenen Punkte dieser Stufe **gesammelt** als **genau EINE** JSON-Liste von Frage-Objekten aufbauen — je Objekt `stage:"a"`, `id` (katalog-eindeutig, Muster `a-<n>`), `frage`, `quelle` (Notiz-Fundstelle), optional `optionen[]` (Format-Vertrag: `board/fragenkatalog.schema.json`). Den Katalog durch den wiederverwendeten Gate-Validator prüfen und das Vorlege-Verhalten am stdout-Token festmachen:
+
+2. **Areas-Entwurf ableiten (AC1, from-notes-areas):** Nach der `docs/concept.md`-Erzeugung einen **`areas.yaml`-Entwurf** aus dem Konzept ableiten — je Produktbereich `id` (kebab-case), `titel`, `beschreibung` (genau 1 Satz), `reihenfolge` (int, eindeutig), konform zum Feldformat aus [[board-areas]] AC1 (oder über ein Hilfsskript ableiten). Der Entwurf wird als Liste aufgebaut und zur Bestätigung über das Fragenkatalog-Gate vorgelegt (AC2, siehe 1.3). Lässt sich kein Bereich ableiten → minimaler Platzhalter-Bereich (z.B. `{id: allgemein, titel: Allgemein, beschreibung: Platzhalter, reihenfolge: 1}`) oder dokumentiert übersprungen (*deckt E1* der from-notes-areas-Spec).
+
+3. **Fragenkatalog-Gate mit Areas-Bestätigung (AC2, from-notes-areas):** Alle offenen Punkte dieser Stufe **gesammelt** als **genau EINE** JSON-Liste von Frage-Objekten aufbauen — je Objekt `stage:"a"`, `id` (katalog-eindeutig, Muster `a-<n>` für beide Konzept- und Bereichsfragen, fortlaufend), `frage`, `quelle` (Notiz-Fundstelle oder Konzept-Sektion), optional `optionen[]` (Format-Vertrag: `board/fragenkatalog.schema.json`). **Die abgeleiteten Bereiche aus Schritt 1.2 als zusätzliche Katalog-Punkte integrieren:** je Bereich **eine Frage** zum **Streichen/Ergänzen/Bestätigen** (AC2). Den gesammelten Katalog (Konzept-Fragen + Areas-Fragen) durch den wiederverwendeten Gate-Validator prüfen und das Vorlege-Verhalten am stdout-Token festmachen:
    ```bash
    printf '%s' "$KATALOG_A_JSON" | bash "$CLAUDE_PLUGIN_ROOT/scripts/obsidian-fragenkatalog-validate.sh"
    ```
-   - **`empty`** → keine offenen Fragen → **Auto-Durchlauf** (AC8): kein Katalog vorlegen, direkt zu 1.3.
-   - **`valid`** → nicht-leerer Katalog → dem User **am Stück** vorlegen (AC7): im Terminal-Pfad via `AskUserQuestion` (ein Prompt, alle Fragen zusammen); im dev-gui-Pfad rendert dev-gui denselben JSON-Katalog und reicht die Antworten über die `id`-Zuordnung zurück (AC9). **Erst nach** vollständiger Beantwortung fließen die Antworten in `docs/concept.md` ein.
+   - **`empty`** → keine offenen Fragen → **Auto-Durchlauf** (AC8, deckt A1 der from-notes-areas-Spec): kein Katalog vorlegen, abgeleitete Bereiche als Defaults bestätigen, direkt zu 1.4.
+   - **`valid`** → nicht-leerer Katalog → dem User **am Stück** vorlegen (AC7): im Terminal-Pfad via `AskUserQuestion` (ein Prompt, alle Fragen zusammen); im dev-gui-Pfad rendert dev-gui denselben JSON-Katalog und reicht die Antworten über die `id`-Zuordnung zurück (AC9). **Erst nach** vollständiger Beantwortung: (a) fließen die Konzept-Antworten in `docs/concept.md` ein, und (b) werden die Areas-Antworten gefiltert (nur "bestätigen"/"ändern" → in Bestätigung aufnehmen, "streichen" → ausschließen).
    - **Exit 1/2** (Vertragsverletzung / Aufrufproblem) → den selbst erzeugten Katalog korrigieren und erneut validieren (nie einen ungültigen Katalog vorlegen).
-3. **Commit Stufe a (AC12, durable):** Erst **nachdem** der Katalog beantwortet (oder leer) ist:
+
+4. **Commit Stufe a mit areas.yaml (AC3, from-notes-areas, durable):** Erst **nachdem** der Katalog beantwortet (oder leer) ist — die bestätigten Bereiche in `board/areas.yaml` schreiben:
+   - Die Bereiche filtern: nur die als "bestätigen" oder "ändern" gebilligten Bereiche übernehmen. Bei Auto-Durchlauf (leerer Katalog): alle abgeleiteten Bereiche als bestätigt.
+   - `board/areas.yaml` schreiben: Vor dem Schreiben prüfen, ob `board/areas.yaml` bereits existiert (Re-Ingest-Szenario). **Existiert die Datei:** nur die NEUEN bestätigten Bereiche hinzufügen (deren `id` nicht bereits in der bestehenden `areas.yaml` vorhanden ist); **Bestehendes nicht blind überschreiben** (Spec NFR Nicht-destruktiv, Edge-Case-Abschnitt). **Existiert die Datei noch nicht:** alle bestätigten Bereiche als neue YAML-Array schreiben. Ergebnis: konform zu `board/areas.schema.json`.
+   - Dann:
    ```bash
-   git add docs/concept.md .claude/profile.md && git commit -m "notes(a): Notiz-Korpus -> docs/concept.md (obsidian-ingest)
+   git add docs/concept.md board/areas.yaml .claude/profile.md && git commit -m "notes(a): Notiz-Korpus -> docs/concept.md + board/areas.yaml (obsidian-ingest from-notes-areas AC1-AC3)
 
    Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>" && git push
    ```
-   Der Profilfeld-Diff (`obsidian_source`, §0a) fährt hier mit. `.claude/profile.md` nur `git add`en, wenn §0a das Feld tatsächlich gesetzt/geändert hat. Lehnt Branch-Protection den Direkt-Push ab → docs-only-PR öffnen + selbst mergen (analog `requirement`-Skill). Der Notiz-Ordner wird **nie** ge-`add`et (AC6/AC14).
+   Der Profilfeld-Diff (`obsidian_source`, §0a) fährt hier mit. `.claude/profile.md` nur `git add`en, wenn §0a das Feld tatsächlich gesetzt/geändert hat. `board/areas.yaml` nur adden, wenn Bereiche bestätigt wurden (AC3). Lehnt Branch-Protection den Direkt-Push ab → docs-only-PR öffnen + selbst mergen (analog `requirement`-Skill). Der Notiz-Ordner wird **nie** ge-`add`et (AC6/AC14). *(AC3 auch E1: keine `areas.yaml`, wenn Owner alle Bereiche streicht oder der Entwurf leer war → Board-Stufe läuft wie ohne Bereichs-Gate)*
 
 Stufe b startet **erst nach** committetem Stufe-a-Ergebnis (harte Reihenfolge, AC12).
 
@@ -81,7 +88,7 @@ Stufe b startet **erst nach** committetem Stufe-a-Ergebnis (harte Reihenfolge, A
 
 1. **Spec(s) schreiben:** je Capability eine `docs/specs/<feature-slug>.md` aus `templates/_docs/specs/_template.md` — Zweck, Verhalten, **nummerierte Acceptance-Kriterien (AC1, AC2, …)**, Verträge, Edge-Cases, NFRs, Nicht-Ziele. **`spec_format`-Stempel:** den Wert 1:1 aus der **aktuellen** `_template.md` übernehmen (nicht hartkodieren), wie es der Spec-Vertrag (`docs/specs/spec-format-field.md` AC3) und `requirement` fordern.
 2. **Tiefes Detail via bestehende Agenten (AC11b/AC13 — kein Neubau):** Wo tiefes Architektur-Detail nötig ist, den **`architekt`**-Agenten (Task) dispatchen → `docs/architecture.md` bzw. `docs/architecture/<subsystem>.md`. Wo ein Datenmodell nötig ist, den **`dba`**-Agenten (Task, **Design-Modus**) → `docs/data-model.md` — dieser Dispatch bekommt **immer** `model: opus` (Design-Rollen-Pinning, siehe §0), unabhängig vom aktiven Cost-Mode. Beide schreiben nur in den Working-Tree (kein Commit) — das Committen macht dieser Skill in 2.4.
-3. **Fragenkatalog-Gate (AC7/AC8/AC9):** identische Mechanik wie 1.2, aber `stage:"b"`, `id`-Muster `b-<n>`, `quelle` = Konzept-/Doku-Fundstelle. `empty` → Auto-Durchlauf; `valid` → dem User am Stück vorlegen (`AskUserQuestion` / dev-gui); erst nach Beantwortung fließen die Antworten in die Spec(s)/Architektur ein.
+3. **Fragenkatalog-Gate (AC7/AC8/AC9):** identische Mechanik wie 1.3, aber `stage:"b"`, `id`-Muster `b-<n>`, `quelle` = Konzept-/Doku-Fundstelle. `empty` → Auto-Durchlauf; `valid` → dem User am Stück vorlegen (`AskUserQuestion` / dev-gui); erst nach Beantwortung fließen die Antworten in die Spec(s)/Architektur ein.
 4. **Commit Stufe b (AC12):** Erst nach beantwortetem/leerem Katalog:
    ```bash
    git add docs/ && git commit -m "notes(b): Konzept -> docs/specs/<…> (obsidian-ingest)

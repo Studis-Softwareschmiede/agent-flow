@@ -11,6 +11,7 @@
 #       reale Projekt-Docs/Board — reine Lektuere der eingecheckten Skill-Datei.
 #
 # Covers (obsidian-ingest): AC11, AC12, AC13, AC14
+# Covers (from-notes-areas): AC1, AC2, AC3
 #   AC11 — Fabrik-Befehl /agent-flow:from-notes orchestriert drei Stufen IN REIHE:
 #          (a) Korpus -> docs/concept.md, (b) Konzept -> docs/specs/<feature>.md
 #          (+ architekt/dba), (c) Spec(s) -> Board-Items ueber den bestehenden
@@ -25,6 +26,15 @@
 #   AC14 — Authoring-only: nur docs/, Profilfeld obsidian_source und Board-Items
 #          (To Do); kein App-Code, kein /flow-Start, kein Merge/Deploy, kein
 #          Schreiben in den Notiz-Ordner.
+#   (from-notes-areas)
+#   AC1 — Nach docs/concept.md-Erzeugung areas.yaml-Entwurf ableiten (id/titel/
+#         beschreibung/reihenfolge, kebab-case, 1 Satz, eindeutig) konform
+#         board-areas AC1; bei leerem Entwurf Platzhalter oder dokumentiert uebersp.
+#   AC2 — Entwurf ueber bestehendes Fragenkatalog-Gate als Teil Stufe-a-Katalog
+#         vorlegen (stage:a, je Bereich Streichen/Ergaenzen/Bestaetigen);
+#         unstrittig + eindeutig -> Auto-Durchlauf.
+#   AC3 — Nach Beantwortung/Bestaetigung board/areas.yaml mit bestaetigung Bereichen
+#         schreiben; Schreibvorgang im Stufe-a-Commit; Notiz-Ordner nie beschrieben.
 #
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 #
@@ -143,6 +153,52 @@ has 'kein .{0,20}Merge/Deploy|KEIN Merge'     "@trace obsidian-ingest#AC14" "exp
 has 'kein.{0,30}Schreiben in den Notiz|rein lesend|nie beschrieben' \
                                               "@trace obsidian-ingest#AC14" "explizite Absage: kein Schreiben in den Notiz-Ordner (AC6-Ruecklauf)"
 has 'kein.{0,20}App-Code|KEIN App-Code'       "@trace obsidian-ingest#AC14" "explizite Absage: kein App-Code"
+
+# ===========================================================================
+# AC1–AC3 (from-notes-areas) — Areas-Entwurf in Stufe a
+# ===========================================================================
+has 'Areas-Entwurf|areas\.yaml-Entwurf'       "@trace from-notes-areas#AC1" "Bereich-Entwurf-Schritt erkannt (AC1)"
+has 'Scope|Konzept.*ableiten'                 "@trace from-notes-areas#AC1" "Ableitung aus Konzept-Scope (AC1)"
+has 'kebab-case|reihenfolge.*int|titel.*beschreibung' \
+                                              "@trace from-notes-areas#AC1" "Feldformat id/titel/beschreibung/reihenfolge (AC1)"
+has 'Platzhalter'                             "@trace from-notes-areas#AC1" "Platzhalter bei leerem Entwurf (E1)"
+
+has 'Fragenkatalog.*mit.*Area|Area.*Fragenkatalog' \
+                                              "@trace from-notes-areas#AC2" "Areas in Fragenkatalog integriert (AC2)"
+has 'Streichen.*Erg.{0,3}nzen|Best.{0,3}tigung' "@trace from-notes-areas#AC2" "Streichen/Ergaenzen/Bestaetigen pro Bereich (AC2)"
+has 'a-[0-9]+|stage.*a.*Bereich'              "@trace from-notes-areas#AC2" "Area-Fragen im stage:a-Katalog mit Muster a-<n> (AC2)"
+has 'Auto-Durchlauf.*Area|unstrittig'         "@trace from-notes-areas#AC2" "Auto-Durchlauf bei eindeutigem Entwurf (A1)"
+
+has 'board/areas\.yaml.*schreiben|areas\.yaml.*Commit' \
+                                              "@trace from-notes-areas#AC3" "board/areas.yaml wird geschrieben (AC3)"
+has 'best.{0,3}tigt.*Bereich|best.{0,3}tigte' "@trace from-notes-areas#AC3" "Nur bestaatigte Bereiche in areas.yaml (AC3)"
+has 'Stufe.*a.*Commit.*areas|notes\(a\).*areas' \
+                                              "@trace from-notes-areas#AC3" "Schreiben faehrt im Stufe-a-Commit (AC3)"
+
+# ===========================================================================
+# Schema-Kompatibilität: a-<n>-Muster gegen echten Validator (Critical Fix Iter-2)
+# ===========================================================================
+# coder/L39: neues id-Muster fuer Fragenkatalog MUSS gegen echten Validator laufen,
+# nicht nur gegen die Prosa-Beschreibung. Dieser Test verifiziert, dass a-<n>-Muster
+# (fuer beide Konzept- und Area-Fragen) durch board/fragenkatalog.schema.json
+# und scripts/obsidian-fragenkatalog-validate.sh validiert (nicht: a-area-<n>).
+VALIDATOR="${REPO_ROOT}/scripts/obsidian-fragenkatalog-validate.sh"
+if [[ -f "$VALIDATOR" ]]; then
+  # Beispiel-Katalog: zwei Fragen mit schema-kompatiblem a-<n>-Muster
+  TEST_CATALOG='[
+    {"stage":"a","id":"a-1","frage":"Beispiel-Konzept-Frage?","quelle":"Beispiel-Notiz.md"},
+    {"stage":"a","id":"a-2","frage":"Beispiel-Area bestaetigen?","quelle":"Konzept-Abschnitt","optionen":["bestaetigen","streichen","aendern"]}
+  ]'
+
+  # Durch Validator schicken — muss Exit 0 sein
+  if printf '%s' "$TEST_CATALOG" | bash "$VALIDATOR" >/dev/null 2>&1; then
+    pass "Schema-Kompatibilität — a-<n>-Muster (Konzept + Area) validiert Exit 0 durch echten Validator"
+  else
+    fail "Schema-Kompatibilität — a-<n>-Muster validierung fehlgeschlagen (sollte Exit 0 sein)"
+  fi
+else
+  fail "Vorbedingung — Validator-Skript $VALIDATOR fehlt"
+fi
 
 # ===========================================================================
 # Zusammenfassung
