@@ -1,7 +1,7 @@
 id: S-038
 parent: F-016
 title: board archive-done-stories + Story-Archiv-Semantik
-status: Blocked
+status: Done
 priority: P2
 spec: docs/specs/board-area-ops.md
 implements:
@@ -12,18 +12,15 @@ labels:
 - board
 size_est: M
 dispo_est: '3.0'
-dispo_act: null
+dispo_act: '3'
 dispo_forecast: null
 estimate_note: S/M-Heuristik; dispo_est aus baseline md|balanced|M (n=8); keine Baseline-Tokens
   (tok_total null)
 confidence: medium
 tok_est: null
 branch: null
-pr: null
-blocked_reason: 'Loop-Schutz N=3 — Review-Gate nach 3 Iterationen weiter CHANGES-REQUIRED
-  (2 offene Important: Test-Verzeichnis-Kollision test9-13 alt/neu + stale Covers-Header
-  in tests/board-area-ops/run-test.sh; Implementierung selbst ohne Critical, 58/58
-  Tests grün; uncommitted im Hauptordner-Working-Tree)'
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/272
+blocked_reason: null
 created_at: '2026-07-03T11:19:58Z'
-updated_at: '2026-07-04T02:16:03Z'
-done_at: null
+updated_at: '2026-07-04T07:46:59Z'
+done_at: '2026-07-04T07:46:59Z'
