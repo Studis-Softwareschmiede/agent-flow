@@ -99,17 +99,17 @@ Stufe b startet **erst nach** committetem Stufe-a-Ergebnis (harte Reihenfolge, A
 
 Stufe c startet **erst nach** committetem Stufe-b-Ergebnis (harte Reihenfolge, AC12).
 
-## 3. Stufe c — Spec(s) → Board-Items/Stories über den `requirement`-Agenten (AC11c/AC13)
+## 3. Stufe c — Spec(s) → Board-Items/Stories über den `requirement`-Agenten (AC11c/AC13, mit Bereichs-Gate AC4)
 
-**Ziel:** die in Stufe b entstandenen Spec(s) in Board-Items/Stories zerlegen — **über den bestehenden `requirement`-Agenten** (AC11: „kein zweiter Zerlege-Pfad").
+**Ziel:** die in Stufe b entstandenen Spec(s) in Board-Items/Stories zerlegen — **über den bestehenden `requirement`-Agenten** (AC11: „kein zweiter Zerlege-Pfad"). **Bereichs-Gate (AC4 der from-notes-areas-Spec):** Der `requirement`-Agent liest in dieser Stufe die in Stufe a geschriebenen **bestätigten Bereiche** aus `board/areas.yaml` — er legt Storys **ausschließlich** unter Bereichs-Features dieser bestätigten Bereiche an (Story-`parent` = Bereichs-Feature des zugeordneten Bereichs; neue Specs tragen `area: <bereich>` im Frontmatter). **Kein** Item ohne Bereich, **keine** autonome Bereichs-Erfindung. Fehlt `board/areas.yaml` oder ist leer (Edge-Case E1: keine Bereiche bestätigt), arbeitet der `requirement`-Agent wie ohne Bereichs-Gate ([[requirement-area-intake]] AC1) und vermerkt das im Output.
 
 1. **`requirement`-Agent dispatchen (Task, `agents/requirement.md`):** als Eingabe die in Stufe b geschriebene(n) Spec(s) übergeben — nicht eine neue vage Anforderung, sondern der Verweis auf die bereits durable Spec(s) mit dem Auftrag, sie in Board-Items zu zerlegen. Der `requirement`-Agent leistet dabei **ohnehin** (AC13):
    - Zerlegung in TODOs (je Item ≈ ein coder→reviewer→tester-Durchlauf),
    - je Item ein Board-Item (**To Do**), das auf **Spec + AC-Nummern** zeigt (**kein** eingebetteter AC-Text),
    - die **A-priori-Schätzung** (`size_est`/`dispo_est`/`confidence`/`estimate_note`) bei der Anlage.
 
-   Da die Spec(s) bereits geschrieben sind, sollte der `requirement`-Agent hier i.d.R. **nicht** erneut Spec-schreiben — sein Fokus ist die Zerlegung. Legt er dabei doch Spec-Feinschliff nach (Working-Tree), fährt der in den Stufe-c-Commit (3.3).
-2. **Fragenkatalog-Gate (AC7/AC8/AC9):** Bleiben bei der Zerlegung Unklarheiten offen (z.B. Schnitt-Granularität, Priorität, Abhängigkeiten), diese **gesammelt** als **einen** Katalog `stage:"c"` (`id`-Muster `c-<n>`, `quelle` = Spec-/Doku-Fundstelle) — Validator + Vorlege-Verhalten wie oben. Der `requirement`-Agent stellt seine eigenen gezielten Rückfragen normalerweise selbst; ein separater Stufe-c-Katalog wird nur aufgebaut, wenn nach seinem Lauf noch pipeline-seitige Unklarheiten offen sind (kein leerer Katalog, AC8).
+   Da die Spec(s) bereits geschrieben sind, sollte der `requirement`-Agent hier i.d.R. **nicht** erneut Spec-schreiben — sein Fokus ist die Zerlegung. Legt er dabei doch Spec-Feinschliff nach (Working-Tree), fährt der in den Stufe-c-Commit (3.3). **Der Agent führt das Bereichs-Gate durch (AC4):** er liest die bestätigten Bereiche aus `board/areas.yaml`, ordnet jede Spec einem Bereich zu (oder lenkt bereichsfremde Teile in die Ideen-Inbox), und stempelt neue Specs mit `area: <bereich>` — siehe `docs/specs/requirement-area-intake.md` AC1–AC3.
+2. **Fragenkatalog-Gate (AC7/AC8/AC9) und Bereichs-Zuordnung (AC4):** Bleiben bei der Zerlegung Unklarheiten offen (z.B. Schnitt-Granularität, Priorität, Abhängigkeiten), diese **gesammelt** als **einen** Katalog `stage:"c"` (`id`-Muster `c-<n>`, `quelle` = Spec-/Doku-Fundstelle) — Validator + Vorlege-Verhalten wie oben. Der `requirement`-Agent stellt seine eigenen gezielten Rückfragen normalerweise selbst; ein separater Stufe-c-Katalog wird nur aufgebaut, wenn nach seinem Lauf noch pipeline-seitige Unklarheiten offen sind (kein leerer Katalog, AC8). **Bereichs-Fragen (AC4):** sollte der `requirement`-Agent bei der Bereichs-Zuordnung feststellen, dass eine Spec keinem bestehenden Bereich passt (bereichsfremd), lenkt er sie autonom in die Ideen-Inbox — es gibt dafür **keine** Owner-Rückfrage, sondern eine Begründung im Output ([[requirement-area-intake]] AC4).
 3. **Commit Stufe c (AC12):** Der `requirement`-Agent legt die Board-Items an (Status **To Do**, `/flow`-Hoheit endet dort — kein Status-Vorschub, AC14). Etwaige vom Agenten in den Working-Tree geschriebene `docs/`-Deltas dieser Stufe committen:
    ```bash
    git add docs/ && git commit -m "notes(c): Spec(s) -> Board-Items (obsidian-ingest)
@@ -125,10 +125,10 @@ Stufe c startet **erst nach** committetem Stufe-b-Ergebnis (harte Reihenfolge, A
 ```
 Obsidian-Ingest (from-notes) — Ordner: <aufgelöster-pfad> (Quelle: <Argument | Profil obsidian_source>)
 Korpus: <n> Notiz(en) gelesen
-Stufe a: docs/concept.md geschrieben — Katalog a: <leer/Auto-Durchlauf | <k> Frage(n) beantwortet> — committet <sha|PR>
+Stufe a: docs/concept.md geschrieben — Katalog a: <leer/Auto-Durchlauf | <k> Frage(n) beantwortet> — board/areas.yaml: <m Bereiche bestätigt | keine Bereiche bestätigt (E1)> — committet <sha|PR>
 Stufe b: docs/specs/<…> (+ <architektur/data-model falls>) — Katalog b: <…> — committet <sha|PR>
-Stufe c: <m> Board-Item(s) (To Do) via requirement — Katalog c: <…> — committet <sha|PR|kein Doc-Delta>
-  #<id> <title> — Spec <feature-slug> (AC<…>) — size_est: <…> dispo_est: <…>
+Stufe c: <n> Board-Item(s) (To Do) via requirement — Bereichs-Gate: <aktiv (m Bereiche) | nicht aktiv (areas.yaml fehlt, E1)> — Katalog c: <…> — committet <sha|PR|kein Doc-Delta>
+  #<id> <title> — Spec <feature-slug> (AC<…>) — Bereich <bereich-id> — size_est: <…> dispo_est: <…>
 Bereit für /agent-flow:flow.
 ```
 
@@ -204,5 +204,6 @@ Kein /flow-Start, keine Story-Anlage, kein Schreiben in den Notiz-Ordner.
 - **Rein lesende Notiz-Quelle (AC6):** der Obsidian-Ordner wird **nie** beschrieben, verschoben oder ge-`add`et/committet — geschrieben wird nur in `docs/`, `.claude/profile.md` und das Board.
 - **Kein zweiter Zerlege-/Schätz-/Übersetzungs-Pfad (AC11/AC13):** Reader (S-021), Fragenkatalog-Gate (S-022), Spec-Vertrag/Vorlage, `requirement` (Zerlegung + Schätzung), `architekt`/`dba` (tiefes Detail) werden **wiederverwendet**, nicht dupliziert.
 - **Commit pro Stufe, harte Reihenfolge (AC12):** jede Stufe wird **einzeln** committet, **nachdem** ihr Fragenkatalog beantwortet (oder leer) ist — **nicht** am Ende in einem Rutsch. b startet erst nach committetem a, c erst nach committetem b. Zwischenstände sind durable, der Lauf ist jederzeit fortsetzbar.
+- **Bereichs-Gate in Stufe c (AC4):** der `requirement`-Agent liest die bestätigten Bereiche aus `board/areas.yaml` (geschrieben in Stufe a, AC3) und ordnet jede Spec einem Bereich zu — Storys hängen unter Bereichs-Features, neue Specs tragen `area: <bereich>`. **Kein** Item ohne Bereich. Edge-Case E1: fehlt `board/areas.yaml` oder ist leer (keine Bereiche bestätigt), arbeitet der Agent wie ohne Bereichs-Gate und vermerkt das im Output — kein Fehler, sondern dokumentierte Situation (der Entwurf war leer oder Owner hat alle Bereiche gestrichen).
 - **Genau EIN gesammelter Katalog pro Stufe (AC7), leer → Auto-Durchlauf (AC8):** nie einzeln pro Unklarheit sofort erfragen; nie einen leeren Katalog vorlegen. Das Vorlege-Verhalten entscheidet ausschließlich das stdout-Token des Gate-Validators (`empty` vs. `valid`).
 - **Re-Sync (`--sync`) — kein Blind-Overwrite, invertierte Reconcile-Autorität (obsidian-sync AC1/AC3/AC6):** der Re-Sync-Modus (§5) überschreibt Konzept/Spec **nie** automatisch; jede Divergenz ist ein per-Fund-User-Entscheid (`uebernehmen`/`behalten`/`manuell`), und **nur** `uebernehmen` schreibt — ausschließlich nach `docs/concept.md`/`docs/specs/*`, nie in den Notiz-Ordner. Er ist ein **eigener Modus** desselben Skills, teilt Reader + Katalog-Gate mit dem Ingest und lässt den **Reconcile-Vertrag unangetastet** (kein Reconcile-„Stufe 0"). **Kein** `/flow`-Start, **keine** automatische Story-Anlage. Bei Deckungsgleichheit: **kein** Katalog, **keine** Änderung, „deckungsgleich"-Meldung.
