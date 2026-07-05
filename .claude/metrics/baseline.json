@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "calibrated_at": "2026-07-01",
-  "n_items": 23,
-  "ep_per_token": 3e-06,
+  "calibrated_at": "2026-07-04",
+  "n_items": 36,
+  "ep_per_token": null,
   "cache_kappa": 0.1,
   "weights": {
     "iter": 2,
@@ -14,52 +14,84 @@
   },
   "medians": {
     "js|balanced|L": {
-      "n": 3,
-      "ep": 7.5,
-      "iters": 2,
-      "crit": 0,
-      "tok_total": 2473893.1500000004,
-      "secs_total": 1613.0
+      "n": 1,
+      "ep": null,
+      "iters": null,
+      "crit": null,
+      "tok_total": null,
+      "secs_total": null
     },
     "js|balanced|M": {
-      "n": 5,
-      "ep": 7.0,
-      "iters": 2,
-      "crit": 0,
-      "tok_total": 1658113.8000000003,
-      "secs_total": 1118.0
+      "n": 1,
+      "ep": null,
+      "iters": null,
+      "crit": null,
+      "tok_total": null,
+      "secs_total": null
     },
     "md|balanced|L": {
-      "n": 4,
-      "ep": 7.0,
+      "n": 6,
+      "ep": 5.75,
       "iters": 2.0,
       "crit": 0.0,
       "tok_total": 3263684.75,
-      "secs_total": 1263.5
+      "secs_total": 1020.0
     },
     "md|balanced|M": {
-      "n": 8,
+      "n": 16,
       "ep": 3.0,
       "iters": 1.0,
       "crit": 0.0,
       "tok_total": null,
-      "secs_total": 391.5
+      "secs_total": 735.5
     },
     "md|balanced|S": {
-      "n": 3,
-      "ep": 5.5,
-      "iters": 2,
-      "crit": 0,
+      "n": 4,
+      "ep": 3.75,
+      "iters": 1.5,
+      "crit": 0.0,
       "tok_total": null,
-      "secs_total": 361.0
+      "secs_total": 575.0
+    },
+    "md|low-cost|M": {
+      "n": 3,
+      "ep": 7.0,
+      "iters": 2,
+      "crit": 1,
+      "tok_total": null,
+      "secs_total": 4547.0
+    },
+    "md|low-cost|S": {
+      "n": 2,
+      "ep": 6.25,
+      "iters": 2.0,
+      "crit": 0.5,
+      "tok_total": null,
+      "secs_total": 790.0
+    },
+    "md|max-quality|L": {
+      "n": 1,
+      "ep": null,
+      "iters": null,
+      "crit": null,
+      "tok_total": null,
+      "secs_total": null
+    },
+    "md|max-quality|M": {
+      "n": 2,
+      "ep": 3.0,
+      "iters": 1.0,
+      "crit": 0.0,
+      "tok_total": null,
+      "secs_total": 468.5
     }
   },
-  "forecast_mae": 0.3284,
+  "forecast_mae": 0.6179,
   "defect_rates": {
     "coder/L14": {
       "hits": 1,
-      "ep_total": 123.5,
-      "rate_per_100ep": 0.8097,
+      "ep_total": 164.5,
+      "rate_per_100ep": 0.6079,
       "n_items": 1,
       "window_items": [
         116
@@ -67,8 +99,8 @@
     },
     "coder/L15": {
       "hits": 1,
-      "ep_total": 123.5,
-      "rate_per_100ep": 0.8097,
+      "ep_total": 164.5,
+      "rate_per_100ep": 0.6079,
       "n_items": 1,
       "window_items": [
         117
@@ -76,8 +108,8 @@
     },
     "coder/L16": {
       "hits": 1,
-      "ep_total": 123.5,
-      "rate_per_100ep": 0.8097,
+      "ep_total": 164.5,
+      "rate_per_100ep": 0.6079,
       "n_items": 1,
       "window_items": [
         121
@@ -85,48 +117,50 @@
     },
     "coder/L18": {
       "hits": 1,
-      "ep_total": 123.5,
-      "rate_per_100ep": 0.8097,
+      "ep_total": 164.5,
+      "rate_per_100ep": 0.6079,
       "n_items": 1,
       "window_items": [
         129
       ]
     },
+    "coder/L38": {
+      "hits": 1,
+      "ep_total": 164.5,
+      "rate_per_100ep": 0.6079,
+      "n_items": 1,
+      "window_items": [
+        "S-041"
+      ]
+    },
+    "coder/L39": {
+      "hits": 1,
+      "ep_total": 164.5,
+      "rate_per_100ep": 0.6079,
+      "n_items": 1,
+      "window_items": [
+        "S-043"
+      ]
+    },
     "reviewer/R03": {
-      "hits": 3,
-      "ep_total": 123.5,
-      "rate_per_100ep": 2.4291,
-      "n_items": 3,
+      "hits": 2,
+      "ep_total": 164.5,
+      "rate_per_100ep": 1.2158,
+      "n_items": 2,
       "window_items": [
-        "S-179",
-        "S-180",
-        "S-181"
-      ]
-    },
-    "reviewer/R04": {
-      "hits": 1,
-      "ep_total": 123.5,
-      "rate_per_100ep": 0.8097,
-      "n_items": 1,
-      "window_items": [
-        "S-179"
-      ]
-    },
-    "security/R05": {
-      "hits": 1,
-      "ep_total": 123.5,
-      "rate_per_100ep": 0.8097,
-      "n_items": 1,
-      "window_items": [
-        "S-183"
+        "S-036",
+        "S-045"
       ]
     }
   },
   "retro_effectiveness": null,
   "learnings_rules": [],
   "estimator_bias": {
-    "js|balanced|L": -0.3651,
-    "js|balanced|M": -0.185
+    "md|balanced|L": 1.3333,
+    "md|balanced|M": -0.2893,
+    "md|low-cost|M": -0.2238,
+    "md|low-cost|S": 0.2061,
+    "md|max-quality|M": 0.125
   },
   "estimator_calibration": [
     {
@@ -150,5 +184,5 @@
       "decided_after_item": null
     }
   ],
-  "_calibration_note": "ep_per_token kalibriert auf 7 Items (κ=0.1)"
+  "_calibration_note": "Zu wenig Token-Daten (3/5) — ep_per_token bleibt null"
 }
