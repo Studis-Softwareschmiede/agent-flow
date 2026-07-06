@@ -14,8 +14,9 @@
 # Feature-Branch → main + EIN Rollout (statt N Merges/N Rollouts). Löst genau
 # das "10 Storys, 10× Deploy"-Problem, das der Owner am 2026-07-06 ansprach.
 #
-# Voraussetzung: ≥ 2 Storys unter diesem Feature — sonst kein Bündelungs-
-# vorteil, das Skript verweigert sich und verweist auf den normalen /flow-Lauf.
+# Voraussetzung: ≥ 1 Story unter diesem Feature (Owner-Entscheidung 2026-07-06,
+# zweite Korrektur — KEINE Mindestanzahl von 2: der Weg ist für 1 Story
+# genauso gültig wie für 30, kein Sonderfall).
 #
 # Blockade-Verhalten (Owner-Entscheidung 2026-07-06): Bleibt eine Story
 # BEWUSST Blocked (status=="Blocked"), wartet das GANZE Feature — kein
@@ -165,7 +166,11 @@ sync_to_feature_branch() {
   git reset --hard -q "origin/${FEATURE_BRANCH}"
 }
 
-# --- Kandidaten-Check: mindestens 2 Storys unter diesem Feature? ---
+# --- Kandidaten-Check: mindestens 1 Story unter diesem Feature? ---
+# Owner-Entscheidung 2026-07-06 (zweite Korrektur): KEINE Mindestanzahl mehr —
+# der Button/dieses Skript arbeitet ein Feature unabhängig von der Story-Zahl
+# ab (1 Story oder 30), immer über denselben Bündel-Weg (ein Feature-Branch,
+# ein finaler Merge). Nur "0 Storys" ist ein echter Fehlerfall.
 STORY_COUNT="$(python3 - "$FEATURE_ID" <<'PYEOF'
 import sys, glob, yaml
 fid = sys.argv[1]
@@ -181,9 +186,9 @@ for path in glob.glob("board/stories/*.yaml"):
 print(count)
 PYEOF
 )"
-[[ "$STORY_COUNT" -ge 2 ]] || die "Feature ${FEATURE_ID} hat nur ${STORY_COUNT} Story(s) — Bündelung bringt hier keinen Vorteil, Storys einzeln per /flow abarbeiten."
+[[ "$STORY_COUNT" -ge 1 ]] || die "Feature ${FEATURE_ID} hat keine Storys."
 
-log "Feature ${FEATURE_ID}: ${STORY_COUNT} Storys — Batch-Modus aktiv (Feature-Branch ${FEATURE_BRANCH})."
+log "Feature ${FEATURE_ID}: ${STORY_COUNT} Story/Storys — Batch-Modus aktiv (Feature-Branch ${FEATURE_BRANCH})."
 
 # --- Feature-Branch sicherstellen (von origin/default_branch abzweigen, falls neu) ---
 git fetch origin "$DEFAULT_BRANCH" --quiet
