@@ -1,6 +1,6 @@
 ---
 name: adopt
-description: Adoptiert ein BESTEHENDES GitHub-Repo in die Fabrik — klont es (fremde Repos werden in die Org geforkt), übernimmt es per init (Stack erkennen, .claude/+docs/ scaffolden, Spec aus Code ableiten, CI/Security ergänzen), auditiert den Bestand gegen den Fabrik-Standard, legt die Funde als priorisiertes Backlog aufs Board und validiert das Skeleton end-to-end via tester-Agent (Cache-Flag profile.adoption_validated_at). Behebt NICHTS automatisch — /flow arbeitet das Backlog ab. Aufruf: /agent-flow:adopt <owner/repo> | /agent-flow:adopt re-validate.
+description: Adoptiert ein BESTEHENDES GitHub-Repo in die Fabrik — klont es (fremde Repos werden in die Org geforkt), übernimmt es per init (Stack erkennen, .claude/+docs/ scaffolden, Spec aus Code ableiten, CI/Security ergänzen, Playwright-Regressions-Grundgerüst idempotent ergänzen), auditiert den Bestand gegen den Fabrik-Standard, legt die Funde als priorisiertes Backlog aufs Board und validiert das Skeleton end-to-end via tester-Agent (Cache-Flag profile.adoption_validated_at). Behebt NICHTS automatisch — /flow arbeitet das Backlog ab. Aufruf: /agent-flow:adopt <owner/repo> | /agent-flow:adopt re-validate.
 ---
 
 # /adopt <owner/repo>   ·   /adopt re-validate
@@ -372,6 +372,25 @@ Läuft **nach** der Migration-Tool-Detection (2f) und **vor** dem Audit (3) — 
 
 **d) Kein Auto-Fix.** Schritt 2g schreibt nur Scaffold-Dateien (nur wenn fehlend), erzeugt Backlog-Items, fasst git-History **nie** an.
 
+## 2h. Regressions-Scaffolding (Spec [`docs/specs/regression-scaffolding.md`](../../docs/specs/regression-scaffolding.md), Konventionen [`docs/specs/regression-playwright-conventions.md`](../../docs/specs/regression-playwright-conventions.md))
+
+Läuft **nach** dem Secrets-Scaffold (2g) und **vor** dem Audit (3) — **immer** (stack-agnostisch, keine Opt-in-Frage), **idempotent** (AC3 — bestehende Regressions-Dateien werden nicht überschrieben, nur Fehlendes ergänzt).
+
+**a) `playwright.config.ts`** — existiert am Repo-Root bereits eine `playwright.config.*` → **nicht anfassen** (bestehenden Stand behalten). Fehlt sie → kopieren: `cp ${CLAUDE_PLUGIN_ROOT}/templates/_shared/regression/playwright.config.ts .` (Referenz-Template-Artefakt, keine divergente Zweit-Definition — AC4; CTRF-JSON + JUnit-Reporter aktiv — AC1).
+
+**b) Playwright-Dev-Dependency** (`@playwright/test` + `playwright-ctrf-json-reporter`, AC1/AC5):
+- **Root-`package.json` vorhanden** (typisch bei bestehenden js/angular-Repos): fehlende Einträge unter `devDependencies` **ergänzen** — bereits vorhandene Versionen/Einträge **nicht überschreiben**.
+- **Kein `package.json`** (java/flutter/html-Repos ohne npm-Ökosystem): ein **eigenständiges, minimales** `package.json` anlegen, das ausschließlich Playwright als Dev-Runner trägt (AC5 „eigenständiger Runner", stack-agnostisch) — analog `new-project` Schritt 4f.2.
+
+**c) `tests/regression/`-Baum** (AC2 — leere Bereichs-Suiten je Eintrag in `board/areas.yaml`, deckt A2 „kein/leeres `areas.yaml`"):
+- **Immer:** `tests/regression/verbund/` anlegen (`.gitkeep`), **falls noch nicht vorhanden** — existiert der Ordner bereits (z.B. aus einem früheren `regression-define`-Lauf), **nicht anfassen**.
+- **Je Eintrag in `board/areas.yaml`:** `tests/regression/<id>/` anlegen (`.gitkeep`), **nur falls der Ordner für diese `id` noch nicht existiert** — bestehende Bereichs-Suiten (bereits befüllt oder leer) bleiben unverändert.
+- **Fehlt `board/areas.yaml` oder ist sie leer:** nur `tests/regression/verbund/` entsteht.
+
+**d) `.gitignore` ergänzen** (idempotent — prüfen ob `test-results/`-Regel bereits vorhanden ist, sonst `cat ${CLAUDE_PLUGIN_ROOT}/templates/_shared/regression/gitignore.snippet >> .gitignore`, AC1).
+
+**e) Kein Runner-Wiring, kein Auto-Fix.** `scripts/run-regression.sh` (Ausführung, [[regression-runner]]) ist explizites Nicht-Ziel (Spec regression-scaffolding.md Nicht-Ziele). Schritt 2h schreibt/ergänzt nur die oben genannten Scaffold-Artefakte — bestehende Regressions-Dateien werden nie überschrieben, keine Testinhalte werden generiert (Befüllen ist [[regression-define]]).
+
 ## 3. Auditieren (gegen den Fabrik-Standard)
 - **Automatik zuerst (objektiv, billig):** `gitleaks detect --source=. --no-git` (Secrets) + Dependency-Audit gemäß Sprache (`npm audit --omit=dev` / `pip-audit` / …) → Funde notieren.
 - **`reviewer` im Audit-Modus** (Task — s. `reviewer.md` „Audit-Modus"): prüft den **Bestand** (kein Diff) gegen **Security-Floor** (immer), die Sprach-/Domänen-**Pack-Checklists**, Projekt-Konventionen und die **abgeleitete Spec** → priorisierte Funde (Critical/Important/Suggestions). Bei großen Repos **priorisiert** (Security-Floor überall; Pack-Checks auf repräsentative/heikle Dateien — Auth, Daten-/Netz-Zugriff, Eingänge; Architektur-Auffälligkeiten), NICHT zeilenweise.
@@ -519,4 +538,5 @@ Expliziter Befehl ohne `<owner/repo>`-Argument. cwd = bereits adoptiertes Repo (
 - Die **abgeleitete Spec ist Entwurf**, bis du sie bestätigst (sie ist danach die Drift-Gate-Referenz für `/flow`).
 - **DB-Detection (Schritt 2a) ist nicht-destruktiv:** schreibt `db_dialect`, hängt Compose-Fragment **nur** an, wenn noch kein db-Service existiert; bestehende `db_scripts/`-Dateien werden **nie** überschrieben — Konflikte landen als Backlog-Item, nicht als Auto-Patch.
 - **Companion-Detection (Schritt 2b) ist nicht-destruktiv** und beeinflusst `db_dialect` NICHT: Companions leben in `profile.companions[]` (additive Liste, Scope-Lock §17). Heute verfügbar: `redis`. Kein `db_scripts/`-Skeleton, kein Migrations-Runner, kein Backup-Auto-Scaffold — wer das braucht, gehört ins DB-Subsystem.
+- **Regressions-Scaffolding (Schritt 2h) ist immer aktiv** (stack-agnostisch, Spec `docs/specs/regression-scaffolding.md`) und strikt idempotent (AC3) — bestehende `playwright.config.*`/`tests/regression/**`-Dateien werden nie überschrieben, nur Fehlendes ergänzt. Befüllen der Suiten ([[regression-define]]) und das Runner-Wiring ([[regression-runner]], `scripts/run-regression.sh`) sind explizite Nicht-Ziele dieses Schritts.
 - **Validate (Schritt 6) ist kein Auto-Fix für Bestand:** der Coder-Fix-Loop darf nur das gerade angelegte **Skeleton** (000_init_meta, run-migrations.sh, Compose-Fragment-Append, .env.db.example) anpassen — nie bestehende `db_scripts/`-Migrations oder bestehende db-Services im Compose. Loop-Cap fix `MAX_VALIDATE_RETRIES = 3`; danach human-handoff + Backlog-Issue, kein Endlos-Loop. `adoption_validated_at` wird NUR bei PASS gesetzt — ohne Validate-PASS gibt es keinen Cache-Hit in `/preview` (Spec §18).
