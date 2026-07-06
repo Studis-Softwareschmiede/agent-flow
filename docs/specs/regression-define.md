@@ -55,10 +55,22 @@ Testdefinition ohne Handarbeit am Testcode: der Agent liest die Specs eines Bere
 ## Verträge
 
 ### Eingabe
+
+Zwei Aufruf-Modi, unterschieden durch das Diskriminator-Feld `modus:`.
+
+**Modus `vorschlag`** (Schritt 1–3 des Main Success Scenario):
 ```
 projekt: <repo>
 bereich: <bereich-id> | verbund: <verbund-name>
 stichworte: [<optional>, …]
+modus: vorschlag
+```
+
+**Modus `uebersetzen`** (nach der Owner-Redaktion in der dev-gui, Schritt 5–6):
+```
+projekt: <repo>
+modus: uebersetzen
+redigierter_vorschlag: <JSON — dieselbe Struktur wie das Rückgabeformat, vom Owner editiert>
 ```
 
 ### Rückgabeformat Testvorschlag (dev-gui-Redaktionsschleife, maschinenlesbar)
@@ -80,9 +92,13 @@ stichworte: [<optional>, …]
 ```
 Nach der Owner-Redaktion wird dieselbe Struktur (redigiert) an den Agenten zurückgegeben und in Playwright-Artefakte übersetzt (AC4/AC5).
 
+### Verbund-Spec-Auswahl (Präzisierung zu AC2)
+
+Für `verbund: <verbund-name>` bestimmt der Agent die „Verbund-relevanten Specs" wie folgt: (1) jedes Element der Owner-**Stichworte**, das exakt einer Bereichs-`id` aus `board/areas.yaml` entspricht, zieht dessen Specs (`area: <id>`) hinzu; (2) ergänzend werden Specs herangezogen, deren `id`/`title` den Verbund-Namen wörtlich enthält. Liefert weder (1) noch (2) einen Treffer, gilt derselbe Edge-Case wie bei einem Bereich ohne Specs.
+
 ## Edge-Cases & Fehlerverhalten
 
-- **Bereich ohne Specs** → der Agent meldet „keine deckenden Specs im Bereich" statt einen leeren/erfundenen Vorschlag zu liefern.
+- **Bereich/Verbund ohne deckende Specs** → der Agent meldet „keine deckenden Specs im Bereich/Verbund `<id>`" statt einen leeren/erfundenen Vorschlag zu liefern.
 - **Redigierte Fassung entfernt alle Beispieldaten** → der Test wird ohne Datentabelle erzeugt (nicht-datengetrieben); die Begleitbeschreibung vermerkt das.
 
 ## NFRs
