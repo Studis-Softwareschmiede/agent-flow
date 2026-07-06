@@ -1,7 +1,7 @@
 id: S-049
 parent: F-025
 title: 'Regressions-Runner: deterministische Ausführung + Testobjekt/target + Vorbedingungs-Check'
-status: In Progress
+status: Done
 priority: P1
 spec: docs/specs/regression-runner.md
 implements:
@@ -18,8 +18,8 @@ labels:
 - security
 size_est: L
 dispo_est: '10.5'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '6.5'
+dispo_forecast: '.6153'
 estimate_note: ≈ Anker ref-L-subsystem-slice (8 EP), roh 7 EP wegen engerem Scope
   (kein Migration/UI-Anteil, AC4/7/8 liegen bei S-051) vs. Security-Treiber AC9 +
   Mehr-Ziel-Auflösung/Vorbedingungs-Check; estimator_bias md|balanced|L=+1.33 auf
@@ -27,8 +27,9 @@ estimate_note: ≈ Anker ref-L-subsystem-slice (8 EP), roh 7 EP wegen engerem Sc
 confidence: medium
 tok_est: null
 branch: feat/S-049-regressions-runner
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/280
 blocked_reason: null
 created_at: '2026-07-05T23:04:10Z'
-updated_at: '2026-07-06T06:56:02Z'
-done_at: null
+updated_at: '2026-07-06T07:13:17Z'
+done_at: '2026-07-06T07:12:07Z'
+tok: null
