@@ -43,17 +43,17 @@ Features werden von **Auftrags-Containern** zu einer **stabilen Strukturkarte** 
 
 ### E2: `areas.yaml` fehlt / malformt
 - `areas.yaml` fehlt → Bereichs-Regeln werden übersprungen (kein Fehler, solange kein Item eine `area` referenziert); referenziert ein Item eine `area` ohne `areas.yaml` → `AREA-UNKNOWN`.
-- `areas.yaml` verletzt das Feldformat (fehlendes `id`/`titel`/`reihenfolge`, `id` nicht kebab-case, doppelte `id`, doppelte `reihenfolge`) → `AREA-FIELD` als **Fehler**.
+- `areas.yaml` verletzt das Feldformat (fehlendes `id`/`name`/`order`, `id` nicht kebab-case, doppelte `id`, doppelte `order`) → `AREA-FIELD` als **Fehler**.
 
 ## Acceptance-Kriterien
 
-- **AC1** — `board/areas.yaml` ist eine YAML-Liste von Bereichen; jeder Bereich trägt `id` (kebab-case, projektweit eindeutig), `titel` (Kurztitel), `beschreibung` (genau 1 Satz) und `reihenfolge` (int, eindeutig, für die Kachel-/Dropdown-Sortierung). `areas.yaml` ist die einzige Quelle der Bereichsliste (Kacheln, Dropdowns, Gate, Spec-Zuordnung). *(V1)*
+- **AC1** — `board/areas.yaml` ist eine YAML-Liste von Bereichen; jeder Bereich trägt `id` (kebab-case, projektweit eindeutig), `name` (Kurztitel), `description` (genau 1 Satz) und `order` (int, eindeutig, für die Kachel-/Dropdown-Sortierung). `areas.yaml` ist die einzige Quelle der Bereichsliste (Kacheln, Dropdowns, Gate, Spec-Zuordnung). *(V1)*
 - **AC2** — Ein Bereichs-Feature trägt das Feld `area: <bereich-id>`, das auf einen `areas.yaml`-Eintrag zeigt; `board/feature.schema.json` kennt das optionale Feld `area` (String|null). Genau ein Bereichs-Feature je Bereich ist das Soll (mehrere Features auf denselben Bereich sind erlaubt, aber `board lint` meldet sie als **Warnung** `AREA-DUP-FEATURE`). *(V2)*
 - **AC3** — Ein Bereichs-Feature (Feature mit gesetztem `area`) ist dauerhaft: `board rollup` setzt es NIE automatisch auf `Done`/`Archived`, auch wenn alle Kind-Storys terminal (`Done`/`Verworfen`) sind; `progress` wird weiter berechnet, der `status` bleibt unverändert (z.B. `Active`). *(V3)*
 - **AC4** — Die Archiv-Semantik liegt auf der Story: erledigte (`Done`) Storys sind archivierbar; das Bereichs-Feature wird dabei NIE archiviert. Die ausführende Mechanik ist `board archive-done-stories` ([[board-area-ops]] AC3). *(V4)*
-- **AC5** — `board lint` prüft je Feature-`area` und je Spec-`area`-Frontmatter, dass der Wert in `areas.yaml` existiert; unbekannter/verwaister Bereich → **Fehler** `AREA-UNKNOWN <datei> <area-wert>`. Ein malformtes `areas.yaml` (fehlende Pflichtfelder, `id` nicht kebab-case, doppelte `id`/`reihenfolge`) → **Fehler** `AREA-FIELD <detail>`. Fehlt `areas.yaml` und referenziert kein Item eine `area` → keine Bereichs-Fehler. *(V5)*
+- **AC5** — `board lint` prüft je Feature-`area` und je Spec-`area`-Frontmatter, dass der Wert in `areas.yaml` existiert; unbekannter/verwaister Bereich → **Fehler** `AREA-UNKNOWN <datei> <area-wert>`. Ein malformtes `areas.yaml` (fehlende Pflichtfelder, `id` nicht kebab-case, doppelte `id`/`order`) → **Fehler** `AREA-FIELD <detail>`. Fehlt `areas.yaml` und referenziert kein Item eine `area` → keine Bereichs-Fehler. *(V5)*
 - **AC6** — `templates/_docs/specs/_template.md` trägt im Frontmatter das Feld `area:` (Pflicht für **neue** Specs, Bestand optional bis Migration). `requirement` stempelt `area` beim Anlegen einer neuen Spec mit dem zugeordneten Bereich (analog zum `spec_format`-Stempel, [[requirement-area-intake]] AC2/AC6). *(V6)*
-- **AC7** — Die initiale `board/areas.yaml` von agent-flow enthält exakt die 10 owner-freigegebenen Bereiche (Vertrag unten): `board`, `flow-orchestrierung`, `rollen-agenten`, `anforderung-intake`, `wissen-packs`, `lernen-retro`, `metriken-schaetzung`, `vorlagen-scaffolding`, `auslieferung`, `doku-reconcile` — mit den dort genannten `titel`/`beschreibung`/`reihenfolge`. *(V7)*
+- **AC7** — Die initiale `board/areas.yaml` von agent-flow enthält exakt die 10 owner-freigegebenen Bereiche (Vertrag unten): `board`, `flow-orchestrierung`, `rollen-agenten`, `anforderung-intake`, `wissen-packs`, `lernen-retro`, `metriken-schaetzung`, `vorlagen-scaffolding`, `auslieferung`, `doku-reconcile` — mit den dort genannten `name`/`description`/`order`. *(V7)*
 - **AC8** — Bestandsmigration agent-flow: die 15 Bestands-Features werden den 10 Bereichen zugeordnet (je Bereich ein dauerhaftes Bereichs-Feature), alle Storys werden unter das jeweilige Bereichs-Feature umgehängt (`parent` neu, Story-`id`/Spec unverändert), erledigte Storys archiviert und alle Specs mit `area` gestempelt. Die Migration wird als **EIN PR** zur Owner-Freigabe vorgelegt; **keine autonome Löschung** (Alt-Features werden auf `Archived` gesetzt, nicht gelöscht). Nach der Migration ist `board lint` grün. *(V7, V5, [[board-area-ops]])*
 
 ## Verträge
@@ -61,13 +61,13 @@ Features werden von **Auftrags-Containern** zu einer **stabilen Strukturkarte** 
 ### `board/areas.yaml` (Feldformat)
 ```yaml
 - id: board                    # kebab-case, projektweit eindeutig
-  titel: Board
-  beschreibung: Schema, board-CLI, Lint, GitHub-Export und die Bereichsliste selbst.
-  reihenfolge: 1
+  name: Board
+  description: Schema, board-CLI, Lint, GitHub-Export und die Bereichsliste selbst.
+  order: 1
 - id: flow-orchestrierung
-  titel: Flow-Orchestrierung
-  beschreibung: flow-Skill, Session-Rotation, Gates, Item-Auswahl und Leerlauf-Diagnose.
-  reihenfolge: 2
+  name: Flow-Orchestrierung
+  description: flow-Skill, Session-Rotation, Gates, Item-Auswahl und Leerlauf-Diagnose.
+  order: 2
 ```
 
 ### `feature.schema.json` — neues Feld
@@ -83,49 +83,49 @@ area: <bereich-id>             # Pflicht für neue Specs; Bestand optional bis M
 ### agent-flow — initiale `board/areas.yaml` (owner-freigegeben, AC7)
 ```yaml
 - id: board
-  titel: Board
-  beschreibung: Schema, board-CLI, Lint, GitHub-Export und die Bereichsliste.
-  reihenfolge: 1
+  name: Board
+  description: Schema, board-CLI, Lint, GitHub-Export und die Bereichsliste.
+  order: 1
 - id: flow-orchestrierung
-  titel: Flow-Orchestrierung
-  beschreibung: flow-Skill, Session-Rotation, Gates, Item-Auswahl und Leerlauf-Diagnose.
-  reihenfolge: 2
+  name: Flow-Orchestrierung
+  description: flow-Skill, Session-Rotation, Gates, Item-Auswahl und Leerlauf-Diagnose.
+  order: 2
 - id: rollen-agenten
-  titel: Rollen-Agenten
-  beschreibung: Agent-Definitionen und Handoff-Verträge der Fabrik-Rollen.
-  reihenfolge: 3
+  name: Rollen-Agenten
+  description: Agent-Definitionen und Handoff-Verträge der Fabrik-Rollen.
+  order: 3
 - id: anforderung-intake
-  titel: Anforderung-Intake
-  beschreibung: requirement mit Eingangs-Gate, estimator, Ideen-Inbox und from-notes.
-  reihenfolge: 4
+  name: Anforderung-Intake
+  description: requirement mit Eingangs-Gate, estimator, Ideen-Inbox und from-notes.
+  order: 4
 - id: wissen-packs
-  titel: Wissen-Packs
-  beschreibung: Knowledge Packs, train sowie Modell-Matrix und Cost-Modes.
-  reihenfolge: 5
+  name: Wissen-Packs
+  description: Knowledge Packs, train sowie Modell-Matrix und Cost-Modes.
+  order: 5
 - id: lernen-retro
-  titel: Lernen-Retro
-  beschreibung: retro, Lessons-Lebenszyklus und Write-back.
-  reihenfolge: 6
+  name: Lernen-Retro
+  description: retro, Lessons-Lebenszyklus und Write-back.
+  order: 6
 - id: metriken-schaetzung
-  titel: Metriken-Schaetzung
-  beschreibung: Ledger, Baseline, Kalibrierung und Token-Erfassung.
-  reihenfolge: 7
+  name: Metriken-Schaetzung
+  description: Ledger, Baseline, Kalibrierung und Token-Erfassung.
+  order: 7
 - id: vorlagen-scaffolding
-  titel: Vorlagen-Scaffolding
-  beschreibung: templates, new-project und adopt.
-  reihenfolge: 8
+  name: Vorlagen-Scaffolding
+  description: templates, new-project und adopt.
+  order: 8
 - id: auslieferung
-  titel: Auslieferung
-  beschreibung: cicd, Landen, CI-Watch, Rollout und preview.
-  reihenfolge: 9
+  name: Auslieferung
+  description: cicd, Landen, CI-Watch, Rollout und preview.
+  order: 9
 - id: doku-reconcile
-  titel: Doku-Reconcile
-  beschreibung: Konzept-/Architektur-Pflege, reconcile und Spec-Lebenszyklus.
-  reihenfolge: 10
+  name: Doku-Reconcile
+  description: Konzept-/Architektur-Pflege, reconcile und Spec-Lebenszyklus.
+  order: 10
 ```
 
 ### `lint`-Regel-IDs (stabil, für CLI-Ausgabe)
-`AREA-UNKNOWN` (V5, Fehler — Feature/Spec nennt Bereich, der nicht in `areas.yaml` existiert) · `AREA-FIELD` (V5, Fehler — `areas.yaml` malformt: fehlende Pflichtfelder, `id` nicht kebab-case, doppelte `id`/`reihenfolge`) · `AREA-DUP-FEATURE` (V2, Warnung — mehrere Features auf denselben Bereich gekoppelt).
+`AREA-UNKNOWN` (V5, Fehler — Feature/Spec nennt Bereich, der nicht in `areas.yaml` existiert) · `AREA-FIELD` (V5, Fehler — `areas.yaml` malformt: fehlende Pflichtfelder, `id` nicht kebab-case, doppelte `id`/`order`) · `AREA-DUP-FEATURE` (V2, Warnung — mehrere Features auf denselben Bereich gekoppelt).
 
 ## Edge-Cases & Fehlerverhalten
 
@@ -138,7 +138,7 @@ area: <bereich-id>             # Pflicht für neue Specs; Bestand optional bis M
 
 ## NFRs
 
-- **Diff-Freundlichkeit:** `areas.yaml` ist eine kleine, selten geänderte Datei; stabile Reihenfolge nach `reihenfolge`.
+- **Diff-Freundlichkeit:** `areas.yaml` ist eine kleine, selten geänderte Datei; stabile Reihenfolge nach `order`.
 - **Determinismus:** die Bereichs-`lint`-Regeln laufen ohne LLM, rein mechanisch.
 - **Stabilität der Referenzen:** Bereichszuordnung ist ein Etikett — Spec-/Datei-IDs bleiben über Merge/Split/Migration hinweg stabil.
 
