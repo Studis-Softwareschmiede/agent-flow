@@ -1,7 +1,7 @@
 id: S-047
 parent: F-021
 title: Playwright-Regressions-Konventionen + Referenz-Template-Artefakte
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/regression-playwright-conventions.md
 implements:
@@ -16,15 +16,16 @@ labels:
 - regression
 - knowledge
 size_est: null
-dispo_est: null
+dispo_est: '7.5'
 dispo_act: null
 dispo_forecast: null
-estimate_note: null
-confidence: null
+estimate_note: ≈ Anker ref-L-subsystem-slice (8 EP), Abschlag wegen weniger AC (6
+  vs 10) und kein db-Label → 7.5 EP.
+confidence: medium
 tok_est: null
-branch: null
+branch: feat/S-047-playwright-conventions
 pr: null
 blocked_reason: null
 created_at: '2026-07-05T23:04:02Z'
-updated_at: '2026-07-05T23:04:02Z'
+updated_at: '2026-07-06T05:40:27Z'
 done_at: null
