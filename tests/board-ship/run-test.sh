@@ -395,6 +395,39 @@ else
 fi
 
 # ===========================================================================
+# Test 8 — Regression 2026-07-06 (Owner-Testlauf F-065): profile.md OHNE
+# default_branch-Feld (echte dev-gui-Form, kein YAML-Frontmatter) darf das
+# Skript NICHT wortlos abbrechen (set -e + pipefail auf grep-ohne-Treffer) —
+# der ":-main"-Fallback muss tatsächlich greifen.
+# ===========================================================================
+echo ""
+echo "--- Test 8: profile.md ohne default_branch-Feld -> Fallback auf 'main' greift, kein stiller Abbruch ---"
+T8_WORK="$(setup_fixture "${TEST_WORK_DIR}/test8")"
+cat > "${T8_WORK}/.claude/profile.md" <<'PLAIN'
+language: js
+merge_policy: direct
+deploy: none
+PLAIN
+(
+  cd "$T8_WORK"
+  git add -A && git commit -q -m "profile.md ohne default_branch (Regressionsfixture)"
+  git push -q origin main
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+T8_OUTPUT="$(cd "$T8_WORK" && MOCK_HEAD_SHA="$(git rev-parse HEAD)" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T8_EXIT=$?
+if [[ $T8_EXIT -eq 0 ]]; then
+  pass "Test 8: kein stiller Abbruch trotz fehlendem default_branch-Feld — Fallback auf 'main' griff"
+else
+  fail "Test 8: Skript brach ab (exit=${T8_EXIT}) statt auf 'main' zurückzufallen"
+  echo "  Output: $T8_OUTPUT"
+fi
+
+# ===========================================================================
 # Ergebnis
 # ===========================================================================
 echo ""

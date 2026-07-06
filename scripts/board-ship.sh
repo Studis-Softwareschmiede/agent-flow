@@ -93,7 +93,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-DEFAULT_BRANCH="$(grep -m1 '^default_branch:' .claude/profile.md 2>/dev/null | sed 's/default_branch: *//;s/"//g')"
+DEFAULT_BRANCH="$(grep -m1 '^default_branch:' .claude/profile.md 2>/dev/null | sed 's/default_branch: *//;s/"//g' || true)"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
 # ============================================================================
@@ -129,11 +129,11 @@ watch_ci_or_die() {
 do_rollout_or_die() {
   local expect_sha="$1"
   local deploy_mode image
-  deploy_mode="$(grep -m1 '^deploy:' .claude/profile.md 2>/dev/null | sed 's/deploy: *//;s/"//g')"
+  deploy_mode="$(grep -m1 '^deploy:' .claude/profile.md 2>/dev/null | sed 's/deploy: *//;s/"//g' || true)"
   deploy_mode="${deploy_mode:-none}"
   [[ "$deploy_mode" == "docker" ]] || return 0
 
-  image="$(grep -m1 '^image:' .claude/profile.md 2>/dev/null | sed 's/image: *//;s/"//g')"
+  image="$(grep -m1 '^image:' .claude/profile.md 2>/dev/null | sed 's/image: *//;s/"//g' || true)"
   [[ -n "$image" ]] || die "profile.deploy=docker aber kein 'image'-Feld in .claude/profile.md"
 
   if [[ -z "$APP_NAME" ]]; then
@@ -237,7 +237,7 @@ if [[ "$ALREADY_MERGED" -eq 0 ]]; then
       || die "Feature-Branch '${SHIP_BRANCH}' existiert nicht und konnte nicht angelegt werden."
   fi
 
-  MERGE_POLICY="$(grep -m1 '^merge_policy:' .claude/profile.md 2>/dev/null | sed 's/merge_policy: *//;s/"//g')"
+  MERGE_POLICY="$(grep -m1 '^merge_policy:' .claude/profile.md 2>/dev/null | sed 's/merge_policy: *//;s/"//g' || true)"
   MERGE_POLICY="${MERGE_POLICY:-pr}"
 
   if [[ "$MERGE_POLICY" == "direct" ]]; then
