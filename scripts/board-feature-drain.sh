@@ -18,15 +18,26 @@
 # vorteil, das Skript verweigert sich und verweist auf den normalen /flow-Lauf.
 #
 # Blockade-Verhalten (Owner-Entscheidung 2026-07-06): Bleibt eine Story
-# Blocked, wartet das GANZE Feature — kein Timeout, kein Teil-Deploy der
-# bereits fertigen Storys. Das Skript beendet sich dann mit Exit 3 und einer
-# klaren Diagnose statt endlos zu pollen — ein äußerer Aufrufer (Board-Ebene)
-# entscheidet, wann er es erneut versucht (z.B. nachdem der Owner die
-# Blockade gelöst hat).
+# BEWUSST Blocked (status=="Blocked"), wartet das GANZE Feature — kein
+# Timeout, kein Teil-Deploy der bereits fertigen Storys. Das Skript beendet
+# sich dann mit Exit 3 und einer klaren Diagnose statt endlos zu pollen — ein
+# äußerer Aufrufer (Board-Ebene) entscheidet, wann er es erneut versucht (z.B.
+# nachdem der Owner die Blockade gelöst hat).
+#
+# Liegengebliebene Storys (Vorfall 2026-07-06, Owner-Testlauf F-065/S-299):
+# Ein nicht-terminaler Status, der weder "To Do" noch "Blocked" ist
+# (typischerweise "In Progress"), stammt fast immer aus einer UNTERBROCHENEN
+# vorherigen /flow-Sitzung (CI-Timeout, Container-Neustart, abgelaufener
+# Token) — niemand hat die Story bewusst blockiert. Das Skript unterscheidet
+# das jetzt von einer echten Blockade: die Story wird automatisch auf
+# "To Do" zurückgesetzt und im selben Lauf sofort erneut versucht, statt das
+# ganze Feature fälschlich als "blockiert" zu melden und auf einen manuellen
+# Eingriff zu warten.
 #
 # Exit 0 = Feature komplett gelandet (oder war schon fertig — idempotent).
 # Exit 1 = Fehler (siehe Meldung).
-# Exit 3 = Feature wartet auf mindestens eine blockierte/nicht-terminale Story.
+# Exit 3 = Feature wartet auf mindestens eine ECHT (status=="Blocked")
+#          blockierte Story.
 
 set -euo pipefail
 
@@ -89,6 +100,71 @@ print(",".join(out))
 PYEOF
 }
 
+blocked_story_ids() {
+  # Kommagetrennte Liste der Story-IDs mit status=="Blocked" — eine ECHTE,
+  # bewusste Blockade (Owner-Entscheidung 2026-07-06: dafür wartet das ganze
+  # Feature). Getrennt von orphaned_story_ids() (unten), die eine bloß
+  # LIEGENGEBLIEBENE Story aus einer unterbrochenen Sitzung erfasst.
+  python3 - "$FEATURE_ID" <<'PYEOF'
+import sys, glob, yaml
+fid = sys.argv[1]
+out = []
+for path in glob.glob("board/stories/*.yaml"):
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        continue
+    if str(data.get("parent", "")).strip() != fid:
+        continue
+    if str(data.get("status", "")).strip() == "Blocked":
+        out.append(str(data.get("id", "")).strip())
+print(",".join(out))
+PYEOF
+}
+
+orphaned_story_ids() {
+  # Kommagetrennte Liste der Story-IDs mit einem nicht-terminalen Status,
+  # der weder "To Do" noch "Blocked" ist (typischerweise "In Progress",
+  # liegengeblieben durch eine unterbrochene vorherige /flow-Sitzung — z.B.
+  # CI-Timeout, Container-Neustart, abgelaufener Token). Vorfall 2026-07-06
+  # (Owner-Testlauf F-065/S-299): board-feature-drain.sh meldete das
+  # fälschlich als "BLOCKIERT" und gab sofort auf, obwohl niemand die Story
+  # bewusst blockiert hatte — nur eine unterbrochene Sitzung lag vor.
+  python3 - "$FEATURE_ID" <<'PYEOF'
+import sys, glob, yaml
+fid = sys.argv[1]
+out = []
+for path in glob.glob("board/stories/*.yaml"):
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        continue
+    if str(data.get("parent", "")).strip() != fid:
+        continue
+    status = str(data.get("status", "")).strip()
+    if status not in ("Done", "Verworfen", "Blocked", "To Do"):
+        out.append(str(data.get("id", "")).strip())
+print(",".join(out))
+PYEOF
+}
+
+sync_to_feature_branch() {
+  # Sorgt dafür, dass der lokale Checkout IMMER exakt origin/<Feature-Branch>
+  # widerspiegelt, bevor Status gelesen/verändert wird — unabhängig davon,
+  # auf welchem Branch eine zuvor gestartete /flow-Kindsitzung den geteilten
+  # Arbeitsbaum zurückgelassen hat. Vorfall 2026-07-06: /flow checkt intern
+  # eigene Arbeits-/Ziel-Branches aus (§5: board-ship.sh --target-branch
+  # feature/<F-###>), board-feature-drain.sh selbst wechselt nie zurück —
+  # ohne diesen Sync lasen story_status()/remaining_nonterminal() vom
+  # Branch-Stand, den die letzte Kindsitzung zufällig hinterlassen hatte,
+  # nicht zwingend vom aktuellen origin/feature/<F-###>.
+  git fetch origin "$FEATURE_BRANCH" --quiet
+  git checkout -q "$FEATURE_BRANCH" 2>/dev/null || git checkout -q -b "$FEATURE_BRANCH" "origin/${FEATURE_BRANCH}"
+  git reset --hard -q "origin/${FEATURE_BRANCH}"
+}
+
 # --- Kandidaten-Check: mindestens 2 Storys unter diesem Feature? ---
 STORY_COUNT="$(python3 - "$FEATURE_ID" <<'PYEOF'
 import sys, glob, yaml
@@ -118,6 +194,7 @@ fi
 
 # --- Hauptschleife: eine frische Story-Sitzung nach der anderen ---
 for round in $(seq 1 50); do
+  sync_to_feature_branch
   NEXT_JSON="$("$BOARD_SCRIPT" next --parent "$FEATURE_ID" 2>/dev/null || true)"
 
   if [[ -z "$NEXT_JSON" ]]; then
@@ -126,7 +203,31 @@ for round in $(seq 1 50); do
       log "Alle Storys von ${FEATURE_ID} terminal (Done/Verworfen) — Feature komplett, finaler Merge folgt."
       break
     fi
-    log "Feature ${FEATURE_ID} wartet — keine Story bereit, aber nicht alle terminal: ${REMAINING}"
+
+    BLOCKED="$(blocked_story_ids)"
+    if [[ -n "$BLOCKED" ]]; then
+      log "Feature ${FEATURE_ID} wartet — echte Blockade (status=Blocked): ${BLOCKED}"
+      echo "BLOCKIERT: ${REMAINING}"
+      exit 3
+    fi
+
+    ORPHANED="$(orphaned_story_ids)"
+    if [[ -n "$ORPHANED" ]]; then
+      log "Feature ${FEATURE_ID}: liegengebliebene Story(s) aus unterbrochener Sitzung (${ORPHANED}) — setze auf 'To Do' zurück und versuche erneut."
+      for oid in ${ORPHANED//,/ }; do
+        BOARD_WRITER=flow "$BOARD_SCRIPT" set "$oid" status "To Do" --reason "Automatisch zurückgesetzt (board-feature-drain.sh): unterbrochene Sitzung, kein bewusster Blocker" >/dev/null
+      done
+      if [[ -n "$(git status --porcelain -- board/)" ]]; then
+        git add board/
+        git commit -q -m "chore(board): ${FEATURE_ID} liegengebliebene Story(s) auf To Do zurückgesetzt (${ORPHANED})"
+        git push origin "$FEATURE_BRANCH" --quiet
+      fi
+      continue
+    fi
+
+    # Sollte unerreichbar sein (REMAINING nicht leer, aber weder Blocked noch
+    # orphaned erkannt) — Sicherheitsnetz mit klarer Diagnose statt stillem Hang.
+    log "Feature ${FEATURE_ID} wartet — keine Story bereit, unklarer Zustand: ${REMAINING}"
     echo "BLOCKIERT: ${REMAINING}"
     exit 3
   fi
@@ -138,7 +239,7 @@ for round in $(seq 1 50); do
   # Frische Story-Sitzung (Story-Ebene, eigener Kontext) — /flow im Feature-Scope.
   "${BOARD_FEATURE_DRAIN_CLAUDE_CMD:-claude}" -p "/agent-flow:flow --parent ${FEATURE_ID}" --dangerously-skip-permissions || true
 
-  git fetch origin "$FEATURE_BRANCH" --quiet 2>/dev/null || true
+  sync_to_feature_branch
   STATUS_AFTER="$(story_status "$STORY_ID")"
 
   # L7-Prinzip: Fortschritt verifizieren statt Ausführung zu vertrauen. Bleibt

@@ -98,6 +98,14 @@ if [[ "\${MOCK_STORY_TO_BLOCK:-}" == "\$SID" ]]; then
   exit 0
 fi
 
+if [[ "\${MOCK_STORY_TO_ORPHAN:-}" == "\$SID" ]] && [[ ! -f "\${MOCK_ORPHAN_MARKER}" ]]; then
+  touch "\${MOCK_ORPHAN_MARKER}"
+  BOARD_WRITER=flow bash "$BOARD_SCRIPT" set "\$SID" status "In Progress" --reason "Test: simulierte unterbrochene Sitzung"
+  git add board/ && git commit -q -m "chore(board): \$SID In Progress (Test-Unterbrechung)"
+  git push origin "\${BOARD_MOCK_FEATURE_BRANCH}" --quiet
+  exit 0
+fi
+
 git checkout -q -b "feat/\${SID}-mock"
 echo "story \$SID" >> "story-\${SID}.txt"
 git add -A
@@ -307,6 +315,45 @@ if [[ $T5_EXIT -eq 0 ]]; then
 else
   fail "Test 5: Skript brach ab (exit=${T5_EXIT}) statt auf 'main' zurückzufallen"
   echo "  Output: $T5_OUTPUT"
+fi
+
+# ===========================================================================
+# Test 6 — Regression 2026-07-06 (Owner-Testlauf F-065/S-299): eine Story
+# bleibt "In Progress" (liegengeblieben durch eine unterbrochene Sitzung,
+# KEINE echte Blockade) -> wird automatisch auf "To Do" zurückgesetzt und
+# im selben Lauf sofort erneut versucht, statt fälschlich "BLOCKIERT" zu
+# melden.
+# ===========================================================================
+echo ""
+echo "--- Test 6: liegengebliebene 'In Progress'-Story wird automatisch zurückgesetzt und fertig ---"
+T6_WORK="$(setup_fixture "${TEST_WORK_DIR}/test6" 3)"
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+export MOCK_STORY_TO_ORPHAN="S-902"
+export MOCK_ORPHAN_MARKER="${TEST_WORK_DIR}/test6-orphan-marker"
+rm -f "$MOCK_ORPHAN_MARKER"
+set +e
+T6_OUTPUT="$(cd "$T6_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T6_EXIT=$?
+set -e
+unset MOCK_STORY_TO_ORPHAN MOCK_ORPHAN_MARKER
+
+if [[ $T6_EXIT -eq 0 ]] && echo "$T6_OUTPUT" | grep -q "liegengebliebene Story"; then
+  pass "Test 6a: liegengebliebene Story wurde erkannt und automatisch zurückgesetzt (kein manueller Eingriff nötig)"
+else
+  fail "Test 6a: erwartete exit 0 mit Hinweis auf liegengebliebene Story, bekam exit=${T6_EXIT}"
+  echo "  Output: $T6_OUTPUT"
+fi
+if ! echo "$T6_OUTPUT" | grep -q "^BLOCKIERT:"; then
+  pass "Test 6b: KEINE fälschliche BLOCKIERT-Meldung (das war genau der Vorfall)"
+else
+  fail "Test 6b: Feature wurde fälschlich als BLOCKIERT gemeldet, obwohl keine echte Blockade vorlag"
+  echo "  Output: $T6_OUTPUT"
+fi
+T6_MAIN_S902_STATUS="$(git -C "$T6_WORK" show origin/main:board/stories/S-902-test.yaml 2>/dev/null | grep '^status:' || true)"
+if echo "$T6_MAIN_S902_STATUS" | grep -q "Done"; then
+  pass "Test 6c: S-902 ist trotz der Unterbrechung am Ende korrekt Done"
+else
+  fail "Test 6c: S-902 ist NICHT Done nach dem automatischen Retry (Status: ${T6_MAIN_S902_STATUS})"
 fi
 
 # ===========================================================================
