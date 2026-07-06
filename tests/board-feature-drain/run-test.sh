@@ -372,6 +372,75 @@ else
 fi
 
 # ===========================================================================
+# Test 7 — Regression 2026-07-06 (Owner-Feedback, dritte Runde): eine "To Do"-
+# Story, die durch das Depends-Gate blockiert ist (Abhängigkeit in einem
+# ANDEREN Feature, noch nicht terminal), muss eine konkrete Erklärung liefern
+# statt eines nichtssagenden "BLOCKIERT" — der Button sprang sonst lautlos
+# zurück auf "Umsetzen", ohne den Owner zu informieren.
+# ===========================================================================
+echo ""
+echo "--- Test 7: Depends-Gate (Abhängigkeit in anderem Feature) -> konkrete Erklärung statt stillem BLOCKIERT ---"
+T7C_WORK="$(setup_fixture "${TEST_WORK_DIR}/test7c" 1)"
+(
+  cd "$T7C_WORK"
+  cat > board/features/F-002-other.yaml <<'YAML'
+id: F-002
+title: Anderes Feature
+goal: Test
+status: Active
+priority: P1
+spec: null
+definition_of_done: null
+labels: null
+depends: null
+owner: null
+area: null
+stories: null
+progress: null
+created_at: '2026-01-01T00:00:00Z'
+updated_at: '2026-01-01T00:00:00Z'
+YAML
+  cat > board/stories/S-800-dependency.yaml <<'YAML'
+id: S-800
+parent: F-002
+title: Voraussetzung in anderem Feature
+status: To Do
+priority: P2
+spec: null
+implements: null
+depends: null
+labels: null
+branch: null
+pr: null
+created_at: '2026-01-01T00:00:00Z'
+updated_at: '2026-01-01T00:00:00Z'
+done_at: null
+YAML
+  python3 -c "
+import re
+path = 'board/stories/S-901-test.yaml'
+with open(path) as f:
+    content = f.read()
+content = content.replace('depends: null', 'depends:\n- S-800')
+with open(path, 'w') as f:
+    f.write(content)
+"
+  git add -A
+  git commit -q -m "Test-Fixture: Depends-Gate über Feature-Grenze"
+  git push -q origin main
+)
+set +e
+T7C_OUTPUT="$(cd "$T7C_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T7C_EXIT=$?
+set -e
+if [[ $T7C_EXIT -eq 3 ]] && echo "$T7C_OUTPUT" | grep -q "WARTET:.*S-901 wartet auf S-800.*F-002"; then
+  pass "Test 7: konkrete Depends-Gate-Erklärung statt stillem BLOCKIERT (nennt S-800 + F-002)"
+else
+  fail "Test 7: erwartete WARTET-Meldung mit S-800/F-002, bekam exit=${T7C_EXIT}"
+  echo "  Output: $T7C_OUTPUT"
+fi
+
+# ===========================================================================
 # Ergebnis
 # ===========================================================================
 echo ""

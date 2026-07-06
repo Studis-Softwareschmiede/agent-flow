@@ -151,6 +151,52 @@ print(",".join(out))
 PYEOF
 }
 
+depends_gate_reason() {
+  # Für Storys, die "To Do" sind, aber trotzdem NICHT von `board next` ausgewählt
+  # wurden (also durch das Depends-Gate blockiert sind, s. SKILL.md "board next
+  # respektiert depends bereits") — liefert eine für den Owner verständliche
+  # Erklärung: "<dep-id> (<Status>, gehört zu <dep-Feature>)" je nicht-
+  # terminaler Abhängigkeit. Owner-Feedback 2026-07-06: der Button sprang
+  # lautlos von "In Progress" zurück auf "Umsetzen", ohne zu erklären, dass
+  # eine Abhängigkeit in einem ANDEREN Feature noch offen war.
+  python3 - "$FEATURE_ID" <<'PYEOF'
+import sys, glob, yaml
+fid = sys.argv[1]
+
+def load_all():
+    out = {}
+    for path in glob.glob("board/stories/*.yaml"):
+        try:
+            with open(path) as f:
+                data = yaml.safe_load(f) or {}
+        except Exception:
+            continue
+        sid = str(data.get("id", "")).strip()
+        if sid:
+            out[sid] = data
+    return out
+
+stories = load_all()
+lines = []
+for sid, data in stories.items():
+    if str(data.get("parent", "")).strip() != fid:
+        continue
+    if str(data.get("status", "")).strip() != "To Do":
+        continue
+    for dep in (data.get("depends") or []):
+        dep = str(dep).strip()
+        dep_data = stories.get(dep)
+        if dep_data is None:
+            continue
+        dep_status = str(dep_data.get("status", "")).strip()
+        if dep_status in ("Done", "Verworfen"):
+            continue
+        dep_parent = str(dep_data.get("parent", "")).strip()
+        lines.append(f"{sid} wartet auf {dep} ({dep_status}, gehört zu {dep_parent})")
+print("; ".join(lines))
+PYEOF
+}
+
 sync_to_feature_branch() {
   # Sorgt dafür, dass der lokale Checkout IMMER exakt origin/<Feature-Branch>
   # widerspiegelt, bevor Status gelesen/verändert wird — unabhängig davon,
@@ -230,8 +276,21 @@ for round in $(seq 1 50); do
       continue
     fi
 
-    # Sollte unerreichbar sein (REMAINING nicht leer, aber weder Blocked noch
-    # orphaned erkannt) — Sicherheitsnetz mit klarer Diagnose statt stillem Hang.
+    # Häufigster Fall: eine "To Do"-Story wartet auf eine noch offene
+    # Abhängigkeit (ggf. in einem ANDEREN Feature) — `board next` respektiert
+    # das Depends-Gate bereits, wählt so eine Story also nicht aus. Owner-
+    # Feedback 2026-07-06: statt eines nichtssagenden "BLOCKIERT" jetzt eine
+    # konkrete Erklärung, worauf genau gewartet wird.
+    DEPENDS_REASON="$(depends_gate_reason)"
+    if [[ -n "$DEPENDS_REASON" ]]; then
+      log "Feature ${FEATURE_ID} wartet auf Abhängigkeit(en): ${DEPENDS_REASON}"
+      echo "WARTET: ${DEPENDS_REASON}"
+      exit 3
+    fi
+
+    # Echtes Sicherheitsnetz (REMAINING nicht leer, aber weder Blocked noch
+    # orphaned noch durch eine erkennbare Abhängigkeit erklärt) — klare
+    # Diagnose statt stillem Hang.
     log "Feature ${FEATURE_ID} wartet — keine Story bereit, unklarer Zustand: ${REMAINING}"
     echo "BLOCKIERT: ${REMAINING}"
     exit 3
