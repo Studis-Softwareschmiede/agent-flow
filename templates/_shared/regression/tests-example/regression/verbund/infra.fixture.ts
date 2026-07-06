@@ -1,4 +1,5 @@
 import { test as base } from '@playwright/test';
+import { guardInfraResourceName, type InfraGuardOptions } from './infra-guard';
 
 /**
  * @file Reference fixture for infrastructure chains
@@ -9,8 +10,21 @@ import { test as base } from '@playwright/test';
  * The teardown is guaranteed via Playwright's fixture `use()` pattern with try/finally.
  * Even if a test throws, the finally block runs.
  *
+ * Infra-Leitplanken (regression-runner.md AC7/AC8): every resource name is
+ * checked via `guardInfraResourceName` BEFORE it is provisioned AND again
+ * before it is torn down — see `./infra-guard.ts`. A project that consumes
+ * this template supplies its own production-resource allowlist via
+ * `PRODUCTION_ALLOWLIST` below (empty by default: no known production
+ * resources in this reference example).
+ *
  * Usage: import { test } from './infra.fixture';
  */
+
+// AC7 — Produktiv-Allowlist: Namen bestehender produktiver Ressourcen, die der
+// Guard niemals antasten darf (auch nicht, falls sie zufaellig rtest-*
+// heissen wuerden). Konsumierende Projekte befuellen diese Liste mit ihren
+// echten Produktiv-Ressourcennamen; das Referenzbeispiel bleibt leer.
+const PRODUCTION_ALLOWLIST: InfraGuardOptions = { allowlist: [] };
 
 interface TestResource {
   id: string;
@@ -26,6 +40,13 @@ async function provisionResource(): Promise<TestResource> {
   console.log('[infra] Provisioning test resource...');
   // Simulate: allocate resource, set up test data, etc.
   const resourceId = `rtest-${Date.now()}`;
+
+  // AC7 — Leitplanken-Check VOR jeder Provisionierung: bricht hart ab
+  // (InfraGuardrailError), falls der Name gegen das rtest-*-Schema verstoesst
+  // oder mit der Produktiv-Allowlist kollidiert. Wirft der Guard hier, wurde
+  // noch keine Ressource angelegt — kein Teardown noetig.
+  guardInfraResourceName(resourceId, PRODUCTION_ALLOWLIST);
+
   const resource: TestResource = {
     id: resourceId,
     status: 'provisioning',
@@ -63,6 +84,12 @@ async function pollResource(resource: TestResource, maxRetries = 10): Promise<vo
  * This MUST run even if the test fails. Use try/finally to guarantee it.
  */
 async function teardownResource(resource: TestResource): Promise<void> {
+  // AC7 — Leitplanken-Check auch VOR dem Teardown: verhindert, dass ein
+  // Cleanup-Pfad jemals eine nicht-rtest-*/nicht-allowlistete Ressource
+  // anfasst (Defense-in-Depth, auch wenn derselbe Name bereits beim
+  // Provisionieren gegengeprueft wurde).
+  guardInfraResourceName(resource.id, PRODUCTION_ALLOWLIST);
+
   console.log(`[infra] Tearing down resource ${resource.id}...`);
   // Simulate: stop container, delete database, cleanup test data, etc.
   await new Promise((resolve) => setTimeout(resolve, 100));

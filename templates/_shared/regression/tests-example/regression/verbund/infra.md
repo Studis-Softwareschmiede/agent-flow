@@ -19,11 +19,15 @@ lokalen Erreichbarkeits-Check und ohne `REGRESSION_BASE_URL` aus — die
 Fixture kümmert sich selbst um ihr Ziel.
 
 Ressourcen-Namensschema (`rtest-*`) und Produktiv-Allowlist/garantiertes
-Cleanup auf Infra-Leitplanken-Ebene sind Gegenstand von
-[[regression-runner]] AC7/AC8 (separate Story).
+Cleanup auf Infra-Leitplanken-Ebene ([[regression-runner]] AC7/AC8) sind über
+`infra-guard.ts` (`guardInfraResourceName`) durchgesetzt: die Fixture ruft den
+Guard vor JEDER Provisionierung UND vor JEDEM Teardown eines
+Ressourcennamens auf — Verstöße (kein `rtest-*`-Präfix, oder Kollision mit der
+projekteigenen Produktiv-Allowlist) brechen hart ab.
 
 ## Verdrahtet mit
 
 - Testdatei: `infra.spec.ts`
 - Fixture: `infra.fixture.ts` (garantierter Teardown via `try`/`finally`)
+- Guard: `infra-guard.ts` (`rtest-*`-Namensschema + Produktiv-Allowlist, AC7/AC8)
 - Reporter: CTRF-JSON + JUnit (wird via `playwright.config.ts` aktiviert)
