@@ -47,6 +47,14 @@ Selbstheilung ohne Selbst-Degradation: wenn eine Regressions-Suite rot läuft, w
 
 ## Verträge
 
+### Eingabe (Trigger)
+```
+projekt:     <repo>
+lauf:        <Run-ID / Pfad zum CTRF-Report des roten Laufs>
+tests:       [tests/regression/<…>.spec.<ext>, …]   # optional — sonst aus dem CTRF-Report abgeleitet
+```
+Fehlt `lauf` oder ist der referenzierte Report nicht auffindbar → kein Heilversuch, Fehler „kein auswertbarer roter Lauf" (kein Rate-Versuch anhand vermuteter Symptome).
+
 ### Heil-PR — Pflicht-Referenzen
 ```
 - lauf:      <Run-ID / CTRF-Report-Referenz des roten Laufs>
