@@ -9,7 +9,9 @@ labels: []
 depends: null
 owner: null
 area: auslieferung
-stories: null
-progress: 0/0 done
+stories:
+- S-049
+- S-051
+progress: 0/2 done
 created_at: '2026-07-04T07:52:41Z'
 updated_at: '2026-07-04T07:54:22Z'
