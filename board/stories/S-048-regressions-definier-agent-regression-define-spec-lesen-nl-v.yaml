@@ -2,7 +2,7 @@ id: S-048
 parent: F-019
 title: 'Regressions-Definier-Agent (regression-define): Spec-Lesen, NL-Vorschlag,
   Playwright-Übersetzung'
-status: In Progress
+status: In Review
 priority: P2
 spec: docs/specs/regression-define.md
 implements:
@@ -29,8 +29,8 @@ estimate_note: ≈ Anker ref-L-subsystem-slice (8 EP) plus reale Geschwister-Sto
 confidence: medium
 tok_est: null
 branch: feat/S-048-regression-define-agent
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/282
 blocked_reason: null
 created_at: '2026-07-05T23:04:09Z'
-updated_at: '2026-07-06T07:19:42Z'
+updated_at: '2026-07-06T07:39:15Z'
 done_at: null
