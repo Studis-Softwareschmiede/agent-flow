@@ -2,7 +2,7 @@ id: S-052
 parent: F-019
 title: 'Regressions-Heil-Agent (regression-heal): Selektor-Drift via Playwright-Healer,
   immer als PR'
-status: To Do
+status: Done
 priority: P3
 spec: docs/specs/regression-heal.md
 implements:
@@ -16,16 +16,18 @@ depends:
 labels:
 - regression
 - agent
-size_est: null
-dispo_est: null
-dispo_act: null
-dispo_forecast: null
-estimate_note: null
-confidence: null
+size_est: M
+dispo_est: '3.0'
+dispo_act: '3'
+dispo_forecast: '0'
+estimate_note: Score-Heuristik (AC=5, Komponenten=2, kein db/security/ui-Label) =>
+  M; Baseline-Lookup md|balanced|M (n=16) => ep_est 3.0.
+confidence: medium
 tok_est: null
-branch: null
-pr: null
+branch: feat/S-052-regression-heal
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/288
 blocked_reason: null
 created_at: '2026-07-05T23:04:23Z'
-updated_at: '2026-07-05T23:04:23Z'
-done_at: null
+updated_at: '2026-07-06T10:13:10Z'
+done_at: '2026-07-06T10:12:05Z'
+tok: null
