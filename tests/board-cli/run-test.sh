@@ -957,6 +957,55 @@ else
 fi
 
 # ===========================================================================
+# Test 24 — 'board next --parent <F-###>' (2026-07-06, board-feature-drain.sh)
+#   @trace board-cli#next-parent-filter
+# ===========================================================================
+echo ""
+echo "--- Test 24: 'board next --parent' filtert auf ein Feature ---"
+
+T24_DIR="${TEST_WORK_DIR}/test24"
+setup_board "$T24_DIR"
+cat > "${T24_DIR}/board/features/F-002-zweit.yaml" <<'YAML'
+id: F-002
+title: Zweites Feature
+goal: Testfeature 2
+status: Active
+priority: P0
+spec: null
+definition_of_done: null
+labels: null
+depends: null
+owner: null
+stories: null
+progress: null
+created_at: '2026-01-01T00:00:00Z'
+updated_at: '2026-01-01T00:00:00Z'
+YAML
+make_story "$T24_DIR" "S-001" "To Do" "" "" "" ""
+sed -i.bak 's/^parent: F-001/parent: F-002/' "${T24_DIR}/board/stories/S-001-s-001.yaml" && rm -f "${T24_DIR}/board/stories/S-001-s-001.yaml.bak"
+
+T24_OUTPUT="$(cd "$T24_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" next --parent F-001 2>&1)"
+if [[ -z "$T24_OUTPUT" ]]; then
+  pass "Test 24a: '--parent F-001' liefert leer, da S-001 zu F-002 gehört"
+else
+  fail "Test 24a: erwartete leere Ausgabe, bekam: $T24_OUTPUT"
+fi
+
+T24_OUTPUT2="$(cd "$T24_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" next --parent F-002 2>&1)"
+if echo "$T24_OUTPUT2" | grep -q '"id": "S-001"'; then
+  pass "Test 24b: '--parent F-002' findet S-001 korrekt"
+else
+  fail "Test 24b: S-001 nicht gefunden — Output: $T24_OUTPUT2"
+fi
+
+T24_OUTPUT3="$(cd "$T24_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" next 2>&1)"
+if echo "$T24_OUTPUT3" | grep -q '"id": "S-001"'; then
+  pass "Test 24c: ohne --parent (board-weit) wird S-001 weiterhin gefunden (Rückwärtskompatibilität)"
+else
+  fail "Test 24c: ohne Filter sollte S-001 weiterhin gefunden werden — Output: $T24_OUTPUT3"
+fi
+
+# ===========================================================================
 # Ergebnis
 # ===========================================================================
 echo ""

@@ -46,9 +46,22 @@ mkdir -p "$MOCK_BIN_DIR"
 cat > "${MOCK_BIN_DIR}/gh" <<'MOCKEOF'
 #!/usr/bin/env bash
 if [[ "$1" == "run" && "$2" == "list" ]]; then
+  branch=""
+  for ((i=1; i<=$#; i++)); do
+    [[ "${!i}" == "--branch" ]] && { j=$((i+1)); branch="${!j}"; break; }
+  done
   for a in "$@"; do
     case "$a" in
-      *headSha*) echo "${MOCK_HEAD_SHA:-}"; exit 0 ;;
+      *headSha*)
+        # MOCK_HEAD_SHA=AUTO -> dynamisch aus dem echten origin/<branch> auflösen
+        # (nötig für --merge-feature, wo git merge --no-ff eine neue, im Voraus
+        # unbekannte SHA erzeugt statt eines Fast-Forward auf eine bekannte SHA).
+        if [[ "${MOCK_HEAD_SHA:-}" == "AUTO" ]]; then
+          echo "$(git rev-parse "origin/${branch}" 2>/dev/null)"
+        else
+          echo "${MOCK_HEAD_SHA:-}"
+        fi
+        exit 0 ;;
       *'.status'*) echo "${MOCK_CI_STATUS:-completed}"; exit 0 ;;
       *conclusion*) echo "${MOCK_CI_CONCLUSION:-success}"; exit 0 ;;
     esac
@@ -293,6 +306,92 @@ if [[ $T5_EXIT -eq 0 ]] && echo "$T5_OUTPUT" | grep -q "bereits gemergt"; then
 else
   fail "Test 5: wiederholter Aufruf nicht idempotent (exit=${T5_EXIT})"
   echo "  Output: $T5_OUTPUT"
+fi
+
+# ===========================================================================
+# Test 6 — Modus B: --target-branch — Story landet im Feature-Branch, main
+# bleibt unberührt, kein Rollout (Owner-Konzept 2026-07-06, Feature-Batching)
+# ===========================================================================
+echo ""
+echo "--- Test 6: --target-branch — Story landet im Feature-Branch, main unberührt, kein Rollout ---"
+T6_WORK="$(setup_fixture "${TEST_WORK_DIR}/test6")"
+(
+  cd "$T6_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+T6_MAIN_BEFORE="$(git -C "$T6_WORK" rev-parse origin/main)"
+set +e
+T6_OUTPUT="$(cd "$T6_WORK" && MOCK_HEAD_SHA="$(git rev-parse HEAD)" bash "$SHIP_SCRIPT" S-900 --target-branch "feature/F-900" 2>&1)"
+T6_EXIT=$?
+set -e
+
+if [[ $T6_EXIT -eq 0 ]]; then
+  pass "Test 6a: Ship in Feature-Branch läuft ohne Fehler durch"
+else
+  fail "Test 6a: exit=${T6_EXIT}"
+  echo "  Output: $T6_OUTPUT"
+fi
+T6_MAIN_AFTER="$(git -C "$T6_WORK" rev-parse origin/main)"
+if [[ "$T6_MAIN_BEFORE" == "$T6_MAIN_AFTER" ]]; then
+  pass "Test 6b: origin/main unverändert — Story landete NICHT direkt in main"
+else
+  fail "Test 6b: origin/main hat sich verändert, obwohl Ziel der Feature-Branch war"
+fi
+T6_FEATURE_LOG="$(git -C "$T6_WORK" log "origin/feature/F-900" --oneline 2>/dev/null | grep -c "feature work" || true)"
+if [[ "$T6_FEATURE_LOG" -ge 1 ]]; then
+  pass "Test 6c: Story-Commit ist tatsächlich in origin/feature/F-900 gelandet"
+else
+  fail "Test 6c: Story-Commit fehlt im Feature-Branch"
+fi
+T6_STATUS="$(git -C "$T6_WORK" show "origin/feature/F-900:board/stories/S-900-test.yaml" | grep '^status:')"
+if [[ "$T6_STATUS" == "status: Done" ]]; then
+  pass "Test 6d: Board-Flip auf Done ist im Feature-Branch committet"
+else
+  fail "Test 6d: Board-Status im Feature-Branch ist '${T6_STATUS}'"
+fi
+
+# ===========================================================================
+# Test 7 — Modus C: --merge-feature — kompletter Feature-Branch nach main,
+# CI-Watch + Rollout, idempotent bei wiederholtem Aufruf
+# ===========================================================================
+echo ""
+echo "--- Test 7: --merge-feature — Feature-Branch komplett nach main, idempotent ---"
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+T7_MAIN_HEAD_BEFORE="$(git -C "$T6_WORK" rev-parse origin/main)"
+T7_OUTPUT="$(cd "$T6_WORK" && MOCK_HEAD_SHA="AUTO" bash "$SHIP_SCRIPT" --merge-feature "feature/F-900" 2>&1)"
+T7_EXIT=$?
+
+if [[ $T7_EXIT -eq 0 ]]; then
+  pass "Test 7a: --merge-feature läuft ohne Fehler durch"
+else
+  fail "Test 7a: exit=${T7_EXIT}"
+  echo "  Output: $T7_OUTPUT"
+fi
+T7_MAIN_HEAD_AFTER="$(git -C "$T6_WORK" rev-parse origin/main)"
+if [[ "$T7_MAIN_HEAD_AFTER" != "$T7_MAIN_HEAD_BEFORE" ]]; then
+  pass "Test 7b: origin/main hat einen neuen Commit (der Feature-Merge)"
+else
+  fail "Test 7b: origin/main unverändert — Merge hat nicht stattgefunden"
+fi
+T7_MAIN_HAS_STORY="$(git -C "$T6_WORK" log origin/main --oneline | grep -c "feature work" || true)"
+if [[ "$T7_MAIN_HAS_STORY" -ge 1 ]]; then
+  pass "Test 7c: Story-Commit aus dem Feature-Branch ist jetzt in main enthalten"
+else
+  fail "Test 7c: Story-Commit fehlt in main nach dem Feature-Merge"
+fi
+
+# Idempotenz: zweiter Aufruf, Feature-Branch ist jetzt bereits in main enthalten
+T7B_OUTPUT="$(cd "$T6_WORK" && MOCK_HEAD_SHA="AUTO" bash "$SHIP_SCRIPT" --merge-feature "feature/F-900" 2>&1)"
+T7B_EXIT=$?
+if [[ $T7B_EXIT -eq 0 ]] && echo "$T7B_OUTPUT" | grep -q "bereits vollständig"; then
+  pass "Test 7d: wiederholter --merge-feature-Aufruf erkennt 'bereits enthalten', kein Doppel-Merge"
+else
+  fail "Test 7d: wiederholter Aufruf nicht idempotent (exit=${T7B_EXIT})"
+  echo "  Output: $T7B_OUTPUT"
 fi
 
 # ===========================================================================
