@@ -57,11 +57,15 @@ Regressions-Läufe laufen **ohne Agent**, reproduzierbar und sicher. Jede Suite 
 ## Verträge
 
 ### Begleitbeschreibungs-Kopf (`<suite>.md`)
+Frontmatter, `---`-begrenzt, am Dateianfang (konsistent mit dem `---`-Frontmatter-Muster der übrigen Fabrik-`.md`-Dateien):
 ```
+---
 target: local            # local | ephemeral-infra | url
 url: <nur bei target=url>
 kosten: <nur bei ephemeral-infra: Kosten-/Ressourcen-Deklaration>
+---
 ```
+Der Runner (`scripts/run-regression.sh`) liest ausschließlich die Zeilen zwischen der ersten und zweiten `---`-Zeile.
 
 ### Testobjekt-Auflösung
 | `target` | Ziel | Herkunft |

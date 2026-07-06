@@ -35,8 +35,14 @@ export default defineConfig({
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    /* Base URL to use in actions like `await page.goto('/')`. */
-    // baseURL: 'http://127.0.0.1:3000',
+    /*
+     * Base URL to use in actions like `await page.goto('/')`.
+     * Set at runtime by scripts/run-regression.sh (regression-runner AC2/AC3/AC5):
+     * resolved target ("local" -> http://localhost:<preview_port>, "url" -> the
+     * declared suite URL). Undefined when run directly via `npx playwright test`
+     * without the runner (falls back to Playwright's default: no base URL).
+     */
+    baseURL: process.env.REGRESSION_BASE_URL,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
