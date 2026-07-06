@@ -40,10 +40,10 @@ Verwendung:
   board set <id> <feld> <wert> [--reason <text>]
   board show <id>
   board list [--type feature|story] [--status <status>] [--parent <F-###>]
-  board next
+  board next [--parent <F-###>]
   board rollup <F-###|--all>
   board lint [<board-dir>]
-  board ready [--quiet]
+  board ready [--quiet] [--parent <F-###>]
   board export-github
   board area list
   board area merge <a> <b> <ziel>
@@ -770,6 +770,19 @@ cmd_next() {
   # KEIN require_board — next ist ein lesendes Verb; fehlendes Board/Verzeichnis → leere
   # Ausgabe + Exit 0 (board-cli-Spec AC6 Edge-Case; coder/L15).
 
+  # --parent <F-###> (optional, 2026-07-06 — Feature-Batch-Skript board-feature-drain.sh):
+  # beschränkt die Kandidatenliste auf Storys dieses Features. Dieselbe
+  # Sortierung/Depends-Gate wie im board-weiten Fall — EINE Quelle der
+  # Wahrheit statt einer zweiten, duplizierten Auswahl-Implementierung.
+  local parent_filter=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --parent) shift; parent_filter="$1" ;;
+      *) die "next: unbekannte Option '$1'" ;;
+    esac
+    shift
+  done
+
   # Alle Dateien einsammeln (archive/ ausgeschlossen)
   local story_files=()
   if [[ -d "$STORIES_DIR" ]]; then
@@ -786,15 +799,16 @@ cmd_next() {
   fi
 
   # Queue-Logik via Python (deterministisch, kein LLM)
-  python3 - "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" \
+  python3 - "$parent_filter" "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" \
              "${#feature_files[@]}" "${feature_files[@]+"${feature_files[@]}"}" <<'PYEOF'
 import sys, yaml, json, datetime, re
 
-# Argumente: <n_stories> <story_file...> <n_features> <feature_file...>
+# Argumente: <parent_filter> <n_stories> <story_file...> <n_features> <feature_file...>
 args = sys.argv[1:]
-n_stories  = int(args[0])
-story_files  = args[1 : 1 + n_stories]
-rest         = args[1 + n_stories:]
+parent_filter = args[0]
+n_stories  = int(args[1])
+story_files  = args[2 : 2 + n_stories]
+rest         = args[2 + n_stories:]
 n_features   = int(rest[0])
 feature_files = rest[1 : 1 + n_features]
 
@@ -845,10 +859,12 @@ for path in feature_files:
 
 # --- Schritt 1: Kandidaten = To-Do-Stories ---
 # Nur "To Do" ist Kandidat; "Verworfen" (terminal, Won't-Do) wird NIE aufgegriffen (AC4).
+# --parent-Filter (optional): nur Storys dieses Features (board-feature-drain.sh).
 candidates = [
     (sid, data)
     for sid, data in stories.items()
     if str(data.get("status", "")).strip() == "To Do"
+    and (not parent_filter or str(data.get("parent", "")).strip() == parent_filter)
 ]
 
 # --- Schritt 2: Filter — alle depends terminal ({Done, Verworfen}) ---
@@ -1852,10 +1868,12 @@ PYEOF
 # ---------------------------------------------------------------------------
 cmd_ready() {
   local quiet=0
+  local parent_filter=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --quiet|-q) quiet=1 ;;
+      --parent) shift; parent_filter="$1" ;;
       *) die "ready: unbekannte Option '$1'" ;;
     esac
     shift
@@ -1878,15 +1896,16 @@ cmd_ready() {
     repo_root="$(pwd)"
   fi
 
-  python3 - "$STORIES_DIR" "$repo_root" "$quiet" \
+  python3 - "$STORIES_DIR" "$repo_root" "$quiet" "$parent_filter" \
             "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" <<'PYEOF'
 import sys, os, yaml, re
 
-stories_dir  = sys.argv[1]
-repo_root    = sys.argv[2]
-quiet        = sys.argv[3] == "1"
-n_stories    = int(sys.argv[4])
-story_files  = sys.argv[5 : 5 + n_stories]
+stories_dir   = sys.argv[1]
+repo_root     = sys.argv[2]
+quiet         = sys.argv[3] == "1"
+parent_filter = sys.argv[4]
+n_stories     = int(sys.argv[5])
+story_files   = sys.argv[6 : 6 + n_stories]
 
 AC_IN_SPEC      = re.compile(r"\bAC(\d+)\b")
 FRONTMATTER_RE  = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
@@ -1945,6 +1964,13 @@ def categorize(reason):
 for sid in sorted_ids:
     data = stories[sid]
     status = str(data.get("status", "")).strip()
+
+    # --parent-Filter (2026-07-06 — board-feature-drain.sh): Storys anderer
+    # Features werden wie n/a behandelt, tauchen also nicht in WAITING/Summary auf.
+    if parent_filter and str(data.get("parent", "")).strip() != parent_filter:
+        if not quiet:
+            lines.append(f"(n/a)     {sid}")
+        continue
 
     if status != "To Do":
         if not quiet:

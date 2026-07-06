@@ -107,6 +107,8 @@ Das GitHub-Board ist nicht nur Anzeige, sondern **Arbeits-Queue UND persistenter
 - **Code-Landing = PR pro Item** (Default), via `merge_policy: pr|direct` im Projekt-Profil auf Direkt-auf-`main` umstellbar. PR-Modus nutzt die „In Review"-Spalte + deinen Merge-Approve.
 - **Tester läuft interaktiv** im `/flow`-Lauf (sofortiges PASS/FAIL). CI-Tester (Actions auf dem PR) optional später, nur im PR-Modus.
 
+**Feature-Batch-Orchestrierung (Owner-Konzept 2026-07-06, seit `board-feature-drain.sh`).** Ergänzt eine dritte, deterministische Ebene ZWISCHEN der äußeren Board-Schleife (dev-gui `ProjectDrain`/Nachtwächter) und der Story-Ebene (`/flow`): Bei einem Feature mit ≥ 2 Storys arbeitet `scripts/board-feature-drain.sh <F-###>` alle Storys des Features nacheinander ab — jede landet **nur** in einem eigenen Feature-Branch (`feature/<F-###>`, kein Rollout je Story) — und stößt **erst nach der letzten Story** EINEN einzigen Merge nach `main` + EIN Rollout an (statt N Merges/N Rollouts). Löst das "10 Storys, 10× Deploy"-Problem strukturell. Bleibt eine Story blockiert, wartet das GANZE Feature (kein Timeout, kein Teil-Deploy). Rein mechanisch (kein LLM auf dieser Ebene) — Details: [`docs/specs/feature-batch-orchestration.md`](docs/specs/feature-batch-orchestration.md).
+
 ## 4c. Sprach-/Domänen-Expertise: Knowledge Packs (statt per-Sprache-Agenten)
 
 Trennung **Rolle (Prozess) ≠ Expertise (Wissen)**: die Rollen-Agenten (coder/reviewer/tester) sind generisch; die Sprach-/Domänen-Expertise liegt in versionierten **Knowledge Packs** in der Fabrik:
