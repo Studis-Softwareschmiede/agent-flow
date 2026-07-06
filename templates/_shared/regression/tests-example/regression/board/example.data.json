@@ -1,0 +1,27 @@
+[
+  {
+    "area_id": "example-area-a",
+    "description": "First example area for regression testing",
+    "order": 1
+  },
+  {
+    "area_id": "example-area-b",
+    "description": "Second example area for regression testing",
+    "order": 2
+  },
+  {
+    "area_id": "example-area-c",
+    "description": "Third example area for regression testing",
+    "order": 3
+  },
+  {
+    "area_id": "demo-bereich",
+    "description": "Demo area for end-to-end scenario testing",
+    "order": 4
+  },
+  {
+    "area_id": "example-area-d",
+    "description": "Fourth example area for regression testing",
+    "order": 5
+  }
+]
