@@ -1,10 +1,26 @@
 #!/usr/bin/env bash
 # run-regression.sh — Deterministischer Regressions-Runner (Template-Artefakt).
 #
-# Spec: docs/specs/regression-runner.md — deckt AC1, AC2, AC3, AC5, AC6, AC9.
-# (AC4/AC7/AC8 — ephemeral-infra-Provisionierung, rtest-*-Namensschema,
-#  Produktiv-Allowlist, garantiertes Cleanup — sind NICHT Teil dieses Skripts;
-#  sie werden am Fixture-/Infra-Leitplanken-Layer separat abgedeckt.)
+# Spec: docs/specs/regression-runner.md — deckt AC1, AC2, AC3, AC5, AC6, AC9
+# direkt; AC4/AC7/AC8 (ephemeral-infra-Provisionierung, rtest-*-Namensschema,
+# Produktiv-Allowlist, garantiertes Cleanup) per Delegation an den
+# Fixture-/Infra-Leitplanken-Layer, den dieses Skript fuer den
+# `ephemeral-infra`-Bucket aufruft (kein eigener Ressourcen-Code hier, s.u.).
+#
+# AC4/AC7/AC8 — dieses Skript provisioniert/zerstoert selbst NICHTS: fuer
+#        `target: ephemeral-infra` ruft es lediglich `npx playwright test` auf
+#        (s. `run_playwright "ephemeral-infra" ...` unten); die eigentliche
+#        Provisionierung + der garantierte Teardown (AC4/AC8) sowie die
+#        rtest-*-Namensschema-/Produktiv-Allowlist-Durchsetzung (AC7) leben in
+#        der Playwright-Fixture, siehe Referenz-Implementierung:
+#          templates/_shared/regression/tests-example/regression/verbund/infra-guard.ts
+#          templates/_shared/regression/tests-example/regression/verbund/infra.fixture.ts
+#        `infra-guard.ts` liefert `guardInfraResourceName()`, das vor JEDER
+#        Provisionierung/JEDEM Teardown eines Infra-Ressourcennamens hart
+#        abbricht, wenn der Name nicht `rtest-*` ist oder mit einem
+#        Allowlist-Eintrag (produktive Ressource) kollidiert; das
+#        Fixture-try/finally-Muster (regression-playwright-conventions.md AC4)
+#        garantiert den Teardown-Aufruf auch im Fehlerpfad (AC8).
 #
 # AC1 — Deterministisch: dieses Skript dispatcht pro Testlauf KEINEN Agenten,
 #        es ruft ausschliesslich `npx playwright test` auf.

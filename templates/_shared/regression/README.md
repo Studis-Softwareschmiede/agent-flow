@@ -32,6 +32,7 @@ tests/regression/
     <suite>.md
   ...                           # weitere Bereiche aus board/areas.yaml
   verbund/
+    infra-guard.ts               # Infra-Leitplanken: rtest-*-Schema + Allowlist (AC7/AC8)
     infra.fixture.ts            # Referenz-Fixture für Infra-Ketten
     infra.spec.ts               # bereichsübergreifende Tests (target: ephemeral-infra)
     infra.md                    # Begleitbeschreibung (target-Header)
@@ -72,6 +73,15 @@ try {
   await teardown(resource);
 }
 ```
+
+## Infra-Leitplanken (AC7/AC8, [`regression-runner.md`](../../../docs/specs/regression-runner.md))
+
+Referenz-Guard: `tests-example/regression/verbund/infra-guard.ts` (`guardInfraResourceName`).
+
+- **AC7 — `rtest-*`-Namensschema + Produktiv-Allowlist:** vor JEDER Provisionierung und JEDEM Teardown eines Infra-Ressourcennamens ruft die Fixture `guardInfraResourceName(name, { allowlist })` auf. Der Guard bricht mit `InfraGuardrailError` hart ab, wenn der Name (a) nicht mit `rtest-` beginnt, oder (b) mit einem Eintrag der projekteigenen Produktiv-Allowlist kollidiert — Fall (b) hat Vorrang, selbst wenn der Name zufällig dem `rtest-*`-Schema entspricht (keine Produktiv-Berührung).
+- **AC8 — garantiertes Cleanup:** der Guard-Aufruf ist in beide Pfade (Provision + Teardown) der Fixture verdrahtet; das umgebende `try`/`finally` (AC4) sorgt dafür, dass der Teardown-Versuch auch bei einem fehlschlagenden Testkörper läuft.
+
+Konsumierende Projekte pflegen ihre eigene Produktiv-Allowlist im `PRODUCTION_ALLOWLIST`-Konstant in `infra.fixture.ts` (im Referenzbeispiel leer).
 
 ## Reporter-Konfiguration (AC5)
 
@@ -167,7 +177,8 @@ Beide sind maschinenlesbar für CI/Aggregation.
 - **Versioniert**: Testdefinitionen + Datentabellen in Git; Läufe/Artefakte NICHT.
 - **Fixture-Sicherheit**: Teardown garantiert auch im Fehlerpfad (fixture-scoped oder try/finally).
 - **Secrets**: NIE in Testdateien hartcodiert — Runtime-Injektion via Umgebung.
-- **Ressourcen-Naming**: Infra-Ressourcen für Tests: Präfix `rtest-` (z.B. `rtest-testdb-001`).
+- **Ressourcen-Naming**: Infra-Ressourcen für Tests: Präfix `rtest-` (z.B. `rtest-testdb-001`), durchgesetzt vom Guard (`infra-guard.ts`, AC7).
+- **Produktiv-Allowlist**: produktive Ressourcen sind unantastbar; eine Kollision mit der Allowlist bricht den Guard hart ab, auch bei `rtest-*`-Namen (AC7).
 
 ## Verweis
 
