@@ -207,9 +207,39 @@ sync_to_feature_branch() {
   # ohne diesen Sync lasen story_status()/remaining_nonterminal() vom
   # Branch-Stand, den die letzte Kindsitzung zufällig hinterlassen hatte,
   # nicht zwingend vom aktuellen origin/feature/<F-###>.
+  #
+  # 2026-07-06 (vierte Runde): mehrere unabhängige dev-gui-Automatisierungen
+  # (z.B. der normale "Board abarbeiten"-Lauf) teilen sich denselben
+  # Arbeitsbaum im Container. Hat eine ANDERE, gerade aktive Sitzung dort eine
+  # noch nicht committete Datei liegen, verweigert `git checkout` zu Recht
+  # ("would be overwritten by checkout") — sonst ginge deren Arbeit verloren.
+  # Das ist kein Fehler in board-feature-drain.sh, sondern ein normaler,
+  # VORÜBERGEHENDER Zustand. Statt sofort mit rohem Git-Fehlertext
+  # abzubrechen, wird mehrfach mit kurzer Wartezeit erneut versucht; bleibt es
+  # blockiert, ein klarer, verständlicher Hinweis statt kryptischer Ausgabe.
+  local retries="${BOARD_FEATURE_DRAIN_SYNC_RETRIES:-5}"
+  local sleep_s="${BOARD_FEATURE_DRAIN_SYNC_SLEEP:-10}"
   git fetch origin "$FEATURE_BRANCH" --quiet
-  git checkout -q "$FEATURE_BRANCH" 2>/dev/null || git checkout -q -b "$FEATURE_BRANCH" "origin/${FEATURE_BRANCH}"
-  git reset --hard -q "origin/${FEATURE_BRANCH}"
+  local attempt=0 checkout_out=""
+  while (( attempt < retries )); do
+    attempt=$((attempt + 1))
+    if checkout_out="$(git checkout -q "$FEATURE_BRANCH" 2>&1)"; then
+      git reset --hard -q "origin/${FEATURE_BRANCH}"
+      return 0
+    fi
+    if checkout_out="$(git checkout -q -b "$FEATURE_BRANCH" "origin/${FEATURE_BRANCH}" 2>&1)"; then
+      git reset --hard -q "origin/${FEATURE_BRANCH}"
+      return 0
+    fi
+    if echo "$checkout_out" | grep -q "would be overwritten by checkout"; then
+      log "Arbeitsverzeichnis wird gerade von einer anderen Sitzung genutzt — warte ${sleep_s}s und versuche erneut (${attempt}/${retries})."
+      sleep "$sleep_s"
+      continue
+    fi
+    die "sync_to_feature_branch: unerwarteter Checkout-Fehler: ${checkout_out}"
+  done
+  echo "WARTET: Arbeitsverzeichnis wird von einer anderen, aktiven Sitzung belegt (unfertige Datei blockiert den Branch-Wechsel) — bitte in Kürze erneut versuchen."
+  exit 3
 }
 
 # --- Kandidaten-Check: mindestens 1 Story unter diesem Feature? ---

@@ -441,6 +441,49 @@ else
 fi
 
 # ===========================================================================
+# Test 8 — Regression 2026-07-06 (Owner-Testlauf, vierte Runde): eine ANDERE,
+# aktive dev-gui-Automatisierung hat im geteilten Arbeitsbaum eine noch nicht
+# committete Datei liegen, die mit dem Feature-Branch kollidiert -> `git
+# checkout` verweigert zu Recht. Statt eines kryptischen Git-Fehlers muss
+# board-feature-drain.sh das erkennen, ein paar Mal erneut versuchen und bei
+# fortbestehender Blockade klar (nicht roh) melden.
+# ===========================================================================
+echo ""
+echo "--- Test 8: geteilter Arbeitsbaum durch andere Sitzung blockiert -> klare WARTET-Meldung statt rohem Git-Fehler ---"
+T8_WORK="$(setup_fixture "${TEST_WORK_DIR}/test8" 2)"
+(
+  cd "$T8_WORK"
+  git push -q origin "origin/main:refs/heads/feature/F-001"
+  git fetch -q origin feature/F-001
+  git checkout -q -b feature/F-001-setup "origin/feature/F-001"
+  echo "vom-branch-committet" > conflict.txt
+  git add conflict.txt
+  git commit -q -m "Feature-Branch: conflict.txt committet"
+  git push -q origin "feature/F-001-setup:feature/F-001"
+  git checkout -q main
+  git branch -q -D feature/F-001-setup
+  echo "andere-sitzung-unfertig" > conflict.txt
+)
+export BOARD_FEATURE_DRAIN_SYNC_RETRIES=2
+export BOARD_FEATURE_DRAIN_SYNC_SLEEP=0
+set +e
+T8_OUTPUT="$(cd "$T8_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T8_EXIT=$?
+set -e
+unset BOARD_FEATURE_DRAIN_SYNC_RETRIES BOARD_FEATURE_DRAIN_SYNC_SLEEP
+if [[ $T8_EXIT -eq 3 ]] && echo "$T8_OUTPUT" | grep -q "WARTET: Arbeitsverzeichnis wird von einer anderen"; then
+  pass "Test 8: klare WARTET-Meldung statt rohem Git-Fehlertext, kein Crash"
+else
+  fail "Test 8: erwartete klare WARTET-Meldung, bekam exit=${T8_EXIT}"
+  echo "  Output: $T8_OUTPUT"
+fi
+if [[ -f "${T8_WORK}/conflict.txt" ]] && grep -q "andere-sitzung-unfertig" "${T8_WORK}/conflict.txt"; then
+  pass "Test 8b: die fremde, unfertige Datei der anderen Sitzung wurde NICHT angetastet"
+else
+  fail "Test 8b: die fremde Datei wurde verändert/gelöscht — Datenverlust-Risiko"
+fi
+
+# ===========================================================================
 # Ergebnis
 # ===========================================================================
 echo ""
