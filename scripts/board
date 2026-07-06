@@ -1132,8 +1132,8 @@ cmd_export_github() {
 # ---------------------------------------------------------------------------
 # Verb: area list — AC1 (docs/specs/board-area-ops.md)
 #
-# Gibt board/areas.yaml als sortiertes JSON-Array aus (Felder id, titel,
-# beschreibung, reihenfolge). Fehlt areas.yaml (oder ist sie leer/kein
+# Gibt board/areas.yaml als sortiertes JSON-Array aus (Felder id, name,
+# description, order). Fehlt areas.yaml (oder ist sie leer/kein
 # Mapping) → leeres Array, Exit 0. Lesend, token-frei/deterministisch —
 # kein require_board (areas.yaml ist optional, board-areas AC1/E2).
 # ---------------------------------------------------------------------------
@@ -1165,13 +1165,13 @@ for entry in data:
         continue
     items.append({
         "id":           entry.get("id"),
-        "titel":        entry.get("titel"),
-        "beschreibung": entry.get("beschreibung"),
-        "reihenfolge":  entry.get("reihenfolge"),
+        "name":        entry.get("name"),
+        "description": entry.get("description"),
+        "order":  entry.get("order"),
     })
 
 def sort_key(item):
-    r = item.get("reihenfolge")
+    r = item.get("order")
     return r if (isinstance(r, int) and not isinstance(r, bool)) else 10**9
 
 items.sort(key=sort_key)
@@ -1186,7 +1186,7 @@ PYEOF
 # `board area merge <a> <b> <ziel>` legt Bereich <a>/<b> unter <ziel> zusammen:
 #   - areas.yaml: <a>/<b>-Eintraege entfernen (sofern != <ziel>), <ziel>
 #     behalten oder neu anlegen (Titel/Beschreibung von <a>, sonst <b>;
-#     naechste reihenfolge — Spec-Praezisierung, s. Edge-Cases in der Spec).
+#     naechste order — Spec-Praezisierung, s. Edge-Cases in der Spec).
 #   - Mechanisches Umschreiben aller area-Etiketten (Feature-`area`,
 #     Spec-`area`-Frontmatter, Ideen-Inbox-`- area:`-Eintraege) von <a>/<b>
 #     auf <ziel>.
@@ -1279,18 +1279,18 @@ if ziel_new:
 
     source_entry = entries_by_id.get(area_a) or entries_by_id.get(area_b)
 
-    def is_int_reihenfolge(v):
+    def is_int_order(v):
         return isinstance(v, int) and not isinstance(v, bool)
 
-    ordnungen = [e.get("reihenfolge") for e in areas_list if isinstance(e, dict)]
-    ordnungen = [o for o in ordnungen if is_int_reihenfolge(o)]
-    next_reihenfolge = (max(ordnungen) + 1) if ordnungen else 1
+    ordnungen = [e.get("order") for e in areas_list if isinstance(e, dict)]
+    ordnungen = [o for o in ordnungen if is_int_order(o)]
+    next_order = (max(ordnungen) + 1) if ordnungen else 1
 
     new_ziel_entry = {
         "id":           area_ziel,
-        "titel":        source_entry.get("titel"),
-        "beschreibung": source_entry.get("beschreibung"),
-        "reihenfolge":  next_reihenfolge,
+        "name":        source_entry.get("name"),
+        "description": source_entry.get("description"),
+        "order":  next_order,
     }
 
 # --- alte Labels, die auf <ziel> umgeschrieben werden ---
@@ -1416,7 +1416,7 @@ PYEOF
 #   - Ideen-Inbox-Eintraege mit `- area: <a>`
 # — mit einem Ziel-Vorschlag (<a1>|<a2>) + Konfidenz (token-freie,
 # deterministische Wort-Ueberlappungs-Heuristik der Artefakt-Bezeichner gegen
-# id/titel/beschreibung der beiden Ziel-Bereiche). Eindeutige Faelle werden
+# id/name/description der beiden Ziel-Bereiche). Eindeutige Faelle werden
 # SOFORT umgeschrieben (Etikett); mehrdeutige (Punktegleichstand, inkl. 0:0)
 # landen als maschinenlesbarer Fragenkatalog ({stage,id,frage,quelle,
 # optionen}, board/fragenkatalog.schema.json, stage="split").
@@ -1431,7 +1431,7 @@ PYEOF
 # ein Nicht-Ziel dieser Operation).
 #
 # E2: neue Ziel-Bereiche <a1>/<a2> werden — sofern noch unbekannt — SOFORT in
-# areas.yaml angelegt (Platzhalter-`beschreibung` + naechste `reihenfolge`),
+# areas.yaml angelegt (Platzhalter-`description` + naechste `order`),
 # damit kein zugeordnetes Artefakt je auf einen fehlenden Bereich zeigt
 # (kein AREA-UNKNOWN-Zwischenzustand). Der Quell-Bereich <a> wird nur
 # entfernt, wenn ALLE schreibbaren Artefakte zugeordnet sind (Fragenkatalog
@@ -1566,7 +1566,7 @@ def target_tokens(area_id):
     toks = tokens(area_id.replace("-", " "))
     entry = entries_by_id.get(area_id)
     if entry:
-        toks |= tokens(entry.get("titel"), entry.get("beschreibung"))
+        toks |= tokens(entry.get("name"), entry.get("description"))
     return toks
 
 
@@ -1753,31 +1753,31 @@ if os.path.isfile(ideas_path):
             add_frage("Idee", titel, rel_ideas)
 
 # --- areas.yaml: neue Ziel-Bereiche anlegen (E2), Quelle ggf. entfernen ---
-def is_int_reihenfolge(v):
+def is_int_order(v):
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-ordnungen = [e.get("reihenfolge") for e in areas_list if isinstance(e, dict)]
-ordnungen = [o for o in ordnungen if is_int_reihenfolge(o)]
-next_reihenfolge = (max(ordnungen) + 1) if ordnungen else 1
+ordnungen = [e.get("order") for e in areas_list if isinstance(e, dict)]
+ordnungen = [o for o in ordnungen if is_int_order(o)]
+next_order = (max(ordnungen) + 1) if ordnungen else 1
 
 new_entries = []
 if a1_new:
     new_entries.append({
         "id":           area_a1,
-        "titel":        area_a1.replace("-", " ").title(),
-        "beschreibung": f"TODO: Beschreibung nach Split von '{area_a}' ergaenzen.",
-        "reihenfolge":  next_reihenfolge,
+        "name":        area_a1.replace("-", " ").title(),
+        "description": f"TODO: Beschreibung nach Split von '{area_a}' ergaenzen.",
+        "order":  next_order,
     })
-    next_reihenfolge += 1
+    next_order += 1
 if a2_new:
     new_entries.append({
         "id":           area_a2,
-        "titel":        area_a2.replace("-", " ").title(),
-        "beschreibung": f"TODO: Beschreibung nach Split von '{area_a}' ergaenzen.",
-        "reihenfolge":  next_reihenfolge,
+        "name":        area_a2.replace("-", " ").title(),
+        "description": f"TODO: Beschreibung nach Split von '{area_a}' ergaenzen.",
+        "order":  next_order,
     })
-    next_reihenfolge += 1
+    next_order += 1
 
 fully_assigned = len(fragenkatalog) == 0
 remove_source = fully_assigned and area_a not in (area_a1, area_a2)

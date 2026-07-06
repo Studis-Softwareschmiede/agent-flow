@@ -43,11 +43,11 @@ Bereiche entwickeln sich: sie werden zusammengelegt (`merge`), aufgeteilt (`spli
 - `merge`/`split` mit einem Quell-/Ziel-Bereich, der nicht in `areas.yaml` existiert → Fehler, **kein** Schreiben, Exit ≠ 0.
 
 ### E2: split-Ziel existiert noch nicht
-- `<a1>`/`<a2>` sind neue Bereiche → `split` legt sie in `areas.yaml` an (erbt `beschreibung`-Platzhalter + nächste `reihenfolge`); der Quell-Bereich `<a>` wird entfernt, sobald alle Artefakte zugeordnet sind (offene Fragen → `<a>` bleibt bis zur Beantwortung bestehen).
+- `<a1>`/`<a2>` sind neue Bereiche → `split` legt sie in `areas.yaml` an (erbt `description`-Platzhalter + nächste `order`); der Quell-Bereich `<a>` wird entfernt, sobald alle Artefakte zugeordnet sind (offene Fragen → `<a>` bleibt bis zur Beantwortung bestehen).
 
 ## Acceptance-Kriterien
 
-- **AC1** — `board area list` gibt die Bereiche aus `areas.yaml` als JSON-Array (Felder `id,titel,beschreibung,reihenfolge`), sortiert nach `reihenfolge`, aus. Fehlt `areas.yaml` → leeres Array, Exit 0. Token-frei/deterministisch. *(V1)*
+- **AC1** — `board area list` gibt die Bereiche aus `areas.yaml` als JSON-Array (Felder `id,name,description,order`), sortiert nach `order`, aus. Fehlt `areas.yaml` → leeres Array, Exit 0. Token-frei/deterministisch. *(V1)*
 - **AC2** — `board area merge <a> <b> <ziel>` ist vollautomatisch: es schreibt `areas.yaml` (entfernt `<a>`/`<b>`, behält/legt `<ziel>` an) und schreibt **mechanisch** alle `area`-Etiketten (Feature-`area`, Spec-`area`-Frontmatter, Ideen-Inbox-Einträge) von `<a>`/`<b>` auf `<ziel>` um. Es ist **idempotent** (zweiter Aufruf ändert nichts) und verschiebt **keine** Dateien / ändert **keine** Spec-IDs. Unbekannter Bereich → kein Schreiben, Exit ≠ 0. *(V2)*
 - **AC3** — `board archive-done-stories` verschiebt jede Story mit `status=Done` nach `board/stories/archive/` (git-erhalten), aktualisiert die betroffenen Feature-Rollups und lässt Bereichs-Features unberührt (nie archiviert). Storys mit anderem Status bleiben unangetastet. Idempotent (zweiter Aufruf: nichts mehr zu archivieren). *(V3, [[board-areas]] AC4)*
 - **AC4** — `board area split <a> <a1> <a2>` ist assistiert: es listet alle Artefakte von `<a>` (Specs mit `area=<a>`, Storys unter Features mit `area=<a>`, Ideen-Inbox-Einträge mit `area=<a>`) mit **Ziel-Vorschlag** (`<a1>`|`<a2>`) und **Konfidenz**; eindeutige Fälle werden direkt zugeordnet (Etikett umgeschrieben), unklare Fälle als maschinenlesbarer Fragenkatalog `{stage,id,frage,quelle,optionen}` (`board/fragenkatalog.schema.json`) ausgegeben. Es verschiebt **keine** Dateien / ändert **keine** Spec-IDs. Unbekannter Quell-Bereich → kein Schreiben, Exit ≠ 0. *(V4)*
@@ -57,7 +57,7 @@ Bereiche entwickeln sich: sie werden zusammengelegt (`merge`), aufgeteilt (`spli
 
 ### Verb-Übersicht (Ergänzung zu [[board-cli]] §7)
 ```
-board area list                        → JSON-Array (id, titel, beschreibung, reihenfolge) | []
+board area list                        → JSON-Array (id, name, description, order) | []
 board area merge <a> <b> <ziel>        → geänderte areas.yaml + umgeschriebene Etiketten (idempotent)
 board area split <a> <a1> <a2>         → Zuordnungs-Report + Fragenkatalog (JSON) für unklare Fälle
 board archive-done-stories             → Liste archivierter Story-IDs
@@ -100,11 +100,11 @@ board/stories/archive/S-###-<slug>.yaml   # verschobene Done-Storys (aus aktivem
 ## Edge-Cases & Fehlerverhalten
 
 - **`merge` von `<a>`==`<ziel>`** → `<b>` wird in `<a>` eingegliedert; kein Fehler.
-- **`merge`, wenn `<ziel>` noch nicht existiert** → `<ziel>` wird in `areas.yaml` angelegt (nächste `reihenfolge`), dann `<a>`/`<b>` eingegliedert. *(Spec-Präzisierung: `titel`/`beschreibung` des neuen `<ziel>`-Eintrags werden von `<a>` übernommen, falls `<a>` in `areas.yaml` existiert, sonst von `<b>`; `reihenfolge` = höchste bestehende `reihenfolge` + 1.)*
+- **`merge`, wenn `<ziel>` noch nicht existiert** → `<ziel>` wird in `areas.yaml` angelegt (nächste `order`), dann `<a>`/`<b>` eingegliedert. *(Spec-Präzisierung: `name`/`description` des neuen `<ziel>`-Eintrags werden von `<a>` übernommen, falls `<a>` in `areas.yaml` existiert, sonst von `<b>`; `order` = höchste bestehende `order` + 1.)*
 - **`merge`-Gültigkeitsprüfung („unbekannter Bereich", E1) — Spec-Präzisierung:** `areas.yaml` ist die einzige Quelle gültiger Bereichs-`id`s (AC1). Ein Aufruf gilt nur dann als **unbekannter Bereich** (Fehler, kein Schreiben, Exit ≠ 0), wenn **weder** `<a>` **noch** `<b>` **noch** `<ziel>` aktuell als Eintrag in `areas.yaml` existiert. Ist mindestens einer der drei bekannt (z. B. `<ziel>` existiert bereits aus einem vorherigen Merge-Lauf, oder `<a>`==`<ziel>` und bekannt), läuft der Merge durch; ein bereits fehlender `<a>`/`<b>`-Eintrag gilt dabei als „nichts mehr zu entfernen" (kein Fehler). Diese Regel macht einen zweiten, identischen Aufruf idempotent (AC2), ohne die Kernaussage von E1 (garantiert unbekannte Eingabe → Fehler) zu verletzen.
 - **`archive-done-stories` ohne `Done`-Storys** → leere Ausgabe, Exit 0 (nichts zu tun).
 - **`split` mit offenen Fragen** → der Quell-Bereich `<a>` bleibt in `areas.yaml`, bis alle Artefakte zugeordnet sind (kein Datenverlust).
-- **`split`-Ziel-Bereiche, die noch nicht existieren** → `<a1>`/`<a2>` werden — unabhängig von offenen Fragen — sofort in `areas.yaml` angelegt (Platzhalter-`beschreibung`, nächste `reihenfolge` je Ziel), damit ein bereits zugeordnetes Artefakt nie auf einen fehlenden Bereich zeigt (kein `AREA-UNKNOWN`-Zwischenzustand). Ist `<a1>` oder `<a2>` identisch mit `<a>`, wird `<a>` beim Entfernen übersprungen (der wiederverwendete Bereich bleibt bestehen).
+- **`split`-Ziel-Bereiche, die noch nicht existieren** → `<a1>`/`<a2>` werden — unabhängig von offenen Fragen — sofort in `areas.yaml` angelegt (Platzhalter-`description`, nächste `order` je Ziel), damit ein bereits zugeordnetes Artefakt nie auf einen fehlenden Bereich zeigt (kein `AREA-UNKNOWN`-Zwischenzustand). Ist `<a1>` oder `<a2>` identisch mit `<a>`, wird `<a>` beim Entfernen übersprungen (der wiederverwendete Bereich bleibt bestehen).
 - **`split`-Artefakttyp Story — Spec-Präzisierung (bindend an Kontext-Abschnitt oben):** Nur Feature-`area`, Spec-`area`-Frontmatter und Ideen-Inbox-`- area:`-Einträge sind schreibbare Bereichs-Etiketten (wie bei `merge`, AC2). Eine Story trägt **kein** eigenes `area`-Feld — ihre Bereichszugehörigkeit hängt an ihrem Eltern-Feature. Storys erscheinen im `split`-Report daher **nur informativ**, mit demselben Ziel-Vorschlag/Konfidenz-Ergebnis wie ihr Eltern-Feature; sie werden nicht separat befragt oder umgeschrieben (kein Story-Reparenting — Kern-CRUD-Verben sind laut Nicht-Ziele dieser Spec ausgeschlossen).
 - **`split`, wenn `<a1>`==`<a2>`** → ungültige Eingabe (kein sinnvoller Split), Fehler, kein Schreiben, Exit ≠ 0 (AC5).
 - **Story ist bereits in `archive/`** → wird von `list`/`next`/`rollup` ignoriert; erneutes `archive-done-stories` fasst sie nicht an.

@@ -15,8 +15,8 @@
 #   AC5 — `board lint` prueft je Feature-`area` und je Spec-`area`-Frontmatter, dass der
 #         Wert in board/areas.yaml existiert (AREA-UNKNOWN, Tests 2-5); ein malformtes
 #         areas.yaml (fehlende Pflichtfelder, id nicht kebab-case, doppelte id/
-#         reihenfolge) -> AREA-FIELD (Tests 6-9); fehlt areas.yaml und referenziert
-#         kein Item eine area -> keine Bereichs-Fehler (Test 10); reihenfolge als
+#         order) -> AREA-FIELD (Tests 6-9); fehlt areas.yaml und referenziert
+#         kein Item eine area -> keine Bereichs-Fehler (Test 10); order als
 #         unhashbarer Typ (YAML-Liste statt int) -> AREA-FIELD statt uncaught
 #         TypeError/exit 0 (Test 11, Review-Fund Iteration 1).
 #
@@ -191,9 +191,9 @@ T3_DIR="${TEST_WORK_DIR}/test3"
 setup_board "$T3_DIR"
 make_areas_yaml "$T3_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T3_DIR" "F-001" "nicht-vorhanden"
 
 T3_OUTPUT="$(bash "$LINT_SCRIPT" "$T3_DIR/board" 2>&1 || true)"
@@ -214,9 +214,9 @@ T4_DIR="${TEST_WORK_DIR}/test4"
 setup_board "$T4_DIR"
 make_areas_yaml "$T4_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T4_DIR" "F-001" "board"
 
 T4_OUTPUT="$(bash "$LINT_SCRIPT" "$T4_DIR/board" 2>&1 || true)"
@@ -237,9 +237,9 @@ T5_DIR="${TEST_WORK_DIR}/test5"
 setup_board "$T5_DIR"
 make_areas_yaml "$T5_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_spec "${T5_DIR}/docs/specs/orphan.md" "nicht-vorhanden"
 
 T5_OUTPUT="$(bash "$LINT_SCRIPT" "$T5_DIR/board" 2>&1 || true)"
@@ -260,11 +260,11 @@ T6_DIR="${TEST_WORK_DIR}/test6"
 setup_board "$T6_DIR"
 make_areas_yaml "$T6_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  order: 1"
 
 T6_OUTPUT="$(bash "$LINT_SCRIPT" "$T6_DIR/board" 2>&1 || true)"
-if echo "$T6_OUTPUT" | grep -q "FEHLER AREA-FIELD board/areas.yaml Eintrag 1: Pflichtfeld 'beschreibung' fehlt"; then
+if echo "$T6_OUTPUT" | grep -q "FEHLER AREA-FIELD board/areas.yaml Eintrag 1: Pflichtfeld 'description' fehlt"; then
   pass "Test 6: AREA-FIELD bei fehlendem Pflichtfeld gemeldet (AC5)"
 else
   fail "Test 6: AREA-FIELD fehlt oder falsch"
@@ -281,9 +281,9 @@ T7_DIR="${TEST_WORK_DIR}/test7"
 setup_board "$T7_DIR"
 make_areas_yaml "$T7_DIR" \
   "- id: Board Bereich" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 
 T7_OUTPUT="$(bash "$LINT_SCRIPT" "$T7_DIR/board" 2>&1 || true)"
 if echo "$T7_OUTPUT" | grep -q "FEHLER AREA-FIELD board/areas.yaml Eintrag 1: id='Board Bereich' nicht kebab-case"; then
@@ -303,13 +303,13 @@ T8_DIR="${TEST_WORK_DIR}/test8"
 setup_board "$T8_DIR"
 make_areas_yaml "$T8_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1" \
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1" \
   "- id: board" \
-  "  titel: Board zwei" \
-  "  beschreibung: Zweiter Eintrag." \
-  "  reihenfolge: 2"
+  "  name: Board zwei" \
+  "  description: Zweiter Eintrag." \
+  "  order: 2"
 
 T8_OUTPUT="$(bash "$LINT_SCRIPT" "$T8_DIR/board" 2>&1 || true)"
 if echo "$T8_OUTPUT" | grep -q "FEHLER AREA-FIELD board/areas.yaml Eintrag 2: doppelte id='board'"; then
@@ -320,26 +320,26 @@ else
 fi
 
 # ===========================================================================
-# Test 9: AC5 — areas.yaml: doppelte reihenfolge -> AREA-FIELD
+# Test 9: AC5 — areas.yaml: doppelte order -> AREA-FIELD
 # ===========================================================================
 echo ""
-echo "--- Test 9: AC5 — doppelte reihenfolge -> AREA-FIELD ---"
+echo "--- Test 9: AC5 — doppelte order -> AREA-FIELD ---"
 
 T9_DIR="${TEST_WORK_DIR}/test9"
 setup_board "$T9_DIR"
 make_areas_yaml "$T9_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1" \
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1" \
   "- id: flow" \
-  "  titel: Flow" \
-  "  beschreibung: Orchestrierung." \
-  "  reihenfolge: 1"
+  "  name: Flow" \
+  "  description: Orchestrierung." \
+  "  order: 1"
 
 T9_OUTPUT="$(bash "$LINT_SCRIPT" "$T9_DIR/board" 2>&1 || true)"
-if echo "$T9_OUTPUT" | grep -q "FEHLER AREA-FIELD board/areas.yaml Eintrag 2: doppelte reihenfolge=1"; then
-  pass "Test 9: AREA-FIELD bei doppelter reihenfolge gemeldet (AC5)"
+if echo "$T9_OUTPUT" | grep -q "FEHLER AREA-FIELD board/areas.yaml Eintrag 2: doppelte order=1"; then
+  pass "Test 9: AREA-FIELD bei doppelter order gemeldet (AC5)"
 else
   fail "Test 9: AREA-FIELD fehlt oder falsch"
   echo "  Output: $T9_OUTPUT"
@@ -377,18 +377,18 @@ else
 fi
 
 # ===========================================================================
-# Test 11: AC5 — areas.yaml: reihenfolge unhashbar (YAML-Liste) -> AREA-FIELD, kein Crash
+# Test 11: AC5 — areas.yaml: order unhashbar (YAML-Liste) -> AREA-FIELD, kein Crash
 # ===========================================================================
 echo ""
-echo "--- Test 11: AC5 — reihenfolge als YAML-Liste (unhashbar) -> AREA-FIELD statt Crash ---"
+echo "--- Test 11: AC5 — order als YAML-Liste (unhashbar) -> AREA-FIELD statt Crash ---"
 
 T11_DIR="${TEST_WORK_DIR}/test11"
 setup_board "$T11_DIR"
 make_areas_yaml "$T11_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Test." \
-  "  reihenfolge:" \
+  "  name: Board" \
+  "  description: Test." \
+  "  order:" \
   "    - 1" \
   "    - 2"
 
@@ -399,8 +399,8 @@ T11_OUTPUT="$(bash "$LINT_SCRIPT" "$T11_DIR/board" 2>&1)"
 T11_EXIT=$?
 set -e
 
-if echo "$T11_OUTPUT" | grep -qF "FEHLER AREA-FIELD board/areas.yaml Eintrag 1: reihenfolge=[1, 2] kein int"; then
-  pass "Test 11a: AREA-FIELD bei unhashbarer reihenfolge gemeldet statt stillem Crash (AC5)"
+if echo "$T11_OUTPUT" | grep -qF "FEHLER AREA-FIELD board/areas.yaml Eintrag 1: order=[1, 2] kein int"; then
+  pass "Test 11a: AREA-FIELD bei unhashbarer order gemeldet statt stillem Crash (AC5)"
 else
   fail "Test 11a: AREA-FIELD fehlt oder falsch (kein TypeError-Schutz?)"
   echo "  Output: $T11_OUTPUT"

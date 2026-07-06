@@ -20,7 +20,7 @@
 #              zeigt auf keinen Eintrag in board/areas.yaml — auch wenn areas.yaml
 #              fehlt und trotzdem ein Item eine area referenziert;
 #              AREA-FIELD: board/areas.yaml selbst malformt — fehlendes Pflichtfeld,
-#              id nicht kebab-case, doppelte id/reihenfolge)
+#              id nicht kebab-case, doppelte id/order)
 #
 # Ausgabe je Verstoss: FEHLER|WARN <regel-id> <datei> <feld/detail>
 # Exit-Code: 1 bei mindestens einem FEHLER, 0 bei nur Warnungen oder gruen.
@@ -50,8 +50,8 @@
 #                          existiert (auch wenn areas.yaml komplett fehlt, s. E2)
 #                          (aus Spec docs/specs/board-areas.md, AC5)
 #   AREA-FIELD           — board/areas.yaml verletzt das Feldformat: fehlendes
-#                          Pflichtfeld (id/titel/beschreibung/reihenfolge), id nicht
-#                          kebab-case, doppelte id, doppelte reihenfolge
+#                          Pflichtfeld (id/name/description/order), id nicht
+#                          kebab-case, doppelte id, doppelte order
 #                          (aus Spec docs/specs/board-areas.md, AC5)
 
 set -euo pipefail
@@ -766,7 +766,7 @@ for fid, entry in features.items():
 # (E2). Referenziert jedoch ein Item eine area OHNE areas.yaml, ist das
 # ebenfalls AREA-UNKNOWN — valid_area_ids bleibt dafuer einfach leer.
 AREA_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
-AREA_REQUIRED = ("id", "titel", "beschreibung", "reihenfolge")
+AREA_REQUIRED = ("id", "name", "description", "order")
 
 areas_path = os.path.join(board_dir, "areas.yaml")
 valid_area_ids = set()
@@ -785,7 +785,7 @@ if os.path.isfile(areas_path):
             messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} areas.yaml muss eine YAML-Liste sein"))
         else:
             seen_ids = {}          # id -> erster Eintrags-Index (1-basiert)
-            seen_reihenfolge = {}  # reihenfolge -> erster Eintrags-Index (1-basiert)
+            seen_order = {}  # order -> erster Eintrags-Index (1-basiert)
             for idx, area_entry in enumerate(areas_data):
                 loc = f"Eintrag {idx + 1}"
                 if not isinstance(area_entry, dict):
@@ -808,14 +808,14 @@ if os.path.isfile(areas_path):
                         seen_ids[eid_s] = idx + 1
                         valid_area_ids.add(eid_s)
 
-                reihenfolge = area_entry.get("reihenfolge")
-                if reihenfolge is not None:
-                    if not isinstance(reihenfolge, int) or isinstance(reihenfolge, bool):
-                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: reihenfolge={reihenfolge!r} kein int"))
-                    elif reihenfolge in seen_reihenfolge:
-                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: doppelte reihenfolge={reihenfolge!r} (bereits Eintrag {seen_reihenfolge[reihenfolge]})"))
+                order = area_entry.get("order")
+                if order is not None:
+                    if not isinstance(order, int) or isinstance(order, bool):
+                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: order={order!r} kein int"))
+                    elif order in seen_order:
+                        messages.append((areas_rel, f"FEHLER AREA-FIELD {areas_rel} {loc}: doppelte order={order!r} (bereits Eintrag {seen_order[order]})"))
                     else:
-                        seen_reihenfolge[reihenfolge] = idx + 1
+                        seen_order[order] = idx + 1
 
 # Feature-`area` gegen valid_area_ids pruefen
 for fid, entry in features.items():

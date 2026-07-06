@@ -3,7 +3,7 @@
 #
 # Covers (board-area-ops): AC1, AC2, AC3, AC4, AC5
 #   AC1 — `board area list` gibt board/areas.yaml als sortiertes JSON-Array
-#         (id, titel, beschreibung, reihenfolge) aus; fehlt areas.yaml -> []
+#         (id, name, description, order) aus; fehlt areas.yaml -> []
 #         Exit 0 (Tests 1-2).
 #   AC2 — `board area merge <a> <b> <ziel>` ist vollautomatisch: areas.yaml
 #         wird angepasst (a/b entfernen, ziel behalten/anlegen), alle
@@ -229,28 +229,28 @@ else
 fi
 
 # ===========================================================================
-# Test 2: AC1 — areas.yaml vorhanden -> JSON-Array sortiert nach reihenfolge
+# Test 2: AC1 — areas.yaml vorhanden -> JSON-Array sortiert nach order
 # ===========================================================================
 echo ""
-echo "--- Test 2: AC1 — areas.yaml -> sortiertes JSON-Array (id,titel,beschreibung,reihenfolge) ---"
+echo "--- Test 2: AC1 — areas.yaml -> sortiertes JSON-Array (id,name,description,order) ---"
 
 T2_DIR="${TEST_WORK_DIR}/test2"
 setup_board "$T2_DIR"
 make_areas_yaml "$T2_DIR" \
   "- id: flow-orchestrierung" \
-  "  titel: Flow-Orchestrierung" \
-  "  beschreibung: Flow-Skill." \
-  "  reihenfolge: 2" \
+  "  name: Flow-Orchestrierung" \
+  "  description: Flow-Skill." \
+  "  order: 2" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 
 T2_OUTPUT="$(cd "$T2_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area list)"
-T2_EXPECTED='[{"id": "board", "titel": "Board", "beschreibung": "Schema und CLI.", "reihenfolge": 1}, {"id": "flow-orchestrierung", "titel": "Flow-Orchestrierung", "beschreibung": "Flow-Skill.", "reihenfolge": 2}]'
+T2_EXPECTED='[{"id": "board", "name": "Board", "description": "Schema und CLI.", "order": 1}, {"id": "flow-orchestrierung", "name": "Flow-Orchestrierung", "description": "Flow-Skill.", "order": 2}]'
 
 if [[ "$T2_OUTPUT" == "$T2_EXPECTED" ]]; then
-  pass "Test 2: JSON-Array korrekt sortiert nach reihenfolge (AC1)"
+  pass "Test 2: JSON-Array korrekt sortiert nach order (AC1)"
 else
   fail "Test 2: Output weicht ab"
   echo "  erwartet: $T2_EXPECTED"
@@ -267,13 +267,13 @@ T3_DIR="${TEST_WORK_DIR}/test3"
 setup_board "$T3_DIR"
 make_areas_yaml "$T3_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich." \
-  "  reihenfolge: 1" \
+  "  name: Alpha" \
+  "  description: Alpha-Bereich." \
+  "  order: 1" \
   "- id: beta" \
-  "  titel: Beta" \
-  "  beschreibung: Beta-Bereich." \
-  "  reihenfolge: 2"
+  "  name: Beta" \
+  "  description: Beta-Bereich." \
+  "  order: 2"
 make_feature "$T3_DIR" "F-001" "alpha"
 make_feature "$T3_DIR" "F-002" "beta"
 make_spec "${T3_DIR}/docs/specs/orphan-a.md" "alpha"
@@ -295,10 +295,10 @@ else
   echo "$T3_AREAS"
 fi
 
-if echo "$T3_AREAS" | grep -A2 "id: gamma" | grep -q "titel: Alpha"; then
-  pass "Test 3c: neues ziel erbt titel von <a> (Spec-Praezisierung)"
+if echo "$T3_AREAS" | grep -A2 "id: gamma" | grep -q "name: Alpha"; then
+  pass "Test 3c: neues ziel erbt name von <a> (Spec-Praezisierung)"
 else
-  fail "Test 3c: titel-Vererbung falsch"
+  fail "Test 3c: name-Vererbung falsch"
   echo "$T3_AREAS"
 fi
 
@@ -371,13 +371,13 @@ T5_DIR="${TEST_WORK_DIR}/test5"
 setup_board "$T5_DIR"
 make_areas_yaml "$T5_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1" \
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1" \
   "- id: wegwerf" \
-  "  titel: Wegwerf" \
-  "  beschreibung: Wird eingegliedert." \
-  "  reihenfolge: 2"
+  "  name: Wegwerf" \
+  "  description: Wird eingegliedert." \
+  "  order: 2"
 make_feature "$T5_DIR" "F-001" "wegwerf"
 
 T5_EXIT=0
@@ -417,9 +417,9 @@ T6_DIR="${TEST_WORK_DIR}/test6"
 setup_board "$T6_DIR"
 make_areas_yaml "$T6_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T6_DIR" "F-001" "board"
 
 T6_AREAS_BEFORE="$(cat "$T6_DIR/board/areas.yaml")"
@@ -457,13 +457,13 @@ T7_DIR="${TEST_WORK_DIR}/test7"
 setup_board "$T7_DIR"
 make_areas_yaml "$T7_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich." \
-  "  reihenfolge: 1" \
+  "  name: Alpha" \
+  "  description: Alpha-Bereich." \
+  "  order: 1" \
   "- id: beta" \
-  "  titel: Beta" \
-  "  beschreibung: Beta-Bereich." \
-  "  reihenfolge: 2"
+  "  name: Beta" \
+  "  description: Beta-Bereich." \
+  "  order: 2"
 make_ideas_inbox "${T7_DIR}/docs/ideas-inbox.md" "alpha"
 
 (cd "$T7_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area merge alpha beta gamma >/dev/null)
@@ -485,17 +485,17 @@ T8_DIR="${TEST_WORK_DIR}/test8"
 setup_board "$T8_DIR"
 make_areas_yaml "$T8_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich." \
-  "  reihenfolge: 1" \
+  "  name: Alpha" \
+  "  description: Alpha-Bereich." \
+  "  order: 1" \
   "- id: beta" \
-  "  titel: Beta" \
-  "  beschreibung: Beta-Bereich." \
-  "  reihenfolge: 2" \
+  "  name: Beta" \
+  "  description: Beta-Bereich." \
+  "  order: 2" \
   "- id: unbeteiligt" \
-  "  titel: Unbeteiligt" \
-  "  beschreibung: Bleibt unberuehrt." \
-  "  reihenfolge: 3"
+  "  name: Unbeteiligt" \
+  "  description: Bleibt unberuehrt." \
+  "  order: 3"
 make_feature "$T8_DIR" "F-001" "alpha"
 make_feature "$T8_DIR" "F-002" "unbeteiligt"
 
@@ -526,9 +526,9 @@ T9_DIR="${TEST_WORK_DIR}/test9"
 setup_board "$T9_DIR"
 make_areas_yaml "$T9_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T9_DIR" "F-001" "board"
 make_story_for "$T9_DIR" "S-001" "F-001" "Done Story"
 make_story_for "$T9_DIR" "S-002" "F-001" "Active Story"
@@ -573,9 +573,9 @@ T10_DIR="${TEST_WORK_DIR}/test10"
 setup_board "$T10_DIR"
 make_areas_yaml "$T10_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T10_DIR" "F-001" "board"
 make_story_for "$T10_DIR" "S-010" "F-001" "Story eins"
 make_story_for "$T10_DIR" "S-011" "F-001" "Story zwei"
@@ -630,9 +630,9 @@ T11_DIR="${TEST_WORK_DIR}/test11"
 setup_board "$T11_DIR"
 make_areas_yaml "$T11_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T11_DIR" "F-001" "board"
 make_story_for "$T11_DIR" "S-100" "F-001" "Done Story"
 
@@ -666,9 +666,9 @@ T12_DIR="${TEST_WORK_DIR}/test12"
 setup_board "$T12_DIR"
 make_areas_yaml "$T12_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T12_DIR" "F-001" "board"
 make_story_for "$T12_DIR" "S-200" "F-001" "To Do Story"
 # Status ist bereits To Do
@@ -702,9 +702,9 @@ T13_DIR="${TEST_WORK_DIR}/test13"
 setup_board "$T13_DIR"
 make_areas_yaml "$T13_DIR" \
   "- id: board" \
-  "  titel: Board" \
-  "  beschreibung: Schema und CLI." \
-  "  reihenfolge: 1"
+  "  name: Board" \
+  "  description: Schema und CLI." \
+  "  order: 1"
 make_feature "$T13_DIR" "F-001" "board"
 make_story_for "$T13_DIR" "S-300" "F-001" "Story wird archiviert"
 
@@ -732,13 +732,13 @@ T9_DIR="${TEST_WORK_DIR}/test9"
 setup_board "$T9_DIR"
 make_areas_yaml "$T9_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich." \
-  "  reihenfolge: 1" \
+  "  name: Alpha" \
+  "  description: Alpha-Bereich." \
+  "  order: 1" \
   "- id: beta" \
-  "  titel: Beta" \
-  "  beschreibung: Beta-Bereich." \
-  "  reihenfolge: 2"
+  "  name: Beta" \
+  "  description: Beta-Bereich." \
+  "  order: 2"
 make_feature "$T9_DIR" "F-001" "alpha"
 
 T9_AREAS_BEFORE="$(cat "$T9_DIR/board/areas.yaml")"
@@ -776,9 +776,9 @@ T10_DIR="${TEST_WORK_DIR}/test10"
 setup_board "$T10_DIR"
 make_areas_yaml "$T10_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich." \
-  "  reihenfolge: 1"
+  "  name: Alpha" \
+  "  description: Alpha-Bereich." \
+  "  order: 1"
 make_feature "$T10_DIR" "F-001" "alpha"
 
 T10_AREAS_BEFORE="$(cat "$T10_DIR/board/areas.yaml")"
@@ -814,9 +814,9 @@ T11_DIR="${TEST_WORK_DIR}/test11"
 setup_board "$T11_DIR"
 make_areas_yaml "$T11_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich." \
-  "  reihenfolge: 1"
+  "  name: Alpha" \
+  "  description: Alpha-Bereich." \
+  "  order: 1"
 
 T11_AREAS_BEFORE="$(cat "$T11_DIR/board/areas.yaml")"
 
@@ -850,9 +850,9 @@ T12_DIR="${TEST_WORK_DIR}/test12"
 setup_board "$T12_DIR"
 make_areas_yaml "$T12_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich mit Frontend und Backend." \
-  "  reihenfolge: 1"
+  "  name: Alpha" \
+  "  description: Alpha-Bereich mit Frontend und Backend." \
+  "  order: 1"
 make_feature_titled "$T12_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
 make_feature_titled "$T12_DIR" "F-002" "alpha" "Backend Api Service" "Backend-Testfeature"
 make_story_for "$T12_DIR" "S-010" "F-001" "Dashboard Redesign"
@@ -937,9 +937,9 @@ T13_DIR="${TEST_WORK_DIR}/test13"
 setup_board "$T13_DIR"
 make_areas_yaml "$T13_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich mit Frontend und Backend." \
-  "  reihenfolge: 1"
+  "  name: Alpha" \
+  "  description: Alpha-Bereich mit Frontend und Backend." \
+  "  order: 1"
 make_feature_titled "$T13_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
 make_spec_titled "${T13_DIR}/docs/specs/mystery-spec.md" "mystery-spec" "Voellig Unklare Anforderung" "alpha"
 
@@ -1000,41 +1000,41 @@ else
 fi
 
 # ===========================================================================
-# Test 19: AC4/E2 — neue Ziel-Bereiche werden mit Platzhalter + naechster reihenfolge angelegt
+# Test 19: AC4/E2 — neue Ziel-Bereiche werden mit Platzhalter + naechster order angelegt
 # ===========================================================================
 echo ""
-echo "--- Test 19: AC4/E2 — neue Ziel-Bereiche in areas.yaml (Platzhalter, reihenfolge) ---"
+echo "--- Test 19: AC4/E2 — neue Ziel-Bereiche in areas.yaml (Platzhalter, order) ---"
 
 T14_DIR="${TEST_WORK_DIR}/test14"
 setup_board "$T14_DIR"
 make_areas_yaml "$T14_DIR" \
   "- id: alpha" \
-  "  titel: Alpha" \
-  "  beschreibung: Alpha-Bereich." \
-  "  reihenfolge: 5"
+  "  name: Alpha" \
+  "  description: Alpha-Bereich." \
+  "  order: 5"
 make_feature_titled "$T14_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
 
 (cd "$T14_DIR" && BOARD_DIR=board bash "$BOARD_SCRIPT" area split alpha frontend backend >/dev/null)
 
 T14_AREAS="$(cat "$T14_DIR/board/areas.yaml")"
-if echo "$T14_AREAS" | grep -A3 "id: frontend" | grep -q "reihenfolge: 6"; then
-  pass "Test 14a: neuer Ziel-Bereich 'frontend' erhaelt naechste reihenfolge (6)"
+if echo "$T14_AREAS" | grep -A3 "id: frontend" | grep -q "order: 6"; then
+  pass "Test 14a: neuer Ziel-Bereich 'frontend' erhaelt naechste order (6)"
 else
-  fail "Test 14a: reihenfolge falsch"
+  fail "Test 14a: order falsch"
   echo "$T14_AREAS"
 fi
 
-if echo "$T14_AREAS" | grep -A3 "id: backend" | grep -q "reihenfolge: 7"; then
-  pass "Test 14b: neuer Ziel-Bereich 'backend' erhaelt naechste reihenfolge (7)"
+if echo "$T14_AREAS" | grep -A3 "id: backend" | grep -q "order: 7"; then
+  pass "Test 14b: neuer Ziel-Bereich 'backend' erhaelt naechste order (7)"
 else
-  fail "Test 14b: reihenfolge falsch"
+  fail "Test 14b: order falsch"
   echo "$T14_AREAS"
 fi
 
 if echo "$T14_AREAS" | grep -q "TODO: Beschreibung nach Split von ''alpha'' ergaenzen."; then
-  pass "Test 14c: neue Ziel-Bereiche erhalten Platzhalter-beschreibung (E2)"
+  pass "Test 14c: neue Ziel-Bereiche erhalten Platzhalter-description (E2)"
 else
-  fail "Test 14c: Platzhalter-beschreibung fehlt"
+  fail "Test 14c: Platzhalter-description fehlt"
   echo "$T14_AREAS"
 fi
 
@@ -1051,9 +1051,9 @@ for T15_DIR in "$T15_DIR_A" "$T15_DIR_B"; do
   setup_board "$T15_DIR"
   make_areas_yaml "$T15_DIR" \
     "- id: alpha" \
-    "  titel: Alpha" \
-    "  beschreibung: Alpha-Bereich mit Frontend und Backend." \
-    "  reihenfolge: 1"
+    "  name: Alpha" \
+    "  description: Alpha-Bereich mit Frontend und Backend." \
+    "  order: 1"
   make_feature_titled "$T15_DIR" "F-001" "alpha" "Frontend Dashboard" "Frontend-Testfeature"
   make_feature_titled "$T15_DIR" "F-002" "alpha" "Backend Api Service" "Backend-Testfeature"
 done

@@ -1,40 +1,40 @@
 - id: board
-  titel: Board
-  beschreibung: Schema, board-CLI, Lint, GitHub-Export und die Bereichsliste.
-  reihenfolge: 1
+  name: Board
+  description: Schema, board-CLI, Lint, GitHub-Export und die Bereichsliste.
+  order: 1
 - id: flow-orchestrierung
-  titel: Flow-Orchestrierung
-  beschreibung: flow-Skill, Session-Rotation, Gates, Item-Auswahl und Leerlauf-Diagnose.
-  reihenfolge: 2
+  name: Flow-Orchestrierung
+  description: flow-Skill, Session-Rotation, Gates, Item-Auswahl und Leerlauf-Diagnose.
+  order: 2
 - id: rollen-agenten
-  titel: Rollen-Agenten
-  beschreibung: Agent-Definitionen und Handoff-Verträge der Fabrik-Rollen.
-  reihenfolge: 3
+  name: Rollen-Agenten
+  description: Agent-Definitionen und Handoff-Verträge der Fabrik-Rollen.
+  order: 3
 - id: anforderung-intake
-  titel: Anforderung-Intake
-  beschreibung: requirement mit Eingangs-Gate, estimator, Ideen-Inbox und from-notes.
-  reihenfolge: 4
+  name: Anforderung-Intake
+  description: requirement mit Eingangs-Gate, estimator, Ideen-Inbox und from-notes.
+  order: 4
 - id: wissen-packs
-  titel: Wissen-Packs
-  beschreibung: Knowledge Packs, train sowie Modell-Matrix und Cost-Modes.
-  reihenfolge: 5
+  name: Wissen-Packs
+  description: Knowledge Packs, train sowie Modell-Matrix und Cost-Modes.
+  order: 5
 - id: lernen-retro
-  titel: Lernen-Retro
-  beschreibung: retro, Lessons-Lebenszyklus und Write-back.
-  reihenfolge: 6
+  name: Lernen-Retro
+  description: retro, Lessons-Lebenszyklus und Write-back.
+  order: 6
 - id: metriken-schaetzung
-  titel: Metriken-Schaetzung
-  beschreibung: Ledger, Baseline, Kalibrierung und Token-Erfassung.
-  reihenfolge: 7
+  name: Metriken-Schaetzung
+  description: Ledger, Baseline, Kalibrierung und Token-Erfassung.
+  order: 7
 - id: vorlagen-scaffolding
-  titel: Vorlagen-Scaffolding
-  beschreibung: templates, new-project und adopt.
-  reihenfolge: 8
+  name: Vorlagen-Scaffolding
+  description: templates, new-project und adopt.
+  order: 8
 - id: auslieferung
-  titel: Auslieferung
-  beschreibung: cicd, Landen, CI-Watch, Rollout und preview.
-  reihenfolge: 9
+  name: Auslieferung
+  description: cicd, Landen, CI-Watch, Rollout und preview.
+  order: 9
 - id: doku-reconcile
-  titel: Doku-Reconcile
-  beschreibung: Konzept-/Architektur-Pflege, reconcile und Spec-Lebenszyklus.
-  reihenfolge: 10
+  name: Doku-Reconcile
+  description: Konzept-/Architektur-Pflege, reconcile und Spec-Lebenszyklus.
+  order: 10
