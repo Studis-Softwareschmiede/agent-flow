@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + board/-Skelett (File-Board) an, erkennt/erfragt den Stack + DB-Dialekt + optionale Companions (Cache/Queue/Sessions) + Build-Tool + optionale Frameworks, scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI + optionales DB-Compose-Fragment + optionale Companion-Fragmente aus ${CLAUDE_PLUGIN_ROOT}/templates/. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
+description: Bootstrappt ein Projekt der Softwareschmiede — legt Repo + board/-Skelett (File-Board) an, erkennt/erfragt den Stack + DB-Dialekt + optionale Companions (Cache/Queue/Sessions) + Build-Tool + optionale Frameworks, scaffoldet .claude/ (profile, CLAUDE.md, lessons) + Dockerfile + CI + optionales DB-Compose-Fragment + optionale Companion-Fragmente + das Playwright-Regressions-Grundgerüst (tests/regression/, Config, .gitignore, Dev-Dependency) aus ${CLAUDE_PLUGIN_ROOT}/templates/. /init adoptiert ein bestehendes Repo. Schreibt KEINEN App-Code.
 ---
 
 # /new-project <name> [--lang <x>] [--db <dialect>] [--companions <list>] [--build <build>] [--framework <id>@<major>]… [--migration-tool <tool>]   ·   /init
@@ -107,6 +107,28 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
       - **Passphrase nicht auflösbar** (non-interaktiv, kein `gpg.pass`, kein `$GPG_PASSPHRASE`): kein Hard-Fail — Backlog-Item anlegen „Initiales `.env.gpg` erzeugen (`bash scripts/encrypt-env.sh`, sobald Passphrase provisioniert ist — Spec §10 GE4)" + Konsolen-Warnung ausgeben. Das übrige Scaffold (Scripts, `.gitignore`, `.gitleaks.toml`, `.env.example`) liegt trotzdem.
    6. **README um Secrets-Abschnitt erweitern** (am Ende anhängen): Verweis auf `docs/architecture/secrets-subsystem.md`, `.env`/`.env.gpg`-Modell, Workflow (`bash scripts/decrypt-env.sh` lokal → `.env` editieren → `bash scripts/encrypt-env.sh` → `.env.gpg` + `.env.example` committen).
 
+4f. **Regressions-Grundgerüst scaffolden** (Spec [`docs/specs/regression-scaffolding.md`](../../docs/specs/regression-scaffolding.md), Konventionen [`docs/specs/regression-playwright-conventions.md`](../../docs/specs/regression-playwright-conventions.md)) — **immer** (stack-agnostisch, keine Opt-in-Frage; Playwright ist der eine Fabrik-Standard über alle Sprachen):
+   1. **`playwright.config.ts` kopieren** (idempotent — nur anlegen, falls noch nicht vorhanden): `cp ${CLAUDE_PLUGIN_ROOT}/templates/_shared/regression/playwright.config.ts .` — Referenz-Template-Artefakt, keine divergente Zweit-Definition (AC4); aktiviert CTRF-JSON + JUnit-Reporter (AC1).
+   2. **Playwright-Dev-Dependency** (`@playwright/test` + `playwright-ctrf-json-reporter`, AC1/AC5):
+      - Existiert bereits ein Root-`package.json` (js/angular): als `devDependencies` **ergänzen** (bestehende Einträge/Deps nicht überschreiben).
+      - Existiert **kein** `package.json` (Normalfall bei `new-project` — noch kein App-Code; ebenso jede nicht-npm-Sprache: java/flutter/html): ein **eigenständiges, minimales** `package.json` anlegen, das ausschließlich Playwright als Dev-Runner trägt (AC5 „eigenständiger Runner", stack-agnostisch):
+        ```json
+        {
+          "name": "<projektname-kebab-case>-regression",
+          "private": true,
+          "devDependencies": {
+            "@playwright/test": "latest",
+            "playwright-ctrf-json-reporter": "latest"
+          }
+        }
+        ```
+   3. **`tests/regression/`-Baum anlegen** (AC2 — leere Bereichs-Suiten; deckt A2 „kein/leeres `areas.yaml`"):
+      - **Immer:** `mkdir -p tests/regression/verbund` + `.gitkeep` (nur falls der Ordner noch nicht existiert).
+      - **Je Eintrag in `board/areas.yaml`** (Bereichs-`id`, sofern die Datei existiert und mindestens einen Eintrag hat): `mkdir -p tests/regression/<id>` + `.gitkeep` — **leere** Suite, kein Testinhalt (Befüllen ist [[regression-define]], explizites Nicht-Ziel dieser Story).
+      - **Fehlt `board/areas.yaml` oder ist sie leer:** nur `tests/regression/verbund/` entsteht (A2) — Bereichs-Suiten folgen, sobald Bereiche gepflegt sind.
+   4. **`.gitignore` ergänzen** (idempotent — prüfen ob `test-results/` bereits vorhanden ist, sonst `cat ${CLAUDE_PLUGIN_ROOT}/templates/_shared/regression/gitignore.snippet >> .gitignore`, AC1).
+   5. **Kein Runner-Wiring:** `scripts/run-regression.sh` (Ausführung, [[regression-runner]]) ist explizites Nicht-Ziel dieses Schritts (Spec regression-scaffolding.md Nicht-Ziele) — bleibt als Template-Artefakt unter `templates/_shared/regression/`.
+
 5. **Deploy scaffolden** (aus `${CLAUDE_PLUGIN_ROOT}/templates/<lang>/`):
    - `Dockerfile`.
    - `.github/workflows/build.yml`: on push `main` → **Secret-Scan-Gate (gitleaks)** dann Image bauen + Push nach `ghcr.io/studis-softwareschmiede/<name>` via eingebautem `GITHUB_TOKEN` (`permissions: packages: write`).
@@ -140,4 +162,5 @@ Repo-URL · Board-Pfad (`board/`) · Profil · Image-Ziel · (sofern Schritt 8 l
 - `db_dialect: none` → **kein** Compose-Fragment, **kein** `db_scripts/`-Skeleton, **kein** `docs/data-model.md` — der User entscheidet später bewusst per `/adopt`-Re-Run oder manuellem Profil-Edit.
 - Companion-Auswahl ist **optional** (Default `companions: []`); P1 nur `redis` verfügbar. Kein Migrations-/Backup-/Pack-Scaffold für Companions (Scope-Lock Spec §17).
 - **Migration-Tool-Auswahl (Schritt 2e) ist single-value, optional, Default aus Spec §5 Mapping;** entfällt bei `db_dialect: none`. `db_scripts/`-Skeleton wird **nur bei `db_migration_tool: skeleton`** gescaffolded (Spec migration-tool-subsystem §8); bei anderen Tools landet die Tool-spezifische Konvention (Flyway-`src/main/resources/db/migration/`, Prisma-`prisma/migrations/`, …) als Backlog-Item, nicht als Auto-Scaffold. Kein Tool-Mix in einem Projekt — Spec §13.
+- **Regressions-Scaffolding (Schritt 4f) ist immer aktiv** (stack-agnostisch, Spec `docs/specs/regression-scaffolding.md`) und idempotent — bestehende `playwright.config.ts`/`tests/regression/**`-Dateien werden nie überschrieben. Befüllen der Suiten ([[regression-define]]) und das Runner-Wiring ([[regression-runner]], `scripts/run-regression.sh`) sind explizite Nicht-Ziele dieses Schritts.
 - **Validate (Schritt 8) ist kein Auto-Fix für Bestand:** Coder-Fix-Loop darf nur Skeleton/Compose-Fragment/Marker-Migration anpassen. Loop-Cap fix `MAX_VALIDATE_RETRIES = 3`; danach human-handoff, kein Endlos-Loop. `adoption_validated_at` wird NUR bei PASS gesetzt (Spec §18).
