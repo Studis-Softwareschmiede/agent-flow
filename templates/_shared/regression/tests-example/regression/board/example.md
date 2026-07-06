@@ -1,23 +1,26 @@
+---
+title: Board Area Schema
+target: local
+---
+
 # Board Area Tests
 
 Test-Begleitbeschreibung für die Beispiel-Suite `example.spec.ts`.
 
 ## target
 
-Spezialisierung der Test-Ausführung (vgl. [[regression-runner]]):
+Spezialisierung der Test-Ausführung, gelesen vom Regressions-Runner
+(`scripts/run-regression.sh`, vgl. [[regression-runner]] AC2/AC3/AC5):
 
-- `target: local` — Test läuft auf lokal-verfügbarem System (Standard).
-- `target: ephemeral-infra` — Test läuft gegen ephemeral bereitgestellte Infra.
-- `target: url` — Test läuft gegen externe URL.
+- `target: local` — Test läuft auf lokal-verfügbarem System (Standard für
+  Bereichs-Suiten). Der Runner prüft vorab die Erreichbarkeit von
+  `http://localhost:<preview_port>` (AC6).
+- `target: ephemeral-infra` — Test läuft gegen ephemeral bereitgestellte Infra
+  (kein lokaler Erreichbarkeits-Check).
+- `target: url` — Test läuft gegen die im Frontmatter angegebene `url:`, ohne
+  lokal zu provisionieren (AC5).
 
-Beispiel:
-
-```yaml
----
-title: Board Area Schema
-target: local
----
-```
+Diese Suite deklariert oben `target: local` (Default für Bereichs-Suiten).
 
 ## Übersicht
 

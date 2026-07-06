@@ -8,7 +8,8 @@ Playwright ist das **eine** stack-agnostische Regressions-Framework aller Fabrik
 
 | Datei / Verzeichnis | Zweck |
 |---|---|
-| `playwright.config.ts` | Zentrale Playwright-Konfiguration: CTRF-JSON + JUnit-Reporter, Browser-Modi, timeouts. |
+| `playwright.config.ts` | Zentrale Playwright-Konfiguration: CTRF-JSON + JUnit-Reporter, Browser-Modi, timeouts, `baseURL` aus `REGRESSION_BASE_URL` (siehe Regressions-Runner unten). |
+| `run-regression.sh` | Deterministischer Regressions-Runner ([`regression-runner.md`](../../../docs/specs/regression-runner.md), AC1/AC2/AC3/AC5/AC6/AC9) — target-Auflösung, Vorbedingungs-Check, Secret-Injektion. |
 | `gitignore.snippet` | `.gitignore`-Regeln: `test-results/` + `playwright-report/` ignoriert; Testdefinitionen selbst versioniert. |
 | `tests-example/` | Referenz-Skelett-Layout + ausgearbeitete Beispiele (AC2–AC4). |
 | `tests-example/regression/` | Root-Verzeichnis für Regressions-Suiten. |
@@ -32,7 +33,8 @@ tests/regression/
   ...                           # weitere Bereiche aus board/areas.yaml
   verbund/
     infra.fixture.ts            # Referenz-Fixture für Infra-Ketten
-    <suite>.spec.ts             # bereichsübergreifende Tests
+    infra.spec.ts               # bereichsübergreifende Tests (target: ephemeral-infra)
+    infra.md                    # Begleitbeschreibung (target-Header)
 ```
 
 Jeder Bereichs-Ordner `tests/regression/<bereich>/` korrespondiert mit der Bereichs-`id` aus `board/areas.yaml`.
@@ -93,6 +95,21 @@ Siehe `gitignore.snippet` zum Anhängen an die App-`.gitignore`.
 
 Testdefinitionen selbst (`tests/regression/**/*.spec.ts`, `tests/regression/**/*.data.json`) bleiben **versioniert**.
 
+## Regressions-Runner (Spec [`regression-runner.md`](../../../docs/specs/regression-runner.md))
+
+`run-regression.sh` führt Suiten deterministisch aus (**kein Agent pro Testlauf**, AC1) und löst je Suite das Testobjekt aus dem Frontmatter der Begleitbeschreibung auf:
+
+```
+scripts/run-regression.sh [<pfad-oder-datei> ...]   # Default: tests/regression
+```
+
+- **`target: local`** (Default für Bereichs-Suiten, AC3) — der Runner prüft vor dem Lauf die **Erreichbarkeit** von `http://localhost:<preview_port>` (Port aus `.claude/profile.md`, Fallback Compose-Datei). Nicht erreichbar → klarer Vorbedingungs-Fehler, **kein** Playwright-Lauf (AC6).
+- **`target: url`** — läuft gegen die im Frontmatter angegebene `url:`, **ohne** lokal zu provisionieren (AC5).
+- **`target: ephemeral-infra`** — die Fixture (s. o.) provisioniert/zerstört ihr Ziel selbst; der Runner führt ohne lokalen Erreichbarkeits-Check aus.
+- **Secrets (AC9):** existiert `scripts/load-env.sh` (App-Secrets-Subsystem, `docs/architecture/secrets-subsystem.md`), lädt der Runner die App-Secrets zur Laufzeit in seine Shell und vererbt sie an den Playwright-Kindprozess — nie aus Test-/Datendateien gelesen, nichts wird persistiert.
+
+Fehlt `target` im Frontmatter einer Begleitbeschreibung → Fehler (kein stillschweigender Default auf eine Produktiv-URL).
+
 ## Installation & Verwendung
 
 ### Voraussetzungen
@@ -113,15 +130,21 @@ cp -r templates/_shared/regression/tests-example/regression/* tests/regression/
 # Konfiguration kopieren
 cp templates/_shared/regression/playwright.config.ts .
 echo "# append to .gitignore:" && cat templates/_shared/regression/gitignore.snippet >> .gitignore
+
+# Regressions-Runner kopieren
+cp templates/_shared/regression/run-regression.sh scripts/
+chmod +x scripts/run-regression.sh
 ```
 
 ### Test-Ausführung
 
 ```bash
-# Alle Tests
-npx playwright test
+# Deterministischer Runner (empfohlen) — löst target je Suite auf (s.o.)
+scripts/run-regression.sh
+scripts/run-regression.sh tests/regression/board   # nur ein Bereich
 
-# Nur ein Bereich
+# Direkter Playwright-Aufruf (kein target-Handling/Vorbedingungs-Check)
+npx playwright test
 npx playwright test tests/regression/board
 
 # Mit spezifischem Reporter
