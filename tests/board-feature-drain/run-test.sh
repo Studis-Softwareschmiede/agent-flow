@@ -187,20 +187,35 @@ YAML
 }
 
 # ===========================================================================
-# Test 1 — Schwelle: < 2 Storys verweigert das Skript
+# Test 1 — Owner-Entscheidung 2026-07-06 (zweite Korrektur): KEINE Mindest-
+# anzahl mehr — genau 1 Story läuft genauso durch wie mehrere.
 # ===========================================================================
 echo ""
-echo "--- Test 1: < 2 Storys -> Skript verweigert sich ---"
+echo "--- Test 1: genau 1 Story -> läuft durch (kein Mindest-Schwellen-Check mehr) ---"
 T1_WORK="$(setup_fixture "${TEST_WORK_DIR}/test1" 1)"
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+T1_MAIN_BEFORE="$(git -C "$T1_WORK" rev-parse origin/main)"
 set +e
 T1_OUTPUT="$(cd "$T1_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
 T1_EXIT=$?
 set -e
-if [[ $T1_EXIT -ne 0 ]] && echo "$T1_OUTPUT" | grep -q "Bündelung bringt hier keinen Vorteil"; then
-  pass "Test 1: verweigert sich klar bei nur 1 Story"
+if [[ $T1_EXIT -eq 0 ]]; then
+  pass "Test 1a: genau 1 Story läuft ohne Fehler durch (exit 0)"
 else
-  fail "Test 1: kein klarer Abbruch (exit=${T1_EXIT})"
+  fail "Test 1a: erwartete exit 0, bekam exit=${T1_EXIT}"
   echo "  Output: $T1_OUTPUT"
+fi
+T1_MAIN_AFTER="$(git -C "$T1_WORK" rev-parse origin/main)"
+if [[ "$T1_MAIN_AFTER" != "$T1_MAIN_BEFORE" ]]; then
+  pass "Test 1b: origin/main hat einen neuen Commit (der finale Merge der einzelnen Story)"
+else
+  fail "Test 1b: origin/main unverändert — kein Merge stattgefunden"
+fi
+T1_STATUS="$(git -C "$T1_WORK" show origin/main:board/stories/S-901-test.yaml 2>/dev/null | grep '^status:' || true)"
+if echo "$T1_STATUS" | grep -q "Done"; then
+  pass "Test 1c: die einzelne Story ist in main als Done sichtbar"
+else
+  fail "Test 1c: Story nicht Done (Status: ${T1_STATUS})"
 fi
 
 # ===========================================================================
