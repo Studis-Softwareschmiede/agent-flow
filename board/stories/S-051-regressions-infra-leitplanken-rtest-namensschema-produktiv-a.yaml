@@ -1,0 +1,29 @@
+id: S-051
+parent: F-025
+title: 'Regressions-Infra-Leitplanken: rtest-*-Namensschema, Produktiv-Allowlist,
+  garantiertes Cleanup'
+status: To Do
+priority: P2
+spec: docs/specs/regression-runner.md
+implements:
+- AC4
+- AC7
+- AC8
+depends:
+- S-049
+labels:
+- regression
+- security
+size_est: null
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-05T23:04:22Z'
+updated_at: '2026-07-05T23:04:22Z'
+done_at: null
