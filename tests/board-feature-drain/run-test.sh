@@ -282,6 +282,34 @@ else
 fi
 
 # ===========================================================================
+# Test 5 — Regression 2026-07-06 (Owner-Testlauf F-065, dev-gui): profile.md
+# OHNE default_branch-Feld (echte dev-gui-Form) darf nicht zum stillen
+# Abbruch fuehren (set -e + pipefail auf grep-ohne-Treffer).
+# ===========================================================================
+echo ""
+echo "--- Test 5: profile.md ohne default_branch-Feld -> kein stiller Abbruch ---"
+T5_WORK="$(setup_fixture "${TEST_WORK_DIR}/test5" 2)"
+cat > "${T5_WORK}/.claude/profile.md" <<'PLAIN'
+language: js
+merge_policy: direct
+deploy: none
+PLAIN
+(
+  cd "$T5_WORK"
+  git add -A && git commit -q -m "profile.md ohne default_branch (Regressionsfixture)"
+  git push -q origin main
+)
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+T5_OUTPUT="$(cd "$T5_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T5_EXIT=$?
+if [[ $T5_EXIT -eq 0 ]]; then
+  pass "Test 5: kein stiller Abbruch trotz fehlendem default_branch-Feld — Fallback auf 'main' griff"
+else
+  fail "Test 5: Skript brach ab (exit=${T5_EXIT}) statt auf 'main' zurückzufallen"
+  echo "  Output: $T5_OUTPUT"
+fi
+
+# ===========================================================================
 # Ergebnis
 # ===========================================================================
 echo ""

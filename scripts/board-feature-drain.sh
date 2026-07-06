@@ -46,7 +46,7 @@ FEATURE_BRANCH="feature/${FEATURE_ID}"
 log() { echo "[board-feature-drain] $*"; }
 die() { echo "FEHLER [board-feature-drain]: $*" >&2; exit 1; }
 
-DEFAULT_BRANCH="$(grep -m1 '^default_branch:' .claude/profile.md 2>/dev/null | sed 's/default_branch: *//;s/"//g')"
+DEFAULT_BRANCH="$(grep -m1 '^default_branch:' .claude/profile.md 2>/dev/null | sed 's/default_branch: *//;s/"//g' || true)"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
 story_status() {
