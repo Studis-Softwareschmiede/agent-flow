@@ -16,6 +16,20 @@
 #     + Board zeigt alle Storys Done (Test 2), idempotent bei Wiederholung
 #     (Test 4).
 #
+# Covers (docs/specs/feature-batch-orchestration.md — v2 Run-State):
+#   AC9  — Run-State-Anlage & -Aktualisierung: state.yaml entsteht zu
+#     Drain-Start und wird bei Phasenwechsel + Runden-/Story-Wechsel
+#     aktualisiert; last_error bei Exit != 0 gesetzt (Test 9, Test 11).
+#   AC10 — state.yaml-Schema-Vertrag: exakt die vertraglichen Felder mit
+#     zulässigen Werten (phase-Enum, progress done/total, ISO-8601, S-###
+#     oder null, String oder null) (Test 9).
+#   AC11 — board/runs/ ist gitignored: nie in git status als zu committende
+#     Änderung, kein Commit von Run-Artefakten (Test 9, Test 10, Test 12).
+#   AC12 — Last-Run-Eindampfung nach erfolgreichem finalen Merge: state.yaml
+#     kompakt (Endphase, total/total), Zwischen-Arbeitsdateien entfernt;
+#     erneuter Drain-Start überschreibt statt anzuhäufen (Test 10). E6
+#     (abgebrochener Run OHNE Merge) dampft NICHT ein (Test 11).
+#
 # Verwendet lokale /tmp-Git-Fixtures (bare "origin" + Arbeits-Klon), einen
 # gemockten `gh` (wie tests/board-ship) und einen gemockten "claude"-Aufruf,
 # der EINE Story pro Aufruf simuliert (board set Done + Commit + Push in den
@@ -178,6 +192,12 @@ default_branch: main
 ---
 Test-Profil.
 YAML
+    # AC11 (board/runs/ ist gitignored) — echtes Repo-Verhalten in der Fixture
+    # nachbilden, sonst meldet guard_clean_or_die() in board-ship.sh das
+    # untracked board/runs/<F-###>/state.yaml fälschlich als "dirty".
+    cat > .gitignore <<'GITIGNORE'
+board/runs/
+GITIGNORE
     git add -A
     git commit -q -m "initial board setup"
     git branch -M main
@@ -481,6 +501,177 @@ if [[ -f "${T8_WORK}/conflict.txt" ]] && grep -q "andere-sitzung-unfertig" "${T8
   pass "Test 8b: die fremde, unfertige Datei der anderen Sitzung wurde NICHT angetastet"
 else
   fail "Test 8b: die fremde Datei wurde verändert/gelöscht — Datenverlust-Risiko"
+fi
+
+# ===========================================================================
+# Test 9 — AC9/AC10/AC11: Happy Path (2 Storys) erzeugt state.yaml mit dem
+# vertraglichen Schema (Endphase rollout, progress total/total, ISO-8601-
+# Zeitstempel, current_story null außerhalb story-Phase, last_error null) —
+# und board/runs/ erscheint NIE in git status (weder Working-Tree noch
+# origin/main nach dem finalen Merge).
+# ===========================================================================
+echo ""
+echo "--- Test 9: state.yaml nach Happy Path entspricht dem AC10-Schema, board/runs/ bleibt gitignored (AC11) ---"
+T9_WORK="$(setup_fixture "${TEST_WORK_DIR}/test9" 2)"
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+T9_OUTPUT="$(cd "$T9_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T9_EXIT=$?
+if [[ $T9_EXIT -eq 0 ]]; then
+  pass "Test 9a: Happy Path (2 Storys) läuft ohne Fehler durch"
+else
+  fail "Test 9a: exit=${T9_EXIT}"
+  echo "  Output: $T9_OUTPUT"
+fi
+
+T9_STATE="${T9_WORK}/board/runs/F-001/state.yaml"
+if [[ -f "$T9_STATE" ]]; then
+  pass "Test 9b: board/runs/F-001/state.yaml wurde angelegt"
+else
+  fail "Test 9b: state.yaml fehlt (Pfad: ${T9_STATE})"
+fi
+
+T9_SCHEMA_OK="$(python3 - "$T9_STATE" <<'PYEOF'
+import sys, yaml, re
+with open(sys.argv[1]) as f:
+    d = yaml.safe_load(f)
+errs = []
+if d.get("schema_version") != 1:
+    errs.append(f"schema_version={d.get('schema_version')!r} (erwartet 1)")
+if d.get("feature_id") != "F-001":
+    errs.append(f"feature_id={d.get('feature_id')!r} (erwartet F-001)")
+if d.get("phase") not in ("dossier", "story", "merge", "rollout"):
+    errs.append(f"phase={d.get('phase')!r} nicht im Enum")
+if d.get("phase") != "rollout":
+    errs.append(f"phase={d.get('phase')!r} (erwartet 'rollout' nach erfolgreichem Merge)")
+prog = d.get("progress") or {}
+if not isinstance(prog.get("done"), int) or not isinstance(prog.get("total"), int):
+    errs.append(f"progress done/total nicht beide int: {prog!r}")
+elif prog.get("done") != prog.get("total"):
+    errs.append(f"progress {prog!r} (erwartet done==total nach erfolgreichem Merge)")
+if d.get("current_story") is not None:
+    errs.append(f"current_story={d.get('current_story')!r} (erwartet null außerhalb story-Phase)")
+iso_re = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+for field in ("started_at", "updated_at"):
+    val = d.get(field)
+    if not isinstance(val, str) or not iso_re.match(val):
+        errs.append(f"{field}={val!r} ist kein ISO-8601-UTC-Zeitstempel")
+if d.get("last_error") is not None:
+    errs.append(f"last_error={d.get('last_error')!r} (erwartet null nach Erfolg)")
+if errs:
+    print("FEHLER: " + "; ".join(errs))
+else:
+    print("OK")
+PYEOF
+)"
+if [[ "$T9_SCHEMA_OK" == "OK" ]]; then
+  pass "Test 9c: state.yaml entspricht exakt dem AC10-Schema (Endphase rollout, done==total, ISO-8601, current_story null, last_error null)"
+else
+  fail "Test 9c: Schema-Abweichung — ${T9_SCHEMA_OK}"
+  cat "$T9_STATE"
+fi
+
+T9_STATUS_PORCELAIN="$(cd "$T9_WORK" && git status --porcelain)"
+if [[ -z "$T9_STATUS_PORCELAIN" ]]; then
+  pass "Test 9d: git status im Working-Tree ist sauber — board/runs/ erscheint nirgends als zu committende Änderung (AC11)"
+else
+  fail "Test 9d: git status ist NICHT sauber — Run-Artefakt wurde offenbar getrackt: ${T9_STATUS_PORCELAIN}"
+fi
+
+if cd "$T9_WORK" && git show origin/main --stat 2>/dev/null | grep -q "board/runs"; then
+  fail "Test 9e: der finale Merge-Commit nach main enthält Run-Artefakte (board/runs/) — AC11 verletzt"
+else
+  pass "Test 9e: der finale Merge-Commit nach main enthält KEINE Run-Artefakte (AC11)"
+fi
+
+# ===========================================================================
+# Test 10 — AC12: Last-Run-Eindampfung. Nach erfolgreichem finalem Merge
+# bleibt state.yaml als kompaktes Protokoll stehen; ein erneuter Drain-Start
+# desselben (bereits fertigen) Features überschreibt es mit einem frischen
+# Run statt alte Zwischenstände anzuhäufen (kein Wachstum).
+# ===========================================================================
+echo ""
+echo "--- Test 10: Last-Run-Eindampfung nach Merge + erneuter Lauf überschreibt (kein Anhäufen) ---"
+T10_RUN_DIR="${T2_WORK}/board/runs/F-001"
+if [[ -f "${T10_RUN_DIR}/state.yaml" ]]; then
+  pass "Test 10a: state.yaml existiert nach dem Happy-Path-Lauf aus Test 2 (bereits terminaler Merge)"
+else
+  fail "Test 10a: state.yaml fehlt nach Test 2 — Voraussetzung für Eindampfungs-Check nicht gegeben"
+fi
+if [[ ! -f "${T10_RUN_DIR}/dossier.md" && ! -f "${T10_RUN_DIR}/notes.md" ]]; then
+  pass "Test 10b: keine Zwischen-Arbeitsdateien (dossier.md/notes.md) nach erfolgreichem Merge übrig (Eindampfung)"
+else
+  fail "Test 10b: dossier.md/notes.md sind nach dem Merge noch vorhanden — keine Eindampfung"
+fi
+
+T10_ROUND_BEFORE="$(python3 -c "import yaml; print(yaml.safe_load(open('${T10_RUN_DIR}/state.yaml'))['round'])")"
+T10_UPDATED_BEFORE="$(python3 -c "import yaml; print(yaml.safe_load(open('${T10_RUN_DIR}/state.yaml'))['updated_at'])")"
+
+# Test 4 (oben) hat bereits einen zweiten, idempotenten Lauf auf T2_WORK
+# ausgeführt — state.yaml muss dabei NEU geschrieben worden sein (frischer
+# updated_at/round), nicht additiv gewachsen.
+T10_ROUND_AFTER="$(python3 -c "import yaml; print(yaml.safe_load(open('${T10_RUN_DIR}/state.yaml'))['round'])")"
+T10_UPDATED_AFTER="$(python3 -c "import yaml; print(yaml.safe_load(open('${T10_RUN_DIR}/state.yaml'))['updated_at'])")"
+if [[ "$T10_ROUND_AFTER" -le 1 ]]; then
+  pass "Test 10c: erneuter (idempotenter) Drain-Start startet mit frischem round-Zähler (kein Anhäufen über Läufe hinweg)"
+else
+  fail "Test 10c: round=${T10_ROUND_AFTER} nach erneutem Lauf — deutet auf Anhäufung/Fortsetzung statt frischem Run hin"
+fi
+T10_STATE_SIZE_LINES="$(wc -l < "${T10_RUN_DIR}/state.yaml")"
+if [[ "$T10_STATE_SIZE_LINES" -le 12 ]]; then
+  pass "Test 10d: state.yaml bleibt kompakt (${T10_STATE_SIZE_LINES} Zeilen) — kein Wachstum über Läufe hinweg"
+else
+  fail "Test 10d: state.yaml ist unerwartet groß (${T10_STATE_SIZE_LINES} Zeilen)"
+fi
+
+# ===========================================================================
+# Test 11 — AC9 last_error + E6: bricht das Feature MIT einer echten Blockade
+# ab (Exit 3, kein Merge), MUSS state.yaml last_error mit einer Klartext-
+# Zeile setzen — UND darf NICHT eingedampft werden (E6: kein erfolgreicher
+# Merge -> Eindampfung greift nicht, Zwischenstände bleiben für Diagnose).
+# ===========================================================================
+echo ""
+echo "--- Test 11: last_error bei Blockade gesetzt (AC9) + KEINE Eindampfung ohne Merge (E6) ---"
+T11_WORK="$(setup_fixture "${TEST_WORK_DIR}/test11" 3)"
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+export MOCK_STORY_TO_BLOCK="S-902"
+set +e
+T11_OUTPUT="$(cd "$T11_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T11_EXIT=$?
+set -e
+unset MOCK_STORY_TO_BLOCK
+
+T11_STATE="${T11_WORK}/board/runs/F-001/state.yaml"
+if [[ $T11_EXIT -eq 3 && -f "$T11_STATE" ]]; then
+  pass "Test 11a: state.yaml existiert trotz (bzw. gerade wegen) der Blockade"
+else
+  fail "Test 11a: erwartete Exit 3 mit vorhandenem state.yaml, bekam exit=${T11_EXIT}"
+fi
+
+T11_LAST_ERROR="$(python3 -c "import yaml; print(yaml.safe_load(open('${T11_STATE}'))['last_error'])" 2>/dev/null || echo "<lesefehler>")"
+if [[ -n "$T11_LAST_ERROR" && "$T11_LAST_ERROR" != "None" ]]; then
+  pass "Test 11b: last_error ist eine Klartext-Zeile (nicht null) nach Exit != 0 — '${T11_LAST_ERROR}'"
+else
+  fail "Test 11b: last_error ist null/leer trotz Exit 3 — ${T11_LAST_ERROR}"
+fi
+
+T11_PHASE="$(python3 -c "import yaml; print(yaml.safe_load(open('${T11_STATE}'))['phase'])" 2>/dev/null || echo "<lesefehler>")"
+if [[ "$T11_PHASE" != "rollout" ]]; then
+  pass "Test 11c: phase ist NICHT 'rollout' (E6 — kein erfolgreicher Merge, keine Eindampfung auf Endphase)"
+else
+  fail "Test 11c: phase ist 'rollout', obwohl das Feature blockiert abgebrochen ist (E6 verletzt)"
+fi
+
+# ===========================================================================
+# Test 12 — AC11: board/runs/ bleibt auch im Feature-Branch selbst (nicht nur
+# main) niemals ein zu committendes Artefakt — der Feature-Drain committet
+# während der gesamten Story-Schleife nichts aus board/runs/.
+# ===========================================================================
+echo ""
+echo "--- Test 12: Feature-Branch enthält zu keinem Zeitpunkt Run-Artefakte aus board/runs/ (AC11) ---"
+if cd "$T9_WORK" && git log origin/feature/F-001 --name-only 2>/dev/null | grep -q "board/runs"; then
+  fail "Test 12: mindestens ein Commit im Feature-Branch enthält board/runs/ — AC11 verletzt"
+else
+  pass "Test 12: kein Commit im Feature-Branch enthält board/runs/ (AC11)"
 fi
 
 # ===========================================================================
