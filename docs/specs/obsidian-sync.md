@@ -3,7 +3,7 @@ id: obsidian-sync
 title: Obsidian-Sync — wiederholter Abgleich Notiz ↔ Konzept/Spec (kein Blind-Overwrite)
 status: active
 area: anforderung-intake
-version: 1
+version: 2
 spec_format: use-case-2.0
 ---
 
@@ -13,6 +13,7 @@ spec_format: use-case-2.0
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien + Coverage-Gate), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
 > **Subsystem-Vertrag (verbindlich):** `docs/architecture/obsidian-ingest-subsystem.md` §5. Diese Spec setzt den **Re-Sync-Modus** um — ein **eigener Modus** desselben `from-notes`-Skills, der Notiz-Reader + Fragenkatalog-Gate mit `[[obsidian-ingest]]` teilt.
 > **Abgrenzung zu Reconcile:** bewusst **kein** Reconcile-„Stufe 0" — invertierte Autorität (siehe *Zweck* + Vergleichstabelle in *Verträge*).
+> **Erweitert 07.07.2026 (Idea-Roundtrip):** nutzt die Frontmatter-Sync-Felder aus `[[obsidian-ingest]]` AC17 als Drei-Wege-Anker (AC7). Der Rückkanal Repo→Vault bleibt `[[reconcile]]` Stufe 3 — der Sync schreibt weiterhin **nie** in den Vault.
 
 ## Zweck
 `/agent-flow:from-notes --sync` ist der **wiederholbare Abgleich** zwischen dem **aktuellen Notiz-Stand** im
@@ -75,6 +76,14 @@ Doku (Code ist Wahrheit); hier sind die Notizen **unfertige Gedanken** und dürf
   explizitem User-Entscheid (AC4). Er startet **kein** `/flow` und legt **keine** Stories automatisch an — neue
   Stories entstehen bewusst nur über den Ingest-Stufe-c- bzw. den regulären `requirement`-Fluss. Fehlt
   `obsidian_source` oder ist der Ordner unlesbar → klarer Abbruch wie bei `[[obsidian-ingest]]` (*deckt E1*).
+
+- **AC7** — **Drei-Wege-Anker via Sync-Felder (Idea-Roundtrip, 07.07.2026):** Tragen Ideennotizen die
+  Frontmatter-Sync-Felder `last_sync`/`sync_hash` (gestempelt von `[[obsidian-ingest]]` AC17 bzw.
+  `[[reconcile]]` Stufe 3), nutzt der Sync-Modus sie zur **Klassifikation** jedes Funds: *nur Notiz geändert*
+  (Notiz-Hash ≠ `sync_hash`, Doku seit `last_sync` unverändert) · *nur Doku geändert* · *beide geändert*
+  (echter Konflikt — im Bericht priorisiert und als solcher gekennzeichnet). Fehlen die Felder (nie ingestete
+  oder alte Notizen), läuft der Vergleich wie bisher rein inhaltlich — **kein** Regress. Die Autorität ändert
+  sich dadurch **nicht**: auch klassifizierte Funde werden nie automatisch geschrieben (AC3/AC4).
 
 > **Traceability:** Jeder Test trägt das kanonische Trace-Tag `@trace obsidian-sync#AC<n>`
 > gemäss `knowledge/<lang>.md` → `## Spec-Tagging`. Der `tester` rechnet das Coverage-Gate
