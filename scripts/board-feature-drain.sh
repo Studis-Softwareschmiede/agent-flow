@@ -61,6 +61,70 @@ die() { echo "FEHLER [board-feature-drain]: $*" >&2; exit 1; }
 DEFAULT_BRANCH="$(grep -m1 '^default_branch:' .claude/profile.md 2>/dev/null | sed 's/default_branch: *//;s/"//g' || true)"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
+# ISO-8601-UTC-Zeitstempel (jetzt) — dieselbe Konvention wie scripts/board (now_ts()).
+now_ts() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+# --- Run-State (AC9/AC10/E7): board/runs/<F-###>/state.yaml -----------------
+# Bindender Schema-Vertrag (Spec §"state.yaml-Schema", u.a. für dev-gui) —
+# Feldnamen/Enums NICHT ohne Spec-Änderung anpassen. Atomar geschrieben
+# (Temp-Datei + `mv`, wie die übrige Board-CLI) — kein Leser sieht je eine
+# halb geschriebene Datei (E7).
+RUN_DIR="board/runs/${FEATURE_ID}"
+STATE_FILE="${RUN_DIR}/state.yaml"
+RUN_STARTED_AT=""
+
+state_write() {
+  # state_write <phase> <current_story|-> <done> <total> <round> <last_error|->
+  local phase="$1" current_story="$2" done_n="$3" total_n="$4" round_n="$5" last_error="$6"
+  mkdir -p "$RUN_DIR"
+  [[ -n "$RUN_STARTED_AT" ]] || RUN_STARTED_AT="$(now_ts)"
+  local tmp
+  tmp="$(mktemp "${RUN_DIR}/state.yaml.XXXXXX")"
+  python3 - "$tmp" "$phase" "$current_story" "$done_n" "$total_n" "$round_n" "$last_error" "$FEATURE_ID" "$RUN_STARTED_AT" "$(now_ts)" <<'PYEOF'
+import sys, yaml
+
+(tmp, phase, current_story, done_n, total_n, round_n, last_error,
+ feature_id, started_at, updated_at) = sys.argv[1:11]
+
+data = {
+    "schema_version": 1,
+    "feature_id": feature_id,
+    "phase": phase,
+    "current_story": None if current_story == "-" else current_story,
+    "progress": {"done": int(done_n), "total": int(total_n)},
+    "round": int(round_n),
+    "started_at": started_at,
+    "updated_at": updated_at,
+    "last_error": None if last_error == "-" else last_error,
+}
+with open(tmp, "w", encoding="utf-8") as f:
+    yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+PYEOF
+  mv "$tmp" "$STATE_FILE"
+}
+
+# Bei jedem Fehler/Exit!=0 (AC9): last_error in state.yaml mit Klartext setzen,
+# BEVOR das Skript endet. Nutzt die zuletzt bekannten Phase/Progress/Round-
+# Werte (globale Variablen, laufend in der Hauptschleife aktualisiert) — auch
+# wenn state.yaml noch gar nicht existiert (sehr früher Abbruch), einfach mit
+# Platzhaltern.
+CUR_PHASE="dossier"
+CUR_STORY="-"
+CUR_DONE=0
+CUR_TOTAL=0
+CUR_ROUND=0
+
+on_error_state() {
+  local exit_code=$?
+  if [[ $exit_code -ne 0 ]]; then
+    local msg="Exit ${exit_code}: Feature-Drain für ${FEATURE_ID} abgebrochen (siehe Log oben)."
+    state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "$msg" 2>/dev/null || true
+  fi
+}
+trap on_error_state EXIT
+
 story_status() {
   # story_status <S-###> — liest den aktuellen Status direkt aus der YAML
   # (kein 'board show', um ohne zusätzliche CLI-Abhängigkeit auszukommen).
@@ -76,6 +140,27 @@ for path in glob.glob("board/stories/*.yaml"):
     if str(data.get("id", "")).strip() == sid:
         print(str(data.get("status", "")).strip())
         break
+PYEOF
+}
+
+progress_done_count() {
+  # Anzahl terminaler (Done/Verworfen) Kind-Storys dieses Features — für
+  # state.yaml progress.done (AC10: "done" = Anzahl terminaler Storys).
+  python3 - "$FEATURE_ID" <<'PYEOF'
+import sys, glob, yaml
+fid = sys.argv[1]
+count = 0
+for path in glob.glob("board/stories/*.yaml"):
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        continue
+    if str(data.get("parent", "")).strip() != fid:
+        continue
+    if str(data.get("status", "")).strip() in ("Done", "Verworfen"):
+        count += 1
+print(count)
 PYEOF
 }
 
@@ -266,6 +351,14 @@ PYEOF
 
 log "Feature ${FEATURE_ID}: ${STORY_COUNT} Story/Storys — Batch-Modus aktiv (Feature-Branch ${FEATURE_BRANCH})."
 
+# --- Run-State: Drain-Start, Phase "dossier" (AC9) --------------------------
+CUR_PHASE="dossier"
+CUR_STORY="-"
+CUR_DONE="$(progress_done_count)"
+CUR_TOTAL="$STORY_COUNT"
+CUR_ROUND=0
+state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "-"
+
 # --- Feature-Branch sicherstellen (von origin/default_branch abzweigen, falls neu) ---
 git fetch origin "$DEFAULT_BRANCH" --quiet
 if ! git rev-parse "origin/${FEATURE_BRANCH}" >/dev/null 2>&1; then
@@ -273,8 +366,13 @@ if ! git rev-parse "origin/${FEATURE_BRANCH}" >/dev/null 2>&1; then
   log "Feature-Branch ${FEATURE_BRANCH} neu angelegt (von origin/${DEFAULT_BRANCH})."
 fi
 
+# --- Run-State: Phasenwechsel dossier -> story (AC9) ------------------------
+CUR_PHASE="story"
+state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "-"
+
 # --- Hauptschleife: eine frische Story-Sitzung nach der anderen ---
 for round in $(seq 1 50); do
+  CUR_ROUND="$round"
   sync_to_feature_branch
   NEXT_JSON="$("$BOARD_SCRIPT" next --parent "$FEATURE_ID" 2>/dev/null || true)"
 
@@ -330,6 +428,10 @@ for round in $(seq 1 50); do
   STATUS_BEFORE="$(story_status "$STORY_ID")"
   log "Runde ${round}: nächste Story ${STORY_ID} (Status davor: ${STATUS_BEFORE})"
 
+  # Run-State: Runden-/Story-Wechsel (AC9 — current_story, round, updated_at).
+  CUR_STORY="$STORY_ID"
+  state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "-"
+
   # Frische Story-Sitzung (Story-Ebene, eigener Kontext) — /flow im Feature-Scope.
   "${BOARD_FEATURE_DRAIN_CLAUDE_CMD:-claude}" -p "/agent-flow:flow --parent ${FEATURE_ID}" --dangerously-skip-permissions || true
 
@@ -342,14 +444,40 @@ for round in $(seq 1 50); do
   if [[ "$STATUS_BEFORE" == "To Do" && "$STATUS_AFTER" == "To Do" ]]; then
     die "Runde ${round}: ${STORY_ID} blieb trotz /flow-Lauf auf 'To Do' — Verdacht auf Zwischenfall (kein Fortschritt). Manuell prüfen (git log, Worktrees, uncommittete Dateien), nicht automatisch weiterlaufen."
   fi
+
+  # Fortschritt nach der Runde aktualisieren (AC9 — progress bei jedem Wechsel).
+  CUR_DONE="$(progress_done_count)"
+  state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "-"
 done
 
+# --- Run-State: Phasenwechsel story -> merge (AC9) --------------------------
+CUR_PHASE="merge"
+CUR_STORY="-"
+state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "-"
+
 # --- Finaler Merge: Feature-Branch → main, EINMAL CI-Watch + Rollout ---
+# (board-ship.sh --merge-feature beobachtet CI und rollt selbst aus — aus
+# Sicht des Run-State bleibt das für AC9 EINE zusammengehörende Phase
+# "merge"->"rollout"; wir markieren "rollout" direkt danach, s.u.)
 if [[ -n "$APP_NAME" ]]; then
   "$SHIP_SCRIPT" --merge-feature "$FEATURE_BRANCH" "$APP_NAME"
 else
   "$SHIP_SCRIPT" --merge-feature "$FEATURE_BRANCH"
 fi
 
+# --- Run-State: Phasenwechsel merge -> rollout (AC9, nach erfolgreichem Merge) ---
+CUR_PHASE="rollout"
+CUR_DONE="$CUR_TOTAL"
+state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "-"
+
 log "Feature ${FEATURE_ID} vollständig gelandet + deployt."
+
+# --- Last-Run-Eindampfung (AC12): NUR nach erfolgreichem finalen Merge (AC6) ---
+# state.yaml bleibt als kompaktes Last-Run-Protokoll stehen (Endphase
+# "rollout", progress = total/total, Endzeit) — Zwischen-Arbeitsdateien
+# (dossier.md/notes.md-Rohstände) haben für einen späteren Lauf keinen Wert
+# mehr und werden entfernt. Ein erneuter Drain-Start überschreibt state.yaml
+# ohnehin mit einem frischen Run (kein Anhäufen, s. state_write()).
+rm -f "${RUN_DIR}/dossier.md" "${RUN_DIR}/notes.md"
+
 exit 0

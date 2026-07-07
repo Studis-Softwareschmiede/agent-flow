@@ -11,6 +11,10 @@ cloudflare
 # (Hinweis: KEIN `specs/`-Ignore — seit CONCEPT §4d sind Specs durable und
 #  versioniert; `templates/_docs/specs/` und projekt-eigene `docs/specs/` werden committet.)
 
+# Feature-Batch-Run-Artefakte (ephemer, pro Lauf — docs/specs/feature-batch-orchestration.md AC11)
+# state.yaml/dossier.md/notes.md/Last-Run-Protokoll sind NIE Teil der Git-Historie.
+board/runs/
+
 # Projekt-lokale Lessons (Tier-1, von reviewer.md geschrieben) — NIE committen
 # Sie sind per Spec-Lifecycle projekt-lokal; retro promotet sie via PR ins
 # globale knowledge/ (4 Schutzgitter, siehe agents/retro.md).
