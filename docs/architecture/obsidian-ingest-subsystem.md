@@ -1,6 +1,9 @@
 # Obsidian-Ingest-Subsystem — Notizen als Requirement-Quelle der Fabrik
 
-> **Status:** akzeptiert (Konzept), **noch nicht gebaut**. Quer-Achse wie `reconcile-subsystem.md` /
+> **Status:** akzeptiert (Konzept), **noch nicht gebaut**. **Erweitert 07.07.2026 (Idea-Roundtrip):** ID-Kette
+> `IDEA→C→Spec→BR→Story→@trace`, definierte Vault-Schreibzonen (§4b) und `--audit`-Modus (§5a); der
+> Rückkanal Repo→Obsidian lebt als Stufe 3 in `reconcile-subsystem.md` §3.
+> Quer-Achse wie `reconcile-subsystem.md` /
 > `traceability-subsystem.md`. Skill (Arbeitstitel) `/agent-flow:from-notes` — orchestriert Notiz→Konzept→Spec→Stories.
 > Sprach-**neutral** (der Notiz-Inhalt ist projektfachlich, das Subsystem selbst ist es nicht).
 > **Scope-Grenze (SR — Cross-Repo):** dieses Subsystem ist NUR die **Fabrik-seitige Pipeline-Fähigkeit** (agent-flow).
@@ -49,7 +52,11 @@ Notiz-Korpus ──(a)──▶ docs/concept.md ──(b)──▶ docs/specs/<f
 
 - **Stufe a — Notiz → `docs/concept.md`.** Konsolidiert den Notiz-Korpus zum Konzept (Problem · Nutzer · Ziele ·
   Nicht-Ziele · Scope). **Kritischste Stufe** → **niedrigste Nachfrage-Schwelle** (jede Mehrdeutigkeit im
-  Ideen-Text wird eher zur Frage als zur stillen Annahme).
+  Ideen-Text wird eher zur Frage als zur stillen Annahme). **ID-Vergabe:** Ideennotizen ohne `idea_id` erhalten
+  eine stabile **`IDEA-NNN`** (Frontmatter-Stempel, §4b); jeder erzeugte Konzeptabschnitt erhält eine ID
+  **`C-NNN`** mit Herkunftsvermerk `(← IDEA-NNN)`. Nach Übernahme stempelt die Stufe das Notiz-Frontmatter:
+  `idea_status: adopted`, `last_sync`, `sync_hash`, Referenz auf `C-NNN` — Grundlage für Re-Sync (§5),
+  Audit (§5a) und den Rückkanal (`reconcile` Stufe 3).
 - **Stufe b — Konzept → Spec(s).** Leitet je Capability eine `docs/specs/<feature>.md` aus dem Konzept ab
   (Vorlage `templates/_docs/specs/_template.md`, `spec_format`-Stempel, nummerierte AC). Wo tiefes
   Architektur-Detail nötig ist, wird der **`architekt`** (→ `docs/architecture.md` bzw.
@@ -71,6 +78,21 @@ erneut zu übergeben. Additiv/optional: bestehende Profile ohne Feld bleiben gü
 bleibt unverändert. **Precedence:** übergebenes Ordner-Argument > `obsidian_source` im Profil; fehlt beides →
 klarer Abbruch (nichts zu lesen). Wird ein abweichender Pfad übergeben, wird `obsidian_source` aktualisiert.
 
+## 4b. Vault-Schreibzonen — begrenzt schreibend statt rein lesend (Entscheid 07.07.2026)
+
+Die frühere Regel „Vault ist rein lesende Quelle" ist **aufgehoben** — sie verhinderte den geschlossenen
+Kreislauf (Repo-first entstandene Inhalte fanden nie nach Obsidian zurück). Stattdessen gilt ein
+**Zonen-Modell**: die Fabrik darf in Ideennotizen ausschliesslich **zwei definierte Zonen** anfassen:
+
+1. **Frontmatter-Sync-Felder:** `idea_id` · `idea_status` (`draft | adopted | parked | rejected | superseded`) ·
+   `last_sync` · `sync_hash` · Referenz(en) auf `C-NNN`.
+2. **Generierter Abschnitt** `## Stand aus Konzept (generiert)` — stabil benannt, wird gepatcht
+   (nie Datei-Überschreiben). Einziger Ort für Rückflüsse aus Konzept/Spec.
+
+**Alles andere ist tabu:** die persönliche Ausarbeitung bleibt unantastbar; gelöscht wird nie (Überholtes
+wird `superseded` markiert). Neue Ideennotizen darf nur der Rückkanal (`reconcile` Stufe 3) anlegen — als
+klar gekennzeichnete, repo-first entstandene Idee (`idea_status: adopted`, Herkunft `C-NNN`).
+
 ## 5. Re-Sync — bewusst **kein** Reconcile-Stufe-0, sondern eigener Modus (invertierte Autorität)
 
 Der Re-Sync (`/agent-flow:from-notes --sync`) zeigt Widersprüche zwischen **aktuellem Notiz-Stand** und
@@ -90,6 +112,31 @@ kein Einzel-Nachfragen, ein PR" (`reconcile-subsystem.md` §7). Eine notiz-getri
 Autorität (nichts automatisch, per-Divergenz-Entscheid) in denselben Skill zu hängen würde diesen klaren Vertrag
 verwässern. Der Re-Sync ist deshalb ein **eigener Modus** desselben `from-notes`-Skills, der Reader + Katalog-Gate
 mit dem Ingest teilt, aber Reconcile unangetastet lässt.
+
+## 5a. `--audit` — Integritätsprüfung über die ID-Kette (neu, 07.07.2026)
+
+`/agent-flow:from-notes --audit` verlängert die bestehende `@trace`-Traceability
+(`traceability-subsystem.md`) nach oben bis zur Idee und prüft die **gesamte Kette auf Lücken und
+Widersprüche** — read-only, ändert nichts:
+
+| Ebene | ID | Wo | Status |
+|---|---|---|---|
+| Idee | `IDEA-NNN` | Frontmatter Ideennotiz (Vault) | **neu** |
+| Konzept | `C-NNN (← IDEA-NNN)` | `docs/concept.md` | **neu** |
+| Spec | Spec-ID `(← C-NNN)` | `docs/specs/<feature>.md` | besteht |
+| Geschäftsregel | `BR-NNN` | `architecture.md` / `data-model.md` | besteht |
+| Story | Board-Item (→ Spec-ID) | Board | besteht |
+| Code/Test | `@trace <slug>#AC/BR` | Testcode, Coverage-Gate | besteht |
+
+- **Abgeleitete Coverage-Map, nie handgepflegt** (gleiche Philosophie wie das Traceability-Subsystem):
+  je Lauf frisch berechnet aus Frontmatter-Scan (Vault via `obsidian_source`) + `docs/`-Scan (Repo).
+- **Meldungen:** *Waisen abwärts* (Idee ohne `C-NNN`, Konzept ohne Spec, Spec ohne Item/Test) ·
+  *Waisen aufwärts* (Spec/Code ohne Konzept-/Ideen-Herkunft — typisch nach Code-first; Input für
+  `reconcile` Stufe 3) · *Widersprüche* (`superseded`-Idee noch referenziert, Spec zeigt auf
+  gelöschten `C-NNN` u.ä.).
+- `idea_status: parked | rejected` gilt als **bewusste Entscheidung**, nicht als Lücke — der Audit
+  unterscheidet „vergessen" von „entschieden".
+- **Output:** kompakter Ampel-Report je Kette (Terminal; dev-gui rendert ihn später, §6).
 
 ## 6. Architektur-Aufteilung (zwei Repos) + dev-gui-Schnittstelle
 
@@ -118,13 +165,18 @@ mit dem Ingest teilt, aber Reconcile unangetastet lässt.
 - **`templates/_docs/`** — Stufe a/b schreiben in dieselben durable Skelette (`concept.md`, `specs/_template.md`).
 - **CONCEPT §4a/§4d** — dieses Subsystem ist ein **dritter Front-Door** in denselben durable-Docs-Pfad.
 - **`reconcile-subsystem.md`** — bewusste Abgrenzung (§5): Re-Sync ist eigener Modus, kein Reconcile-Stufe-0.
+  **Neu (07.07.2026):** Reconcile erhält eine **Stufe 3 (Obsidian-Rückspielung)**, die Konzept-Änderungen in die
+  generierte Zone der Ideennotizen zurückspielt (dort spezifiziert) — sie nutzt die hier definierten Zonen (§4b)
+  und IDs (`idea_id`/`C-NNN`).
+- **`traceability-subsystem.md`** — der `--audit`-Modus (§5a) verlängert dessen Kette nach oben bis `IDEA-NNN`.
 
 ## 8. Bewusst NICHT
 
 - **Kein Blind-Overwrite aus Notizen** — der Re-Sync überschreibt Konzept/Spec **nie automatisch** (§5); jede
   Divergenz ist ein User-Entscheid. (Genau der Unterschied zu Reconcile.)
-- **Kein Schreiben in den Notiz-Ordner** — der Vault ist externe, rein **lesende** Quelle; nichts wird dorthin
-  zurückgeschrieben oder committet.
+- **Kein Schreiben ausserhalb der definierten Zonen** — nur Frontmatter-Sync-Felder + generierter Abschnitt
+  (§4b); die persönliche Ausarbeitung wird nie berührt, gelöscht wird nie (`superseded` statt Löschen).
+  *(Ersetzt 07.07.2026 das frühere Komplett-Verbot „Vault rein lesend" — das verhinderte den Kreislauf.)*
 - **Kein zweiter Zerlege-Pfad** — Stufe c nutzt den bestehenden `requirement`-Agenten, dupliziert seine Slicing-/
   Schätz-Logik nicht.
 - **Kein Ersatz der vagen Anforderung** — die Notiz-Pipeline ist additiv (dritter Weg), `requirement` bleibt.

@@ -1,6 +1,8 @@
 # Reconcile-Subsystem — Doku wieder mit der Realität in Deckung bringen
 
-> **Status:** akzeptiert + **gebaut** (Stufe 1 + Stufe 2, agent-flow-Teil — Stories S-009..S-012). Quer-Achse wie
+> **Status:** akzeptiert + **gebaut** (Stufe 1 + Stufe 2, agent-flow-Teil — Stories S-009..S-012).
+> **Erweitert 07.07.2026 (Idea-Roundtrip): Stufe 3 (Obsidian-Rückspielung), akzeptiert — noch nicht gebaut** (§3).
+> Quer-Achse wie
 > `traceability-subsystem.md` / `model-tier-subsystem.md`. Skill `/agent-flow:reconcile` (`skills/reconcile/SKILL.md`).
 > Offen (Cross-Repo, SR3): der Auslöser-Button im dev-gui-„Spezifikation"-Reiter (dev-gui Story S-201). Sprach-**neutral**.
 
@@ -25,7 +27,7 @@ Buttons „Board abarbeiten" (`/agent-flow:flow`) und „Änderung erfassen" (`/
 einen **Fabrik-Befehl** im Projekt-Terminal — Arbeitstitel **`/agent-flow:reconcile`**. Die gesamte Logik
 (Erkennen, Konvertieren, Nachziehen) lebt in **agent-flow**; dev-gui ruft sie nur auf (POST `/api/command`).
 
-## 3. Zwei Stufen
+## 3. Drei Stufen
 
 ### Stufe 1 — Form (läuft IMMER, auch bei vollem Board)
 Bringt jede Spec auf die **neueste Vorlagen-Version**. Sicher jederzeit, weil rein doku-intern (kein Code-Bezug).
@@ -56,6 +58,33 @@ Gleicht den **Inhalt** der Doku gegen den **Code** ab.
   fehlende Docs werden angelegt. **Kein Einzel-Nachfragen pro Abweichung.**
 - **Freigabe.** Alles zusammen mit Stufe 1 als **ein PR** zur Freigabe — der Mensch-Gate ist der finale
   Diff-Blick im PR, nicht eine Entscheidung je Drift.
+
+### Stufe 3 — Obsidian-Rückspielung (NUR wenn `obsidian_source` gesetzt; neu 07.07.2026, noch nicht gebaut)
+Schliesst den Kreislauf **Idee → Konzept → Spec → Code → zurück zur Idee**. Läuft nach Stufe 2 und spielt
+Änderungen auf **Konzept-Ebene** in den Vault zurück — gestaffelt von unten nach oben: eine reine
+Verhaltensänderung endet auf Spec-Ebene (Stufe 2); nur Änderungen mit **konzeptioneller Tragweite**
+(neue/geänderte `C-NNN`-Abschnitte in `docs/concept.md`) wandern weiter bis zur Ideennotiz.
+
+- **Vorbedingung:** `profile.obsidian_source` gesetzt + Vault erreichbar. Sonst wird Stufe 3 mit Hinweis
+  **übersprungen** (Stufen 1+2 laufen normal — kein Regress für Projekte ohne Vault-Anbindung).
+- **Ziel-Zonen (strikt):** nur die im `obsidian-ingest-subsystem.md` §4b definierten Zonen — Frontmatter-
+  Sync-Felder + generierter Abschnitt `## Stand aus Konzept (generiert)` der über `idea_id`/`C-NNN`
+  verankerten Ideennotiz. Persönliche Ausarbeitung wird **nie** berührt; gelöscht wird **nie**
+  (Überholtes → `idea_status: superseded`).
+- **Waisen aufwärts** (Konzeptabschnitt/Spec ohne Ideen-Herkunft, typisch nach Code-first): Stufe 3 legt
+  eine **neue Ideennotiz** im `obsidian_source`-Ordner an — klar gekennzeichnet als repo-first entstanden
+  (`idea_status: adopted`, Herkunft `(← C-NNN)`), Inhalt nur in der generierten Zone.
+- **Drei-Wege-Abgleich** über `last_sync`/`sync_hash` je Ideennotiz:
+  - nur Repo geändert → Rückspielen in die generierte Zone + Sync-Felder stempeln
+  - nur Obsidian geändert → **kein** Overwrite; Kandidat für den nächsten Ingest/`--sync`
+    (Autorität der Notiz-Seite bleibt beim `from-notes`-Vertrag)
+  - **beide geändert → Konflikt wird dem Menschen vorgelegt, nie automatisch entschieden**
+- **Autoritätsmodell (gestaffelt):** innerhalb des Repos bleibt „Code gewinnt" (Stufe 2, unverändert);
+  Richtung Vault gewinnt niemand automatisch — die generierte Zone ist Spiegel, die persönliche Zone
+  unantastbar, Konflikte entscheidet der Mensch.
+- **Freigabe:** Repo-seitige Änderungen laufen wie bisher über den **einen PR**; Vault-seitige Patches
+  werden im PR-Text als Liste protokolliert (Notiz + Zone) und erst **nach Merge** des PRs ausgeführt —
+  so bleibt der Mensch-Gate auch für den Vault wirksam.
 
 ### Freigabe — immer ein PR (unabhängig von `merge_policy`)
 Reconcile landet sein **Gesamt-Ergebnis** (Stufe 1 + Stufe 2 + `docs/spec-audit.md`-Block) **immer als genau
@@ -89,13 +118,15 @@ Roh-Drift-Liste (die ist ephemer). Liegt im Ziel-Repo neben `docs/`.
 ## 6. Touchpoints
 
 - **dev-gui** — der Button (Muster wie „Board abarbeiten"/„Änderung erfassen").
-- **`/agent-flow:reconcile`** (neu) — orchestriert Stufe 1 + Stufe 2; einziger Schreiber der Doc-Änderungen
+- **`/agent-flow:reconcile`** (neu) — orchestriert Stufe 1 + Stufe 2 + Stufe 3; einziger Schreiber der Doc-Änderungen
   (immer als **ein PR**, unabhängig von der Projekt-`merge_policy` — der Reconcile-Diff ist ein Review-Artefakt).
 - **`reviewer`** — Audit-Modus liefert die Inhalts-Drift (Stufe 2); setzt **kein** Gate, berichtet nur.
 - **`requirement` / konvertierender Agent** — Stufe-1-Umschreibung in die neue Vorlage.
 - **`templates/_docs/specs/_template.md`** — bekommt das `spec_format`-Feld + nennt die aktuelle Version;
   `requirement` stempelt neue Specs künftig automatisch.
 - **CONCEPT §4d** — definiert die *vorwärtige* Drift-Disziplin; dieses Subsystem ist die *rückwärtige* Aufholung.
+- **`obsidian-ingest-subsystem.md`** — Stufe 3 nutzt dessen Vault-Schreibzonen (§4b) und ID-Verankerung
+  (`idea_id`/`C-NNN`); der `--audit`-Modus dort liefert die Waisen-aufwärts-Liste als Input.
 
 ## 7. Bewusst NICHT
 
@@ -104,6 +135,8 @@ Roh-Drift-Liste (die ist ephemer). Liegt im Ziel-Repo neben `docs/`.
 - **Kein Inhalts-Abgleich (Stufe 2) bei offenem Board** — sonst würde halbfertige Arbeit zur Wahrheit erklärt.
 - **Kein eigener interner Revisions-Zähler** — wir folgen der Standard-Version (`use-case-2.x`).
 - **Kein per-Drift-Nachfragen in Stufe 2** — Code ist maßgebend, der Mensch prüft das Gesamt-Ergebnis.
+- **Kein Blind-Overwrite im Vault (Stufe 3)** — geschrieben wird nur in die definierten Zonen; bei
+  beidseitiger Änderung entscheidet immer der Mensch; gelöscht wird nie (`superseded`).
 - **Keine handgepflegte Drift-Liste als Wahrheit** — durable ist nur das Logbuch (§4).
 - **Kein eigener reconcile-Agent** (Rolle ≠ Expertise): Erkennung = `reviewer`-Audit, Orchestrierung = Skill.
 
