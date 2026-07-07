@@ -3,7 +3,7 @@ id: obsidian-ingest
 title: Obsidian-Ingest — Notiz-Ordner als Requirement-Quelle (Notiz → Konzept → Spec → Stories)
 status: active
 area: anforderung-intake
-version: 1
+version: 2
 spec_format: use-case-2.0
 ---
 
@@ -13,6 +13,7 @@ spec_format: use-case-2.0
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien + Coverage-Gate), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
 > **Subsystem-Vertrag (verbindlich):** `docs/architecture/obsidian-ingest-subsystem.md`. Diese Spec setzt den **agent-flow-Teil** um (Pipeline + Reader + Fragenkatalog-Gate + Profilfeld). Der **dünne dev-gui-Button** (Anzeige/Bedienung) lebt im separaten `dev-gui`-Repo und ist hier **nur Cross-Repo-Abhängigkeit**, kein Board-Item — nur die **Schnittstelle** (Aufruf + Rückgabeformat) ist hier definiert, damit dev-gui andockt.
 > **Schwester-Spec:** `[[obsidian-sync]]` (der Re-Sync-Modus) teilt Reader + Fragenkatalog-Gate dieser Spec.
+> **Erweitert 07.07.2026 (Idea-Roundtrip, Subsystem-Vertrag §4b/§5a):** ID-Kette + Frontmatter-Stempel (AC15–AC18) und `--audit`-Modus (AC19–AC22); das frühere Komplett-Verbot „kein Schreiben in den Vault" ist durch das **Zonen-Modell** ersetzt (AC6/AC17). Der Rückkanal Repo→Vault ist NICHT hier, sondern `[[reconcile]]` Stufe 3.
 
 ## Zweck
 `/agent-flow:from-notes <ordnerpfad>` speist einen **Obsidian-Projektordner** (mehrere freie `.md`-Notizen aus der
@@ -28,13 +29,15 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
 3. Der **Notiz-Korpus-Reader** liest alle `.md`-Notizen des Ordners in einen konsolidierten, deterministisch
    geordneten Korpus (mit Herkunfts-Markern je Notiz).
 4. **Stufe a** übersetzt den Korpus nach `docs/concept.md`; offene Punkte werden als **ein** Fragenkatalog
-   vorgelegt (niedrige Nachfrage-Schwelle), nach Beantwortung wird die Stufe committet.
+   vorgelegt (niedrige Nachfrage-Schwelle), nach Beantwortung wird die Stufe committet. Dabei werden die IDs
+   vergeben (`IDEA-NNN` je Quellnotiz, `C-NNN (← IDEA-NNN)` je Konzeptabschnitt) und die Frontmatter-Sync-Felder
+   der übernommenen Notizen gestempelt (AC15–AC17).
 5. **Stufe b** leitet aus dem Konzept die `docs/specs/<feature>.md` ab (+ `architekt`/`dba` wo nötig); Katalog b,
    dann Commit.
 6. **Stufe c** zerlegt die Spec(s) über den bestehenden `requirement`-Agenten in Board-Items/Stories (To Do), die
    auf **Spec + AC-Nummern** zeigen; Katalog c, dann Commit.
-7. Der Ordner bleibt unangetastet; das Projekt kann jederzeit erneut aus den Notizen arbeiten (Re-Ingest oder
-   `[[obsidian-sync]]`).
+7. Ausser den Frontmatter-Stempeln (AC17) bleibt der Ordner unangetastet; das Projekt kann jederzeit erneut aus
+   den Notizen arbeiten (Re-Ingest, `[[obsidian-sync]]` oder `--audit`).
 
 ## Alternative Flows
 ### A1: Notizen einer Stufe sind klar und widerspruchsfrei
@@ -75,9 +78,13 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
   `.obsidian/`-Verzeichnis, Anhänge) werden übersprungen. Ein nicht existierender Pfad **oder** ein Ordner ohne
   jede `.md`-Datei führt zu **klarem Abbruch mit Meldung** — **niemals** zu einer leeren Pipeline oder einer leer
   angelegten `concept.md`/Spec (*deckt E2*).
-- **AC6** — **Rein lesend:** Der Reader (und die gesamte Pipeline) verändert den Obsidian-Ordner **nie** und
-  committet ihn nie — die Notizen sind eine **externe** Quelle, kein Repo-Artefakt. Geschrieben wird
-  ausschließlich in `docs/`, `.claude/profile.md` und das Board des Ziel-Repos.
+- **AC6** — **Zonen-Modell statt rein lesend (geändert 07.07.2026):** Der **Reader** liest nur; die **Pipeline**
+  darf im Obsidian-Ordner ausschließlich die in Subsystem-Vertrag §4b definierten **Frontmatter-Sync-Felder**
+  stempeln (AC17) — sonst **nichts**: kein Inhalt der Notizen wird verändert oder gelöscht, keine Datei wird
+  angelegt oder entfernt, der Ordner wird nie committet (externe Quelle, kein Repo-Artefakt). Der generierte
+  Abschnitt `## Stand aus Konzept (generiert)` wird **nicht** vom Ingest geschrieben, sondern ausschließlich vom
+  Rückkanal (`[[reconcile]]` Stufe 3). Repo-seitig wird ausschließlich in `docs/`, `.claude/profile.md` und das
+  Board des Ziel-Repos geschrieben.
 
 ### Fragenkatalog-Gate + dev-gui-Schnittstelle
 - **AC7** — Beim Übergang **jeder** Stufe sammelt die Pipeline offene Unklarheiten/Widersprüche und legt sie als
@@ -116,16 +123,56 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
   AC-Nummern statt eingebetteter Kriterien) inkl. der A-priori-Schätzung (`size_est`/`dispo_est`), da `requirement`
   das ohnehin leistet.
 - **AC14** — **Authoring-only:** Die Pipeline schreibt **ausschließlich** durable Docs (`docs/`), das Profilfeld
-  und Board-Items (To Do) — **kein** App-Code, **kein** `/flow`-Start, **kein** Merge/Deploy und **kein** Schreiben
-  in den Notiz-Ordner (→ AC6). Item-Status bleibt allein `/flow`-Hoheit.
+  und Board-Items (To Do) — **kein** App-Code, **kein** `/flow`-Start, **kein** Merge/Deploy und — abgesehen vom
+  Frontmatter-Stempel (AC17) — **kein** Schreiben in den Notiz-Ordner (→ AC6). Item-Status bleibt allein `/flow`-Hoheit.
+
+### ID-Kette + Frontmatter-Stempel (Idea-Roundtrip, 07.07.2026)
+- **AC15** — **Stabile Ideen-IDs:** Stufe a vergibt für jede in den Korpus eingeflossene Ideennotiz **ohne**
+  `idea_id` eine neue, stabile **`IDEA-NNN`** (fortlaufend, nie wiederverwendet) und stempelt sie ins
+  Notiz-Frontmatter. Notizen **mit** bestehender `idea_id` behalten sie unverändert (Re-Ingest vergibt nie neu).
+- **AC16** — **Konzept-Anker:** Jeder von Stufe a erzeugte/geänderte Konzeptabschnitt in `docs/concept.md` trägt
+  eine stabile ID **`C-NNN`** mit Herkunftsvermerk **`(← IDEA-NNN)`**; jede von Stufe b abgeleitete Spec
+  referenziert ihre Konzept-Herkunft **`(← C-NNN)`**. Damit ist die Kette
+  `IDEA → C → Spec → BR → Story → @trace` durchgängig verankert (Verlängerung der bestehenden Traceability).
+- **AC17** — **Frontmatter-Stempel (einzige Vault-Schreiboperation des Ingest):** Nach Übernahme einer Idee
+  stempelt Stufe a im Frontmatter der Quellnotiz genau die Sync-Felder aus Subsystem-Vertrag §4b:
+  `idea_id` · `idea_status: adopted` · `last_sync` (Zeitstempel) · `sync_hash` (Hash des übernommenen
+  Notiz-Stands) · Referenz(en) auf die erzeugten `C-NNN`. **Kein** anderes Frontmatter-Feld und **kein**
+  Notiz-Inhalt wird angefasst (→ AC6).
+- **AC18** — **Nie löschen, nie anlegen:** Die Ingest-Pipeline löscht **nie** eine Notiz oder einen
+  Notiz-Inhalt und legt **nie** neue Ideennotizen an — Überholtes wird ausschließlich per
+  `idea_status: superseded` markiert (Stempel nach AC17-Muster); neue Ideennotizen entstehen nur über den
+  Rückkanal (`[[reconcile]]` Stufe 3, dort spezifiziert). `idea_status: parked | rejected` wird beim Re-Ingest
+  respektiert: solche Notizen fließen **nicht** erneut ins Konzept (bewusste Entscheidung, keine Lücke).
+
+### `--audit` — Integritätsprüfung über die ID-Kette (Idea-Roundtrip, 07.07.2026)
+- **AC19** — **Read-only:** `/agent-flow:from-notes --audit` ändert **nichts** — weder Vault noch `docs/` noch
+  Board noch Profil. Er erzeugt ausschließlich einen Report.
+- **AC20** — **Abgeleitete Coverage-Map, nie handgepflegt:** Der Audit berechnet die Kette
+  `IDEA-NNN → C-NNN → Spec → BR → Story → @trace` je Lauf **frisch** aus einem Frontmatter-Scan des
+  Vault-Ordners (`obsidian_source`) + einem Scan von `docs/` (Konzept-Anker, Spec-Herkünfte) + der bestehenden
+  Traceability-Map. Es existiert **keine** persistierte Map-Datei als Wahrheit.
+- **AC21** — **Meldungs-Klassen:** Der Report unterscheidet **Waisen abwärts** (Idee ohne `C-NNN` · Konzept-Anker
+  ohne Spec · Spec ohne Story/Test), **Waisen aufwärts** (Spec/Konzeptabschnitt ohne Ideen-Herkunft — typisch
+  nach Code-first; Input für `[[reconcile]]` Stufe 3) und **Widersprüche** (z.B. `superseded`-Idee noch
+  referenziert, Spec zeigt auf nicht existenten `C-NNN`). `idea_status: parked | rejected` gilt als **bewusste
+  Entscheidung** und wird **nicht** als Lücke gemeldet.
+- **AC22** — **Report-Format:** kompakter **Ampel-Report je Kette** (grün = durchgängig, gelb = Lücke,
+  rot = Widerspruch) im Terminal **und** maschinenlesbar (Fund-Liste analog Fragenkatalog-Feldmuster mit
+  `id`, Ketten-Bezug, Klasse, Fundstelle), damit dev-gui ihn später rendern kann — **ohne** Änderung an
+  agent-flow.
 
 > **Traceability:** Jeder Test trägt das kanonische Trace-Tag `@trace obsidian-ingest#AC<n>`
 > gemäss `knowledge/<lang>.md` → `## Spec-Tagging`. Der `tester` rechnet das Coverage-Gate
 > (jede genannte AC ≥ 1 deckender Test). Details: `docs/architecture/traceability-subsystem.md`.
 
 ## Verträge
-- **Skill-Befehl:** `/agent-flow:from-notes <ordnerpfad>` (Ingest). Auslöser dünn (dev-gui POST `/api/command`),
-  gesamte Logik in agent-flow. Der Re-Sync-Modus (`--sync`) ist in `[[obsidian-sync]]` spezifiziert.
+- **Skill-Befehl:** `/agent-flow:from-notes <ordnerpfad>` (Ingest) · `--audit` (Integritätsprüfung, AC19–AC22).
+  Auslöser dünn (dev-gui POST `/api/command`), gesamte Logik in agent-flow. Der Re-Sync-Modus (`--sync`) ist in
+  `[[obsidian-sync]]` spezifiziert.
+- **Frontmatter-Sync-Felder (Vault-Schreibzone, AC17):** `idea_id` (`IDEA-NNN`) · `idea_status`
+  (`draft | adopted | parked | rejected | superseded`) · `last_sync` · `sync_hash` · `C-NNN`-Referenz(en) —
+  exakt die Felder aus Subsystem-Vertrag §4b; keine weiteren.
 - **Profilfeld:** `.claude/profile.md`-Frontmatter `obsidian_source: <absoluter-ordnerpfad>` (optional/additiv).
   Precedence Argument > Profil; fehlt beides → Abbruch (AC2).
 - **Notiz-Korpus (Reader-Output):** ein konsolidierter Text/Struktur aller `*.md` des Ordners, deterministisch
@@ -151,20 +198,24 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
 - Widersprüchliche/mehrdeutige Notizen → gesammelter Fragenkatalog pro Stufe (AC7), Stufe a mit niedrigster
   Schwelle (AC10); nie stille Annahme bei relevanter Mehrdeutigkeit.
 - Abbruch/Session-Ende **zwischen** Stufen → committete Stufen bleiben durable (AC12); der Lauf ist fortsetzbar.
-- Obsidian-Interna (`.obsidian/`, Anhänge) → ignoriert (AC5); der Ordner wird nie beschrieben (AC6).
+- Obsidian-Interna (`.obsidian/`, Anhänge) → ignoriert (AC5); ausser dem Frontmatter-Stempel (AC17) wird der
+  Ordner nie beschrieben (AC6).
 
 ## NFRs
 - **Präzision vor Tempo (Erst-Übersetzung):** Stufe a fragt im Zweifel lieber nach (AC10) — Fehlerfortpflanzung in
   Spec/Stories ist teurer als eine Rückfrage.
 - **Nachvollziehbarkeit:** Fragenkatalog-Einträge und die abgeleiteten Docs tragen Herkunfts-Bezug zur Quellnotiz
-  (AC4), sodass Entscheidungen bis zur Notiz rückverfolgbar sind.
+  (AC4), sodass Entscheidungen bis zur Notiz rückverfolgbar sind; die ID-Kette (AC15/AC16) macht das ID-fest.
 - **Robustheit:** kein stiller Leerlauf (AC2/AC5); Zwischenstände durable (AC12).
-- **Sicherheit/Vorsicht:** rein lesende externe Quelle (AC6); kein `/flow`-Start, kein Merge/Deploy (AC14).
+- **Sicherheit/Vorsicht:** Vault-Schreibzugriff strikt auf die Frontmatter-Sync-Felder begrenzt (AC6/AC17);
+  kein `/flow`-Start, kein Merge/Deploy (AC14).
 
 ## Nicht-Ziele
 - **Kein** Ersatz der vagen Anforderung — additiver dritter Weg (AC3).
 - **Kein** zweiter Zerlege-Pfad — Stufe c nutzt `requirement` (AC11/AC13).
-- **Kein** Schreiben in den Notiz-Ordner (AC6); **kein** Rückschreiben nach Obsidian.
+- **Kein** Schreiben ausserhalb der Frontmatter-Sync-Felder (AC6/AC17); der generierte Abschnitt + neue
+  Ideennotizen sind allein Sache des Rückkanals (`[[reconcile]]` Stufe 3) — **kein** Rückschreiben von
+  Konzept-Inhalten durch den Ingest selbst.
 - **Kein** dev-gui-Button in diesem Repo — Cross-Repo-Abhängigkeit unten.
 - **Kein** `/flow`-Start / Merge / Deploy in der Pipeline (AC14).
 - **Kein** Blind-Overwrite bestehender Docs im Re-Sync — das regelt `[[obsidian-sync]]` (eigener Modus).
@@ -178,5 +229,7 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
   des Fragenkatalogs** (dritter Anlage-Weg „aus Obsidian-Notizen", Obsidian-Pfad in den Settings) leben im
   **`dev-gui`-Repo** und werden **dort** in eigenen Board-Items umgesetzt — **NICHT** in agent-flow. agent-flow
   stellt nur den Befehl `/agent-flow:from-notes` **und** das Fragenkatalog-Rückgabeformat (AC9) bereit.
-- Vertrag: `docs/architecture/obsidian-ingest-subsystem.md`. Kontext: CONCEPT §4a (Pipeline) / §4d (durable Docs);
+- `[[reconcile]]` — Stufe 3 (Obsidian-Rückspielung) konsumiert `idea_id`/`C-NNN`/`last_sync`/`sync_hash`
+  (AC15–AC17) als Anker; der `--audit` liefert ihr die Waisen-aufwärts-Liste (AC21).
+- Vertrag: `docs/architecture/obsidian-ingest-subsystem.md` (§4b Schreibzonen, §5a Audit). Kontext: CONCEPT §4a (Pipeline) / §4d (durable Docs);
   Abgrenzung zu `docs/architecture/reconcile-subsystem.md` (Reconcile ≠ Re-Sync, siehe `[[obsidian-sync]]`).
