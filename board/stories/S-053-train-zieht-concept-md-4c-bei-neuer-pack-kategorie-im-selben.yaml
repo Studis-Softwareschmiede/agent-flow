@@ -1,7 +1,7 @@
 id: S-053
 parent: F-026
 title: train zieht CONCEPT.md §4c bei neuer Pack-Kategorie im selben PR nach (Bootstrap-Sync)
-status: In Progress
+status: Done
 priority: P2
 spec: docs/specs/self-documentation.md
 implements:
@@ -21,9 +21,9 @@ estimate_note: 'S/M-Heuristik (score=5: 3 AC + 2 Komponenten agents/train.md + u
   (md|balanced|M.tok_total leer)'
 confidence: medium
 tok_est: null
-branch: feat/s-053-train-concept-sync
-pr: null
+branch: worktree-flow-session
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/308
 blocked_reason: null
 created_at: '2026-07-07T08:32:13Z'
-updated_at: '2026-07-07T13:06:38Z'
-done_at: null
+updated_at: '2026-07-07T13:16:29Z'
+done_at: '2026-07-07T13:16:28Z'
