@@ -9,7 +9,9 @@ labels: []
 depends: null
 owner: null
 area: doku-reconcile
-stories: null
-progress: 0/0 done
+stories:
+- S-053
+- S-054
+progress: 0/2 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-04T07:54:22Z'
+updated_at: '2026-07-07T08:33:03Z'
