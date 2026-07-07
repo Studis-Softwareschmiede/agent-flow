@@ -12,6 +12,7 @@ area: rollen-agenten
 stories:
 - S-048
 - S-052
-progress: 0/2 done
+- S-058
+progress: 2/3 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-04T07:54:21Z'
+updated_at: '2026-07-07T12:37:30Z'
