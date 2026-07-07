@@ -13,8 +13,8 @@ depends:
 labels: null
 size_est: M
 dispo_est: '3.0'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '6.5'
+dispo_forecast: '-0.5385'
 estimate_note: 'S/M-Heuristik: n_ac=2 (AC13/14) + n_comp=3 (board-feature-drain.sh,
   skills/flow/SKILL.md, dossier.md) = Score 5 -> M; dispo_est aus baseline md|balanced|M
   (ep=3.0); keine Baseline-Tokens.'
@@ -24,5 +24,6 @@ branch: feat/s-056-feature-kontext-dossier
 pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/311
 blocked_reason: null
 created_at: '2026-07-07T09:54:42Z'
-updated_at: '2026-07-07T14:56:18Z'
+updated_at: '2026-07-07T14:57:14Z'
 done_at: '2026-07-07T14:56:17Z'
+tok: null
