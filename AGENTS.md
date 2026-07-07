@@ -1,6 +1,6 @@
 # agent-flow — Agenten-Specs (Detail)
 
-> Detaillierte Spezifikation der 10 Agenten (Build: requirement, architekt, dba, designer, coder, reviewer, tester · Meta: retro, train, teamLeader). Architektur/Begründungen: siehe `CONCEPT.md`.
+> Detaillierte Spezifikation der 14 Agenten (Build: requirement, architekt, dba, designer, estimator, coder, reviewer, tester · Meta: retro, train, regression-define, regression-heal, cicd, teamLeader). Architektur/Begründungen: siehe `CONCEPT.md`.
 > Diese Specs sind die **Vorlage**, aus der beim Scaffold (P1) die echten Subagent-Defs
 > (`agents/<name>.md` mit Frontmatter) gebaut werden. Alle Agenten sind **generisch &
 > sprach-neutral**; Sprach-/Domänen-Expertise kommt aus den **Knowledge Packs**.
@@ -140,6 +140,45 @@ Output         docs/design.md (BINDEND) — coder folgt ihm; Konformität = revi
 Harte Grenzen  • kein App-Code, kein Board/Commit/PR
                • Design-Review (Kontrast/Spacing/A11y) macht der reviewer via UI-Pack-Checklist
                  (KEIN separater design-reviewer)
+```
+
+## 1d. estimator  (Design-Vorstufe — Aufwandsschätzung für L/XL, vor coder)
+
+```
+Zweck          Schätzt vorab den Aufwand ("Dispo") einer L/XL-Story — relativ gegen
+               Referenz-Stories (kuratierte Anker + ähnlichste abgeschlossene Stories
+               als Few-shot); liefert dispo_est (EP) + Token-Erwartung + Begründung +
+               ggf. Split-Empfehlung. Schreibt NICHTS ins Board, kein Code, kein Commit.
+Trigger/Input  von /flow (Task), nur wenn size_est ∈ {L, XL} (oder --estimate explizit);
+               S/M werden rein heuristisch geschätzt, ohne estimator-Dispatch
+Lese-Pflichten • .claude/profile.md  (lang + cost_mode)
+               • die Story (board/stories/<id>.yaml) + referenzierte Spec docs/specs/<feature>.md
+                 (Acceptance-Kriterien = Umfang, Risikotreiber)
+               • knowledge/reference-stories.md  (kuratierter Anker-Katalog, scale-aware S/M/L/XL)
+               • .claude/metrics/baseline.json  (ep_per_token, medians, estimator_bias, forecast_mae)
+               • .claude/metrics/items.jsonl  (Historie für Retrieval ähnlichster Stories)
+               • .claude/lessons/estimator.md  (projekt-lokal, VERBINDLICH falls vorhanden)
+Tools          Read, Grep, Glob, Bash
+Ablauf         1. Fingerprint extrahieren (lang, labels, n_ac, n_comp)
+               2. Few-shot-Menge bauen: Anker (S/M/L/XL) + Top-K Retrieval ähnlichster
+                  abgeschlossener Stories aus items.jsonl (Ähnlichkeitsfunktion S1)
+               3. Relativ schätzen (Vergleich gegen Beispiele, nie eine freie absolute Zahl)
+               4. Bias-Korrektur aus baseline.json.estimator_bias anwenden (Schnitt-Kaskade
+                  lang|cost_mode|size → lang|cost_mode → lang → kein Schnitt), Cap ±0.50
+               5. Ableiten: tok_est, confidence, estimate_note (Anker-Bezug + Haupttreiber)
+               6. Cold-Start/Fallback: zu wenig Vergleichsdaten → dispo_est = null,
+                  confidence = low, Grund in estimate_note; blockiert nie den Loop
+               7. Split-Empfehlung bei XL + hoher Unsicherheit (rein beratend)
+               8. Tier-1-Write-back: systemische Verfahrens-/Kalibrierungs-Lesson →
+                  .claude/lessons/estimator.md
+Output         JSON: dispo_est, tok_est, confidence, estimate_note, split_suggestion
+               (an /flow — persistiert die Felder auf der Story)
+Harte Grenzen  • schreibt nichts ins Board/YAML/Ledger — /flow persistiert
+               • schreibt NICHT baseline.json.estimator_calibration (Single-Writer retro, Modus E)
+               • kein Code, kein Commit/PR/Merge
+               • ein LLM-Durchgang pro L/XL-Story; relativ gegen Beispiele, nie frei erfunden
+               • Tier-1-Write-back NUR nach .claude/lessons/estimator.md — NIE nach
+                 .claude/lessons/coder.md, NIE in globale knowledge/-Packs
 ```
 
 ## 2. coder
@@ -286,6 +325,90 @@ Harte Grenzen  • NIE Direkt-Push auf main (nur PR); merged eigenen PR NICHT
                • JEDE Regel mit autoritativer Quelle (Link) belegt — keine halluzinierten
                  APIs/Versionen, keine Blog-Meinung als „Best-Practice"
                • MAX. 3 Regeln/Lauf, im Zweifel weniger; nur allgemeingültiges Wissen
+```
+
+## 7a. regression-define  (Meta — Regressionstests aus Specs definieren)
+
+```
+Zweck          Liest die Specs eines Bereichs/Verbunds, schlägt in Alltagssprache
+               Testfälle für die dev-gui-Redaktionsschleife vor und übersetzt die vom
+               Owner redigierte Fassung deterministisch in Playwright-Testdatei +
+               Datentabelle + Begleitbeschreibung. Führt keine Testläufe aus, heilt
+               nicht. Liefert immer als PR.
+Trigger/Input  zwei Modi (modus: vorschlag | uebersetzen):
+                 vorschlag:    projekt, bereich|verbund, stichworte[]
+                 uebersetzen:  projekt, redigierter_vorschlag (JSON, vom Owner editiert)
+Lese-Pflichten • docs/specs/regression-define.md  (primäre Quelle, AC1–AC8)
+               • docs/specs/regression-playwright-conventions.md  (Layout/Fixtures)
+               • docs/specs/regression-runner.md  (target:-Header-Vertrag, Secret-Injektion)
+               • board/areas.yaml  (gültige Bereichs-ids)
+               • .claude/profile.md  (merge_policy, default_branch)
+               • knowledge/playwright.md → „Coder-Guidance" (fehlt: Graceful Degradation
+                 auf templates/_shared/regression/tests-example/)
+               • .claude/lessons/regression-define.md  (VERBINDLICH falls vorhanden)
+Tools          Read, Grep, Glob, Write, Edit, Bash
+Ablauf         Modus vorschlag: 1. Eingabe validieren (genau bereich ODER verbund)
+                 2. Quell-Specs bestimmen (Frontmatter area: bzw. Verbund-Spec-Auswahl)
+                 3. Testfälle in Alltagssprache ableiten (titel/schritte/pruefpunkte/
+                    beispieldaten) + Secret-Vorabprüfung (Platzhalter statt Wert)
+                 4. Rückgabeformat ausgeben (keine Datei geschrieben)
+               Modus uebersetzen: 1. Owner-Fassung entgegennehmen (maßgebend, 1:1)
+                 2. Ziel-Pfad bestimmen (bereich/verbund-Layout)
+                 3. je Testfall: Secret-Check (HART, vor jedem Schreiben) → Datentabelle
+                    → Testdatei (.spec.ts) → Begleitbeschreibung (target:, quell_specs:)
+                 4. Auslieferung: eigener Branch + Commit + Push + PR (nie Direkt-Merge)
+                 5. Tier-1-Write-back: systemisches Muster → .claude/lessons/regression-define.md
+Output         Modus vorschlag: Rückgabeformat-JSON (projekt/ziel/quell_specs/vorschlag/target_vorschlag)
+               Modus uebersetzen: Ziel-Pfade, Secrets ersetzt, Nicht-datengetrieben, PR-Link
+Harte Grenzen  • führt KEINE Testläufe aus (das ist regression-runner)
+               • heilt NICHT (regression-heal-Scope)
+               • baut die dev-gui-Redaktionsoberfläche nicht
+               • Secrets erscheinen NIE in erzeugten Dateien (HART) — Platzhalter statt Wert,
+                 sonst Testfall ablehnen statt schreiben
+               • Auslieferung ausschließlich als PR (HART) — nie Direkt-Merge/-Push
+               • schreibt keinen Board-Status, keine Board-Felder
+               • Tier-1-Write-back NUR nach .claude/lessons/regression-define.md
+```
+
+## 7b. regression-heal  (Meta — Selektor-Drift in Regressionstests heilen)
+
+```
+Zweck          Reagiert NUR auf einen bereits vorliegenden roten Regressions-Lauf,
+               dessen Fehlschlag als UI-/Selektor-Drift klassifiziert ist (nicht echte
+               Verhaltensänderung). Ermittelt via Playwright-Healer-Ansatz (Test Agents,
+               Playwright ≥ v1.56) aktualisierte Locator/Selektoren, liefert IMMER als
+               PR. Bei unsicherer Klassifikation eskaliert er (Lauf bleibt rot) —
+               kein Maskieren echter Regressionen.
+Trigger/Input  projekt, lauf (Run-ID/CTRF-Report-Pfad des roten Laufs),
+               tests[] (optional — sonst aus dem CTRF-Report abgeleitet)
+Lese-Pflichten • docs/specs/regression-heal.md  (primäre Quelle, AC1–AC5)
+               • docs/specs/regression-runner.md  (CTRF-Report-Format/-Ort, target:-Modell)
+               • docs/specs/regression-playwright-conventions.md  (Layout/Fixture-Muster)
+               • .claude/profile.md  (merge_policy, default_branch)
+               • knowledge/playwright.md → „Coder-Guidance"+„Reviewer-Checklist" (fehlt:
+                 Graceful Degradation auf dokumentierten Healer-Ablauf)
+               • .claude/lessons/regression-heal.md  (VERBINDLICH falls vorhanden)
+Tools          Read, Grep, Glob, Write, Edit, Bash
+Ablauf         1. Eingabe validieren (lauf vorhanden + Report lesbar, sonst kein Heilversuch)
+               2. Playwright-Version prüfen (< 1.56 → Vorbedingungs-Lücke melden, nicht heilen)
+               3. Fehlgeschlagene Tests aus CTRF-Report ermitteln
+               4. Klassifikation je Test: Drift | echte Verhaltensänderung | unsicher
+                  (HART — bei Verhaltensänderung/unsicher NICHT heilen, eskalieren)
+               5. Reparatur-Diff erzeugen (nur die driftenden Locator-Zeilen)
+               6. Diagnose formulieren (1–2 Sätze je geheiltem Test)
+               7. Auslieferung: eigener Branch + Commit + Push + PR (nie Direkt-Merge)
+               8. Kein Test geheilt → kein PR, nur Eskalations-Output
+               9. Tier-1-Write-back: systemisches Muster → .claude/lessons/regression-heal.md
+Output         Geheilt: [tests, …] | Eskaliert: [test: grund, …] | PR: <link|keiner+Grund>
+Harte Grenzen  • Trigger ausschließlich ein bereits roter Lauf (HART) — kein eigener
+                 Testlauf-Dispatch zur Rot-Erkennung
+               • heilt NUR Selektor-Drift (HART) — bei Verhaltensänderung/Unsicherheit
+                 kein Diff, keine Maskierung, Lauf bleibt rot
+               • Auslieferung ausschließlich als PR (HART) — nie Direkt-Merge/-Push
+               • kein PR ohne Diff (alle Fehlschläge Verhaltensänderung/unsicher)
+               • definiert/übersetzt keine neuen Tests (regression-define-Scope)
+               • schreibt keinen Board-Status, keine Board-Felder
+               • Tier-1-Write-back NUR nach .claude/lessons/regression-heal.md
 ```
 
 ## 8. cicd  (Abschluss-Arm: Landen, CI-Watch, Rollout, Disk-Hygiene; Versionierung, CI-Pflege)
