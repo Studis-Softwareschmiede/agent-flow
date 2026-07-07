@@ -2,7 +2,7 @@
 id: regression-define
 title: Regressions-Definier-Agent — Spec-Lesen, NL-Vorschlag, Redaktionsschleife, Playwright-Übersetzung
 status: active
-version: 1
+version: 2
 spec_format: use-case-2.0
 area: rollen-agenten
 ---
@@ -51,6 +51,9 @@ Testdefinition ohne Handarbeit am Testcode: der Agent liest die Specs eines Bere
 - **AC6** — Die Begleitbeschreibung trägt den `target:`-Header ([[regression-runner]]); bei Infra-/Verbund-Suiten zusätzlich eine **Kosten-/Ressourcen-Deklaration** (deckt A1).
 - **AC7** — Secrets erscheinen **nie** in erzeugten Testdateien/Datentabellen; ein Vorschlag/eine Übersetzung, die ein Secret einbetten würde, wird abgelehnt und durch einen Runtime-Injektions-Platzhalter ersetzt (deckt E1; → [[regression-runner]] AC9).
 - **AC8** — Auslieferung erfolgt als **PR/Commit** zur Owner-Freigabe; der Agent merged nie selbst und pusht nie direkt auf einen geschützten Branch.
+- **AC9** — **Slash-Command-Einstieg:** `skills/regression-define/SKILL.md` stellt den Aufruf `/agent-flow:regression-define` bereit (Muster der bestehenden Skills unter `skills/`) und **dispatcht den `regression-define`-Agenten** (`agents/regression-define.md`, Task-Tool) mit dem gemäss Verträge-Abschnitt geparsten Eingabe-Vertrag. Die Skill-Datei enthält **keine** Test-/Übersetzungslogik — sie reicht nur durch (Diskriminator `modus`, `projekt`, `bereich`/`verbund`, `stichworte`) und delegiert. Ohne diesen Skill ist der Agent als Slash-Command nicht aufrufbar (der headless dev-gui-Runner S-307 läuft sonst ins Leere).
+- **AC10** — **Argument-/STDIN-Vertrag:** Der Skill parst den Diskriminator `modus`. In `modus: vorschlag` reicht er `projekt`, `bereich`/`verbund` und optionale `stichworte` als **Aufruf-Argumente** durch. In `modus: uebersetzen` liest er den `redigierter_vorschlag` (JSON, dieselbe Struktur wie das Rückgabeformat) aus **STDIN** — nicht als Inline-Argument, weil die redigierte Fassung beliebig gross werden kann —, sodass der dev-gui-Runner das redigierte JSON via STDIN übergeben kann. Fehlt in `modus: uebersetzen` der STDIN-`redigierter_vorschlag` → der Skill lehnt mit klarer Meldung ab, statt einen leeren/erfundenen Vorschlag zu übersetzen.
+- **AC11** — **Resume-/Zweilauf-Verhalten (dev-gui S-307 Interrupt/Resume):** Der Einstieg unterstützt das zweiläufige Muster — Lauf 1 (`modus: vorschlag`) endet mit dem maschinenlesbaren Rückgabeformat für die Redaktionsschleife; nach der Owner-Redaktion knüpft Lauf 2 (`modus: uebersetzen`) an. Lauf 2 ist **selbst-tragend**: er arbeitet vollständig aus dem `uebersetzen`-Eingabe-Vertrag (`projekt` + `redigierter_vorschlag`) und **benötigt keinen** Zustand aus Lauf 1 (idempotent). Der Skill ist dabei mit `--resume`/Session-Resume kompatibel (der Runner darf denselben Kontext fortsetzen), erzwingt aber keinen Resume-Kontext.
 
 ## Verträge
 
@@ -72,6 +75,24 @@ projekt: <repo>
 modus: uebersetzen
 redigierter_vorschlag: <JSON — dieselbe Struktur wie das Rückgabeformat, vom Owner editiert>
 ```
+
+### Skill-Einstieg / Invocation (AC9–AC11)
+
+Der Aufruf-Einstieg ist `skills/regression-define/SKILL.md` (Slash-Command `/agent-flow:regression-define`), gebaut nach dem Muster der bestehenden Skills (Frontmatter `name`/`description`; Auth via `ensure-gh-auth.sh` falls PR-Auslieferung; Cost-Mode-Auflösung wie `requirement`/`cicd`). Der Skill parst den Diskriminator `modus` und dispatcht den `regression-define`-Agenten:
+
+**Lauf 1 — `modus: vorschlag`** (Argumente):
+```
+/agent-flow:regression-define modus=vorschlag projekt=<repo> (bereich=<bereich-id> | verbund=<verbund-name>) [stichworte=<w1,w2,…>]
+```
+Rückgabe: das maschinenlesbare Rückgabeformat (siehe unten) für die dev-gui-Redaktionsschleife.
+
+**Lauf 2 — `modus: uebersetzen`** (redigierte Fassung via STDIN):
+```
+echo '<redigierter_vorschlag-JSON>' | claude -p '/agent-flow:regression-define modus=uebersetzen projekt=<repo>'
+```
+Der `redigierter_vorschlag` (dieselbe Struktur wie das Rückgabeformat, vom Owner editiert) kommt über **STDIN**, nicht als Inline-Argument (Grösse). Ergebnis: Playwright-Artefakte als PR/Commit (AC4–AC8). Lauf 2 ist selbst-tragend und `--resume`-kompatibel, aber nicht auf Lauf-1-Zustand angewiesen (AC11).
+
+Headless-Konsument: dev-gui **S-307** (`RegressionDefineRunner`) startet genau diese beiden Läufe im Interrupt/Resume-Muster.
 
 ### Rückgabeformat Testvorschlag (dev-gui-Redaktionsschleife, maschinenlesbar)
 ```json
@@ -118,3 +139,5 @@ Für `verbund: <verbund-name>` bestimmt der Agent die „Verbund-relevanten Spec
 - [[regression-runner]] — `target:`-Header + Runtime-Secret-Injektion, auf die der Agent verweist.
 - `knowledge/playwright.md` — Coder-Guidance, die der Agent beim Übersetzen lädt (`/train --bootstrap`-Folgeaktion).
 - dev-gui-Redaktionsschleife (separate dev-gui-Story) — konsumiert das Rückgabeformat.
+- `skills/regression-define/SKILL.md` — der Slash-Command-Einstieg (AC9–AC11), der diesen Agenten dispatcht; ohne ihn ist `/agent-flow:regression-define` nicht aufrufbar.
+- dev-gui **S-307** (`RegressionDefineRunner`) — headless Konsument, der den Slash-Command im Interrupt/Resume-Muster startet (Cross-Repo-Abhängigkeit).
