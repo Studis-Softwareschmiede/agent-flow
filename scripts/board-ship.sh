@@ -101,9 +101,19 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 # ============================================================================
 
 # CI beobachten (cicd/F06: headSha-Race-Schutz) — bricht bei Fehlschlag ab.
+# Repos ohne jegliche Actions-Workflows (z.B. dieses Projekt selbst, language:
+# md, kein .github/workflows/) haben strukturell keine CI zum Beobachten —
+# das wird von "CI noch nicht gestartet" unterschieden, statt 10 Minuten auf
+# etwas zu warten, das nie erscheint.
 watch_ci_or_die() {
   local branch="$1" expect_sha="$2"
   local run_conclusion="" run_sha="" run_status=""
+  local workflow_count
+  workflow_count="$(gh api "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)/actions/workflows" --jq '.total_count' 2>/dev/null || echo "")"
+  if [[ "$workflow_count" == "0" ]]; then
+    log "keine Actions-Workflows im Repo konfiguriert — CI-Watch entfällt strukturell für '${branch}'."
+    return 0
+  fi
   for _ in $(seq 1 40); do
     run_sha="$(gh run list --branch "$branch" --limit 1 --json headSha --jq '.[0].headSha' 2>/dev/null || echo "")"
     run_status="$(gh run list --branch "$branch" --limit 1 --json status --jq '.[0].status' 2>/dev/null || echo "")"
@@ -252,7 +262,7 @@ if [[ "$ALREADY_MERGED" -eq 0 ]]; then
       || die "gh pr create fehlgeschlagen: ${PR_OUT}"
     PR_URL="$(echo "$PR_OUT" | grep -Eo 'https://github\.com/\S+' | tail -1)"
     [[ -n "$PR_URL" ]] || die "konnte PR-URL nicht aus gh-Ausgabe extrahieren: ${PR_OUT}"
-    gh pr merge "$BRANCH" --squash --delete-branch --quiet || die "gh pr merge fehlgeschlagen für Branch '${BRANCH}'"
+    gh pr merge "$BRANCH" --squash --delete-branch >/dev/null || die "gh pr merge fehlgeschlagen für Branch '${BRANCH}'"
   fi
 fi
 
