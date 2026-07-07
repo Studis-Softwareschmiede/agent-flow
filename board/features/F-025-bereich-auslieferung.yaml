@@ -12,6 +12,9 @@ area: auslieferung
 stories:
 - S-049
 - S-051
-progress: 0/2 done
+- S-055
+- S-056
+- S-057
+progress: 2/5 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-04T07:54:22Z'
+updated_at: '2026-07-07T09:55:31Z'
