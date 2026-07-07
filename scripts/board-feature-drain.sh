@@ -209,6 +209,69 @@ print(",".join(out))
 PYEOF
 }
 
+generate_dossier() {
+  # Feature-Kontext-Dossier (einmalig, best-effort, AC13/E4): erzeugt
+  # board/runs/<F-###>/dossier.md über EINE claude -p-Session, BEVOR die erste
+  # Story-Session startet. Fasst die Kind-Storys des Features (IDs, Titel,
+  # Specs, implements-ACs, depends) zusammen und bittet um Feature-Ziel,
+  # betroffene Specs+ACs, Story-Reihenfolge/Abhängigkeiten, Architektur-
+  # Hinweise und bekannte Fallen. Schlägt die Session fehl (Timeout, kein
+  # Token, non-zero exit) läuft der Drain OHNE dossier.md weiter — kein
+  # Abbruch, kein `die` (best-effort, nie blockierend).
+  # Sicherheit: reine Prompt-rein/Text-raus-Zusammenfassung, kein Tool-Zugriff
+  # nötig — das Bash-Skript selbst schreibt die Datei per Redirect. Bewusst
+  # OHNE --dangerously-skip-permissions (anders als die Story-Session weiter
+  # unten): kleinerer Blast-Radius, da der Prompt Freitext (Story-Titel) aus
+  # board/stories/*.yaml einbettet (Prompt-Injection-Fläche).
+  local dossier_file="${RUN_DIR}/dossier.md"
+  local stories_summary
+  stories_summary="$(python3 - "$FEATURE_ID" <<'PYEOF'
+import sys, glob, yaml
+fid = sys.argv[1]
+lines = []
+for path in glob.glob("board/stories/*.yaml"):
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        continue
+    if str(data.get("parent", "")).strip() != fid:
+        continue
+    sid = data.get("id", "")
+    title = data.get("title", "")
+    spec = data.get("spec", "")
+    implements = data.get("implements", []) or []
+    depends = data.get("depends", []) or []
+    lines.append(
+        f"- {sid}: {title}\n"
+        f"  spec: {spec}\n"
+        f"  implements: {', '.join(implements) if implements else '-'}\n"
+        f"  depends: {', '.join(depends) if depends else '-'}"
+    )
+print("\n".join(lines))
+PYEOF
+)"
+
+  local prompt
+  prompt="Fasse für das Feature ${FEATURE_ID} ein kleines Kontext-Dossier zusammen. Hier die Kind-Storys (ID, Titel, Spec, implements-ACs, depends):
+
+${stories_summary}
+
+Schreibe ein knappes Markdown-Dossier mit folgenden Abschnitten: Feature-Ziel, betroffene Specs + AC-Nummern, sinnvolle Story-Reihenfolge/Abhängigkeiten, Architektur-Hinweise, bekannte Fallen. Halte es kurz (kein Roman) — es dient als vorangestellter Kontext für jede einzelne Story-Session dieses Features."
+
+  mkdir -p "$RUN_DIR"
+  if timeout 120s "${BOARD_FEATURE_DRAIN_CLAUDE_CMD:-claude}" -p "$prompt" > "$dossier_file" 2>/dev/null; then
+    if [[ -s "$dossier_file" ]]; then
+      log "Feature-Kontext-Dossier erzeugt (${dossier_file})."
+      return 0
+    fi
+  fi
+  rm -f "$dossier_file"
+  log "Dossier-Erzeugung fehlgeschlagen oder leer (best-effort, E4) — Drain läuft ohne dossier.md weiter."
+  state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "Dossier-Erzeugung fehlgeschlagen (claude -p, best-effort) — ohne dossier.md fortgesetzt" 2>/dev/null || true
+  return 0
+}
+
 orphaned_story_ids() {
   # Kommagetrennte Liste der Story-IDs mit einem nicht-terminalen Status,
   # der weder "To Do" noch "Blocked" ist (typischerweise "In Progress",
@@ -365,6 +428,9 @@ if ! git rev-parse "origin/${FEATURE_BRANCH}" >/dev/null 2>&1; then
   git push origin "origin/${DEFAULT_BRANCH}:refs/heads/${FEATURE_BRANCH}" --quiet
   log "Feature-Branch ${FEATURE_BRANCH} neu angelegt (von origin/${DEFAULT_BRANCH})."
 fi
+
+# --- Feature-Kontext-Dossier: einmalig, VOR der ersten Story-Session (AC13) ---
+generate_dossier
 
 # --- Run-State: Phasenwechsel dossier -> story (AC9) ------------------------
 CUR_PHASE="story"
