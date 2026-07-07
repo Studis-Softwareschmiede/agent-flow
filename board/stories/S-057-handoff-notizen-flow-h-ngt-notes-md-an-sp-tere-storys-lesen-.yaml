@@ -1,7 +1,7 @@
 id: S-057
 parent: F-025
 title: 'Handoff-Notizen: /flow hängt notes.md an + spätere Storys lesen sie beim Start'
-status: To Do
+status: In Progress
 priority: P2
 spec: docs/specs/feature-batch-orchestration.md
 implements:
@@ -18,9 +18,9 @@ estimate_note: 'S/M-Heuristik: n_ac=2 (AC15/16) + n_comp=2 (skills/flow/SKILL.md
   notes.md) = Score 4 -> M; dispo_est aus baseline md|balanced|M (ep=3.0); keine Baseline-Tokens.'
 confidence: medium
 tok_est: null
-branch: null
+branch: feat/S-057-handoff-notes-notes-md
 pr: null
 blocked_reason: null
 created_at: '2026-07-07T09:54:43Z'
-updated_at: '2026-07-07T09:55:26Z'
+updated_at: '2026-07-07T15:00:36Z'
 done_at: null
