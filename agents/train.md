@@ -148,15 +148,25 @@ Web-Recherche (WebSearch/WebFetch) **ausschließlich** aus den `primary_sources`
 
 (`framework-build-subsystem.md` §3): `requires:`/`compatible_with:`/`incompatible:` aus den recherchierten Fakten setzen — Quelle jeweils eine Sektion-A-Regel desselben Packs (keine neuen Wahrheiten). Bei No-Predecessor-Bootstrap: nur setzen, wenn Sektion-A-Regeln konkrete Versionsanforderungen belegen.
 
+## Schritt 4a — CONCEPT.md §4c-Sync bei neuer Pack-Kategorie (`self-documentation` AC1–AC3)
+
+**Kategorie-Erkennung:** „neue Kategorie" = der Ziel-Pfad `knowledge/<kategorie>/<pack>.md` (Schritt 1) enthält einen Verzeichnisanteil unter `knowledge/`, der **vor diesem Lauf nicht existierte**. Prüfen durch Existenz-Check des Zielverzeichnisses **vor** dem Anlegen der Pack-Datei (Schritt 2a/2b). Bei verschachtelten Pfaden ist der **erste** neue Verzeichnisanteil unter `knowledge/` maßgeblich. Ein Pack **direkt unter** `knowledge/` (Sprach-Pack, kein Unterordner, z.B. `knowledge/<id>.md`) ist **keine** neue Kategorie — dieser Schritt entfällt dann ersatzlos (AC2).
+
+- **AC1 (neue Kategorie, PR-Kontext):** Existierte der Zielverzeichnisanteil vor dem Lauf nicht → im **selben** Branch/PR wie die Pack-Anlage zusätzlich `CONCEPT.md` §4c nachziehen: die Pack-/Verzeichnisliste (Absatz mit `agent-flow/knowledge/ …` bzw. die Aufzählung der Kategorien) um die neue Kategorie ergänzen. Kein separater PR, kein Aufschub. Der PR-Body nennt explizit die auslösende neue Kategorie (NFR Nachvollziehbarkeit).
+- **AC2 (bestehende Kategorie, jeder Kontext):** Existierte der Zielverzeichnisanteil bereits (Cut-Bootstrap eines Folge-Packs in derselben Kategorie, Update eines bestehenden Packs, Sprach-Pack ohne Unterordner) → **kein** CONCEPT-Delta. `CONCEPT.md` bleibt unangetastet (Rauscharmut — §4c listet Kategorien/Struktur, nicht jede einzelne Pack-Datei).
+- **AC3 (Staging-Modus, kein PR-Kontext):** Ist `AGENT_FLOW_KNOWLEDGE_DIR` gesetzt (autonomer `/upgrade`-Lauf, Phase E) UND es liegt eine neue Kategorie gemäß obiger Erkennung vor → der CONCEPT-Sync **entfällt** in diesem Lauf (kein Edit von `CONCEPT.md` aus dem Staging-Kontext heraus — es gibt hier keinen PR, in den er gehören könnte). Stattdessen weist der `train`-Output **explizit** auf den ausstehenden §4c-Nachzug hin, z.B.:
+  > `Hinweis: neue Pack-Kategorie 'knowledge/<kategorie>/' angelegt (Staging-Modus, kein PR-Kontext) — CONCEPT.md §4c muss im finalen PR dieses /upgrade-Laufs (oder einem Folge-Lauf) nachgezogen werden.`
+  Kein stiller Verlust der Pflicht: der Hinweis ist Teil des regulären Bootstrap-Outputs (Abschnitt „Output" unten), nicht optional.
+
 ## Schritt 5 — Zwei Schreib-Ziele (autonome `/upgrade`-Läufe, AC7)
 
-- **(a) Staging-Dir:** ist `AGENT_FLOW_KNOWLEDGE_DIR` gesetzt → das fertige Pack **dorthin** schreiben (`$AGENT_FLOW_KNOWLEDGE_DIR/<pack-pfad>.md`) → der laufende `/upgrade` nutzt es **sofort**, ohne Merge/Reload.
-- **(b) PR:** Branch `bootstrap/<pack-id>` (statt `train/<pack-id>`), PR gegen `main` mit Body: URLs, Regeln/IDs mit Quell-Links, LEARNINGS.md-Zeile (`Proposed`). Kein Auto-/Self-Merge.
-  Ist `AGENT_FLOW_KNOWLEDGE_DIR` NICHT gesetzt (manueller Aufruf) → nur (b).
+- **(a) Staging-Dir:** ist `AGENT_FLOW_KNOWLEDGE_DIR` gesetzt → das fertige Pack **dorthin** schreiben (`$AGENT_FLOW_KNOWLEDGE_DIR/<pack-pfad>.md`) → der laufende `/upgrade` nutzt es **sofort**, ohne Merge/Reload. `CONCEPT.md` wird in diesem Zweig NICHT editiert (Schritt 4a, AC3).
+- **(b) PR:** Branch `bootstrap/<pack-id>` (statt `train/<pack-id>`), PR gegen `main` mit Body: URLs, Regeln/IDs mit Quell-Links, LEARNINGS.md-Zeile (`Proposed`), bei neuer Kategorie zusätzlich der `CONCEPT.md`-§4c-Diff (Schritt 4a, AC1) bzw. — im Staging-Fall ohne eigenen PR-Kontext hier — der Hinweis auf den ausstehenden Nachzug. Kein Auto-/Self-Merge.
+  Ist `AGENT_FLOW_KNOWLEDGE_DIR` NICHT gesetzt (manueller Aufruf) → nur (b); liegt eine neue Kategorie vor, ist der §4c-Nachzug (AC1) Teil dieses PRs.
 
 ## Schritt 6 — Gate (AC7)
 
-Der Bootstrap-PR wird NICHT selbst gemergt: `reviewer`-Check + **Mensch-Approve** (§5 Gate, unverändert). Der autonome Lauf wird dadurch nicht blockiert — er arbeitet aus dem Staging-Dir weiter.
+Der Bootstrap-PR wird NICHT selbst gemergt: `reviewer`-Check + **Mensch-Approve** (§5 Gate, unverändert). Der autonome Lauf wird dadurch nicht blockiert — er arbeitet aus dem Staging-Dir weiter. Bei ausstehendem §4c-Nachzug (AC3) prüft der `reviewer` im finalen PR des Laufs, ob der Hinweis aufgegriffen und der Nachzug nachgeholt wurde.
 
 # Model-Tiers-Modus (`/train model-tiers [--force]`)
 
@@ -185,7 +195,7 @@ Sondermodus für die Kuration der Modell-**Klassen**-Matrix `knowledge/model-tie
 > **Hinweis:** GitHub-Project #5 (`agent-flow improvements`) wird nicht mehr beschrieben — es ist archiviert. `LEARNINGS.md` ist die alleinige Karten-Quelle; das dev-gui-Verbesserungs-Board liest daraus.
 
 # Output
-PR-Link + Pack-Änderungen, je mit Quelle.
+PR-Link + Pack-Änderungen, je mit Quelle. **Bootstrap in neuer Kategorie:** zusätzlich entweder der `CONCEPT.md`-§4c-Diff (PR-Kontext, AC1) oder — im Staging-Modus ohne PR-Kontext (AC3) — der explizite Hinweis-Satz auf den ausstehenden §4c-Nachzug (Schritt 4a).
 
 # Gate (§5)
 `reviewer`-Check + **Mensch-Approve** → merge.

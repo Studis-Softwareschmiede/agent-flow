@@ -141,6 +141,15 @@ train --bootstrap <pack-id>
      Header neu (framework_version_range, pack_date, primary_sources), Vorgänger bekommt superseded_by.
    - Sektion A aus Primärquellen füllen (normale train-Disziplin), B leer, C vom Vorgänger.
    - requires/compatible_with/incompatible-Header aus den recherchierten Fakten setzen (§12).
+1a. Neue Pack-Kategorie? (`self-documentation` AC1–AC3, Vertrag agents/train.md Schritt 4a)
+   - Ziel-Pfad hat einen Verzeichnisanteil unter knowledge/, der vor dem Lauf nicht existierte
+     → das IST eine neue Kategorie (Sprach-Pack ohne Unterordner: NIE eine neue Kategorie).
+   - PR-Kontext (kein AGENT_FLOW_KNOWLEDGE_DIR): CONCEPT.md §4c wird im selben PR nachgezogen
+     (Pack-/Verzeichnisliste ergänzt, PR-Body nennt die auslösende Kategorie).
+   - Staging-Modus (AGENT_FLOW_KNOWLEDGE_DIR gesetzt, z.B. hier in Phase E): KEIN CONCEPT-Edit
+     aus dem Staging-Kontext — stattdessen expliziter Hinweis im train-Output auf den
+     ausstehenden §4c-Nachzug (nachzuholen im finalen PR des /upgrade-Laufs).
+   - Bestehende Kategorie (auch bei Cut-Bootstrap/Update): kein CONCEPT-Delta (Rauscharmut).
 2. Schreibt das fertige Pack in ZWEI Ziele:
    (a) den hermetischen Staging-Dir des Laufs (§10) → der Lauf nutzt es SOFORT.
    (b) einen PR gegen agent-flow (Branch `bootstrap/<pack-id>`) → Durability, Mensch-Gate (§5).
