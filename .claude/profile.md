@@ -9,6 +9,7 @@ board: 5
 deploy: none
 default_branch: main
 cost_mode: balanced
+obsidian_source: /Users/alex/Library/Mobile Documents/iCloud~md~obsidian/Documents/AlexSecondBrain/300 Projekte/Studis Softwareschmiede/Agent Flow
 ---
 
 # Projekt-Profil — agent-flow (Selbst-Dogfooding)
