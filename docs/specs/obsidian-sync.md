@@ -13,6 +13,7 @@ spec_format: use-case-2.0
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien + Coverage-Gate), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
 > **Subsystem-Vertrag (verbindlich):** `docs/architecture/obsidian-ingest-subsystem.md` §5. Diese Spec setzt den **Re-Sync-Modus** um — ein **eigener Modus** desselben `from-notes`-Skills, der Notiz-Reader + Fragenkatalog-Gate mit `[[obsidian-ingest]]` teilt.
 > **Abgrenzung zu Reconcile:** bewusst **kein** Reconcile-„Stufe 0" — invertierte Autorität (siehe *Zweck* + Vergleichstabelle in *Verträge*).
+> **Konzept-Herkunft:** `(← C-002)` — CONCEPT.md §11 „Entschieden (Idea-Roundtrip, 07.07.2026)", entstanden aus Ideennotiz `IDEA-002` (`Agent Flow – Konzept Idea-Intake.md`).
 > **Erweitert 07.07.2026 (Idea-Roundtrip):** nutzt die Frontmatter-Sync-Felder aus `[[obsidian-ingest]]` AC17 als Drei-Wege-Anker (AC7). Der Rückkanal Repo→Vault bleibt `[[reconcile]]` Stufe 3 — der Sync schreibt weiterhin **nie** in den Vault.
 
 ## Zweck
