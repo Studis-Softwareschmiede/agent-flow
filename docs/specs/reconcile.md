@@ -3,7 +3,7 @@ id: reconcile
 title: Reconcile — Doku per /agent-flow:reconcile wieder mit der Realität in Deckung bringen
 status: draft
 area: doku-reconcile
-version: 2
+version: 3
 spec_format: use-case-2.0
 ---
 
@@ -11,17 +11,19 @@ spec_format: use-case-2.0
 
 > **Schicht 3 von 3.** Testbares **Verhalten + Verträge**, sprach-/paradigma-unabhängig (Intent, keine Idiome/Klassen).
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien + Coverage-Gate), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
-> **Subsystem-Vertrag (verbindlich, FINAL):** `docs/architecture/reconcile-subsystem.md`. Diese Spec setzt nur den **agent-flow-Teil** des Vertrags um (Skill + Stufe 1 + Stufe 2 + Logbuch). Der **dünne dev-gui-Button** (§2/§5) lebt im separaten `dev-gui`-Repo und ist hier **nur Cross-Repo-Abhängigkeit**, kein Board-Item.
+> **Erweitert 07.07.2026 (Idea-Roundtrip):** **Stufe 3 (Obsidian-Rückspielung)** neu, AC16–AC21 — Stufen 1+2 sind gebaut, Stufe 3 noch nicht.
+> **Subsystem-Vertrag (verbindlich, FINAL):** `docs/architecture/reconcile-subsystem.md`. Diese Spec setzt nur den **agent-flow-Teil** des Vertrags um (Skill + Stufe 1 + Stufe 2 + Stufe 3 + Logbuch). Der **dünne dev-gui-Button** (§2/§5) lebt im separaten `dev-gui`-Repo und ist hier **nur Cross-Repo-Abhängigkeit**, kein Board-Item.
 
 ## Zweck
-`/agent-flow:reconcile` ist die **rückwärtige Aufholung** der Doku-Drift (Gegenstück zur vorwärtigen Drift-Disziplin in CONCEPT §4d): on-demand bringt es die `docs/` eines Projekts wieder in Deckung mit der Realität. **Stufe 1 (Form)** hebt jede Spec auf die neueste Vorlagen-Version (läuft immer); **Stufe 2 (Inhalt)** gleicht — nur bei leerem Kanban — die Doku gegen den maßgeblichen Code ab. Beide Stufen legen genau **einen Diff** zur Freigabe vor; ein knappes `docs/spec-audit.md` protokolliert die getroffenen Änderungen.
+`/agent-flow:reconcile` ist die **rückwärtige Aufholung** der Doku-Drift (Gegenstück zur vorwärtigen Drift-Disziplin in CONCEPT §4d): on-demand bringt es die `docs/` eines Projekts wieder in Deckung mit der Realität. **Stufe 1 (Form)** hebt jede Spec auf die neueste Vorlagen-Version (läuft immer); **Stufe 2 (Inhalt)** gleicht — nur bei leerem Kanban — die Doku gegen den maßgeblichen Code ab; **Stufe 3 (Obsidian-Rückspielung)** spielt — nur bei gesetztem `profile.obsidian_source` — Änderungen mit konzeptioneller Tragweite in die verankerten Ideennotizen des Vaults zurück und schliesst damit den Kreislauf **Idee → Konzept → Spec → Code → zurück zur Idee**. Alle Stufen legen genau **einen Diff** zur Freigabe vor; ein knappes `docs/spec-audit.md` protokolliert die getroffenen Änderungen.
 
 ## Main Success Scenario
 1. Der Mensch löst `/agent-flow:reconcile` aus (im Projekt-Terminal, angestoßen durch den dev-gui-Button oder direkt).
 2. **Stufe 1 (Form)** läuft immer: Specs mit veraltetem/fehlendem `spec_format` werden in die aktuelle Vorlage konvertiert und neu gestempelt.
 3. Ist das Kanban leer, läuft **Stufe 2 (Inhalt)**: `reviewer` im Audit-Modus liefert die Inhalts-Drift, die Doku wird automatisch an den Code angeglichen.
-4. Der Lauf schreibt **genau einen** Block ins Logbuch `docs/spec-audit.md` — bei Änderungen je eine Zeile pro berührtem Dokument, bei einem Lauf ohne jede Änderung eine kanonische „keine Änderung nötig"-Zeile (AC10–AC12).
-5. Das Ergebnis wird als **genau ein PR** zur Freigabe vorgelegt — **unabhängig** von `merge_policy` (auch bei `direct`); nichts landet ungesehen, nichts wird self-gemerged (AC13).
+4. Ist `profile.obsidian_source` gesetzt und der Vault erreichbar, läuft **Stufe 3 (Obsidian-Rückspielung)**: Änderungen mit konzeptioneller Tragweite (`C-NNN`-Abschnitte) werden als Vault-Patch-Plan für die generierte Zone der verankerten Ideennotizen vorbereitet; Code-first-Waisen erhalten eine neue, gekennzeichnete Ideennotiz im Plan (AC16–AC20).
+5. Der Lauf schreibt **genau einen** Block ins Logbuch `docs/spec-audit.md` — bei Änderungen je eine Zeile pro berührtem Dokument, bei einem Lauf ohne jede Änderung eine kanonische „keine Änderung nötig"-Zeile (AC10–AC12).
+6. Das Ergebnis wird als **genau ein PR** zur Freigabe vorgelegt — **unabhängig** von `merge_policy` (auch bei `direct`); der PR-Body protokolliert zusätzlich die geplanten Vault-Patches (Notiz + Zone), die erst **nach** dem Merge ausgeführt werden (AC21). Nichts landet ungesehen, nichts wird self-gemerged (AC13).
 
 ## Alternative Flows
 ### A1: Volles Board → Stufe 1 only
@@ -29,6 +31,9 @@ spec_format: use-case-2.0
 
 ### A2: Keine Drift gefunden
 - Findet der Lauf nichts zu ändern, entsteht **kein** PR (kein Rauschen im Code-Repo) — aber **trotzdem genau ein** Logbuch-Block mit einer kanonischen „keine Änderung nötig"-Zeile, damit „gelaufen, nichts nötig" von „nie gelaufen" unterscheidbar bleibt (siehe AC12/AC15/E2).
+
+### A3: Kein `obsidian_source` gesetzt → Stufe 3 übersprungen
+- Fehlt `profile.obsidian_source` oder ist der Vault nicht erreichbar, wird Stufe 3 **übersprungen** mit klarem Hinweis; Stufen 1+2 laufen unverändert — kein Regress für Projekte ohne Vault-Anbindung (AC16).
 
 ### E4: Kein Git-Remote / keine gh-Auth beim PR-Öffnen
 - Ist kein Remote konfiguriert **oder** lässt sich die `gh`-Auth nicht herstellen bzw. der Push wird abgelehnt, bricht der Lauf **nicht** still ab: die Änderungen bleiben erhalten (committeter lokaler Branch, oder — falls schon das Branchen/Committen scheitert — als Working-Tree-Diff) und der Skill meldet klar, warum kein PR eröffnet wurde und wie der Mensch nachzieht (siehe AC14).
@@ -52,6 +57,14 @@ spec_format: use-case-2.0
 - **AC8** — **Code ist maßgebend:** die Doku wird **automatisch** an den Code angeglichen, fehlende Docs werden angelegt. Es gibt **kein Einzel-Nachfragen pro Abweichung** (kein per-Drift-Prompt) — der Mensch-Gate ist der finale Diff-Blick, nicht eine Entscheidung je Drift.
 - **AC9** — Stufe 2 legt alle Nachzieh-Änderungen als Teil des **einen gemeinsamen PR** (AC13) zur Freigabe vor **und** protokolliert die nachgezogenen Dokumente als Block in `docs/spec-audit.md` (→ AC10/AC11).
 
+### Stufe 3 — Obsidian-Rückspielung (Idea-Roundtrip 07.07.2026, noch nicht gebaut)
+- **AC16** — **Vorbedingung + Skip:** Stufe 3 läuft **nur**, wenn `profile.obsidian_source` gesetzt **und** der Vault-Ordner erreichbar ist. Andernfalls wird sie mit klarem Hinweis **übersprungen**; Stufen 1+2 bleiben davon unberührt. *(deckt A3)*
+- **AC17** — **Nur konzeptionelle Tragweite:** Zurückgespielt werden ausschließlich Änderungen an `C-NNN`-verankerten Abschnitten von `docs/concept.md` (neu/geändert/`superseded`). Reine Spec-/Verhaltensänderungen ohne Konzept-Tragweite enden bei Stufe 2 und erreichen den Vault **nicht**.
+- **AC18** — **Ziel-Zonen strikt (Subsystem-Vertrag §4b von `obsidian-ingest`):** Geschrieben wird ausschließlich in den generierten Abschnitt `## Stand aus Konzept (generiert)` und die Frontmatter-Sync-Felder (`idea_status`/`last_sync`/`sync_hash`/`C-NNN`-Referenzen) der über `idea_id`/`C-NNN` verankerten Ideennotiz — als **Patch**, nie als Datei-Überschreiben. Persönliche Ausarbeitung wird **nie** berührt; gelöscht wird **nie** (Überholtes → `idea_status: superseded`).
+- **AC19** — **Waisen aufwärts → neue Ideennotiz:** Für Konzeptabschnitte/Specs **ohne** Ideen-Herkunft (typisch nach Code-first; erkennbar via `[[obsidian-ingest]]` `--audit`-Logik) legt Stufe 3 im `obsidian_source`-Ordner eine **neue Ideennotiz** an — klar als repo-first gekennzeichnet: `idea_id` (neu vergeben), `idea_status: adopted`, Herkunftsvermerk `(← C-NNN)`, Inhalt **nur** in der generierten Zone.
+- **AC20** — **Drei-Wege-Abgleich, Konflikt an den Menschen:** Je verankerter Ideennotiz wird über `last_sync`/`sync_hash` klassifiziert: *nur Repo geändert* → Rückspielen + Sync-Felder neu stempeln; *nur Obsidian geändert* → **kein** Overwrite (Kandidat für `[[obsidian-sync]]`, dessen Autorität unangetastet bleibt); *beide geändert* → **Konflikt wird dem Menschen vorgelegt, nie automatisch entschieden**. Das Repo-interne Autoritätsmodell „Code gewinnt" (AC8) bleibt unverändert — es endet an der Repo-Grenze.
+- **AC21** — **Freigabe + nachgelagerte Ausführung:** Die geplanten Vault-Patches werden im **PR-Body** (AC13) als Liste protokolliert (je Patch: Notiz, Zone, Art — Rückspielung / neue Notiz / superseded-Stempel / Konflikt-offen). Die **Ausführung** der Vault-Patches erfolgt erst **nach** dem Merge des PRs — der Mensch-Gate wirkt damit auch für den Vault. Ein Lauf, dessen einzige Änderungen Vault-Patches wären (kein Repo-Diff), erzeugt dennoch einen PR (der Patch-Plan ist das Review-Artefakt); die No-Op-Regeln (AC12/AC15) greifen nur, wenn **auch** kein Vault-Patch ansteht.
+
 ### Logbuch `docs/spec-audit.md`
 - **AC10** — Pro Lauf wird **genau ein** knapper Block nach `docs/spec-audit.md` geschrieben — **immer, auch bei einem Lauf ohne jede Änderung** (No-Op): Kopf = **Datum**, darunter bei Änderungen **je eine Zeile pro berührtem Dokument** (z.B. „Spec X auf use-case-2.0 konvertiert" / „Konzept Y nachgezogen"). Der **neueste** Block steht **oben**. Die Datei liegt im Ziel-Repo neben `docs/`; existiert sie nicht, wird sie angelegt.
 - **AC11** — Der Block enthält **nur** die getroffenen Änderungen (durable Historie): **keine** Tabelle, **keine** Begründung, **keine** Fundstellen, **nicht** die ephemere Roh-Drift-Liste. Ein Block ist **nie zeilenlos**: bei Änderungen trägt er ≥ 1 Dokument-Zeile, bei einem No-Op-Lauf **genau eine** kanonische „keine Änderung nötig"-Zeile (→ AC12). Eine einzelne **Stufe** ohne Änderung trägt keine eigene Zeile bei — die No-Op-Zeile entsteht nur, wenn **weder** Stufe 1 **noch** Stufe 2 etwas geändert haben (Block-Ebene = ganzer Lauf, nicht je Stufe).
@@ -74,6 +87,7 @@ spec_format: use-case-2.0
 - **Audit-Schnittstelle:** Dispatch von `reviewer` im Audit-Modus (`agents/reviewer.md` „Audit-Modus") = Repo statt Diff, Output = priorisierter Fund-Report, **kein** Gate.
 - **Logbuch-Format:** `docs/spec-audit.md`, Block = Datums-Kopf + **≥ 1 Zeile** (1/Dokument bei Änderung **oder** genau die eine kanonische No-Op-Zeile), neueste oben, append-prepend (oben einfügen). **Schreib-Mechanismus:** `scripts/spec-audit-append.sh <Zeile> [<Zeile> …]` (Lines auch via Stdin `-`) **oder** `scripts/spec-audit-append.sh --no-op` (schreibt einen Block mit der kanonischen No-Op-Zeile). Idempotent (legt die Datei aus `templates/_docs/spec-audit.md` an, falls sie fehlt). **Schutz-Invariante (AC12):** ohne Zeilen **und** ohne `--no-op` wird **nichts** geschrieben (versehentlicher Leer-Aufruf bleibt folgenlos).
 - **Doc-Schreiber:** ausschließlich der `/agent-flow:reconcile`-Skill (kein anderer Touchpoint schreibt Reconcile-Änderungen).
+- **Vault-Zugriff (Stufe 3):** Ordner aus `profile.obsidian_source`; Schreibzonen + Frontmatter-Sync-Felder exakt nach `docs/architecture/obsidian-ingest-subsystem.md` §4b (kein eigenes Feld-Set). Drei-Wege-Anker = `last_sync`/`sync_hash` (`[[obsidian-ingest]]` AC17). Vault-Patch-Plan im PR-Body; Ausführung nach Merge (AC21).
 - **Freigabe-Mechanik (AC13/AC14/AC15):** immer PR, unabhängig von `merge_policy`. Branch `reconcile/<YYYY-MM-DD>` ab `default_branch`, **ein** Commit (alle berührten Dateien + Logbuch-Block), Push, `gh pr create` gegen `default_branch`, **kein** Self-Merge. Auth: `${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gh-auth.sh` vor dem PR. Kein Remote/keine Auth → Fallback auf committeten lokalen Branch bzw. Working-Tree-Diff + klare Meldung. No-Op-Lauf → kein PR, kein Branch (nur der `--no-op`-Logbuch-Block im Working-Tree).
 
 ## Edge-Cases & Fehlerverhalten
@@ -82,9 +96,11 @@ spec_format: use-case-2.0
 - Offenes Board bei Stufe 2 → Skip mit Hinweis (AC6), niemals stiller Inhalts-Abgleich von Halbfertigem (Vertrag §7).
 - **E3:** Board-Skelett fehlt komplett bei Stufe 2 (`board.yaml` nicht vorhanden) → Vorbedingung nicht prüfbar, Stufe 2 wird konservativ übersprungen mit eigenem Hinweis (AC6) — kein Absturz des Gesamtlaufs, Stufe 1 läuft unabhängig weiter.
 - **E4:** Kein Git-Remote / keine `gh`-Auth beim PR-Öffnen → **kein** stiller Fehlschlag: committeter lokaler Branch (bzw. Working-Tree-Diff, wenn schon das Branchen scheitert) bleibt erhalten + klare Nachzieh-Meldung (AC14).
+- `obsidian_source` fehlt / Vault unerreichbar bei Stufe 3 → Skip mit klarem Hinweis (AC16); Stufen 1+2 unberührt.
+- Beidseitig geänderte Ideennotiz in Stufe 3 → Konflikt an den Menschen, nie automatisch (AC20).
 
 ## NFRs
-- **Sicherheit/Vorsicht:** Kein Landen ohne Freigabe — das Gesamt-Ergebnis geht **immer** durch einen PR mit Mensch-Gate, **nie** per Self-Merge und **nie** per Direkt-Push (auch nicht bei `merge_policy: direct`, AC13). Kein Inhalts-Abgleich bei offenem Board. Kein per-Drift-Nachfragen.
+- **Sicherheit/Vorsicht:** Kein Landen ohne Freigabe — das Gesamt-Ergebnis geht **immer** durch einen PR mit Mensch-Gate, **nie** per Self-Merge und **nie** per Direkt-Push (auch nicht bei `merge_policy: direct`, AC13). Kein Inhalts-Abgleich bei offenem Board. Kein per-Drift-Nachfragen. Vault-Patches erst nach Merge (AC21), nur in definierte Zonen (AC18).
 - **Robustheit:** Fehlt Remote/Auth, scheitert reconcile **sichtbar und verlustfrei** (committeter Branch oder Working-Tree-Diff + Meldung, AC14) — nie ein stiller Abbruch, der Arbeit verschluckt.
 - Stufe 1 ist jederzeit sicher (rein doku-intern, kein Code-Bezug).
 - **Nachvollziehbarkeit:** Jeder Lauf hinterlässt genau eine Spur im Logbuch (auch No-Op) — ein reconcile-Lauf bleibt nie „unsichtbar", „gelaufen ohne Änderung" ist von „nie gelaufen" unterscheidbar (AC12).
@@ -94,9 +110,11 @@ spec_format: use-case-2.0
 - **Kein** eigener interner Revisions-Zähler (Standard-Nummer `use-case-2.x`, → `[[spec-format-field]]`).
 - **Kein** dev-gui-Button in diesem Repo — siehe Cross-Repo-Abhängigkeit unten.
 - **Keine** handgepflegte Drift-Liste als Wahrheit (durable ist nur das Logbuch §4).
+- **Kein** Blind-Overwrite im Vault (Stufe 3): nur definierte Zonen, nie löschen (`superseded`), beidseitige Änderung → Mensch-Entscheid (AC18/AC20); Vault-Patches nie vor dem PR-Merge (AC21).
 
 ## Abhängigkeiten
 - `[[spec-format-field]]` — **Fundament** (Stufe 1 vergleicht gegen den Stempel; muss zuerst existieren).
 - `agents/reviewer.md` (Audit-Modus, Stufe-2-Erkennung) · `agents/requirement.md` bzw. konvertierender Agent (Stufe-1-Umschreibung) · `scripts/board` (Kanban-Vorbedingung) · `skills/reconcile/SKILL.md` (neu) · `${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gh-auth.sh` (Auth vor dem PR, AC13/AC14).
 - **Cross-Repo-Abhängigkeit (SR3 Cross-Repo-Markierung):** Der **Auslöser-Button** im „Spezifikation"-Reiter (Muster wie „Board abarbeiten"/„Änderung erfassen", POST `/api/command` mit `/agent-flow:reconcile`) lebt im **`dev-gui`-Repo** und wird **dort** in einem eigenen Board-Item umgesetzt — **NICHT** in agent-flow. agent-flow stellt nur den Befehl bereit.
-- Vertrag: `docs/architecture/reconcile-subsystem.md` (FINAL). Konzept: `CONCEPT.md` (Reconcile-Absatz). CONCEPT §4d (vorwärtige Drift-Disziplin, Gegenstück).
+- `[[obsidian-ingest]]` — Stufe 3 konsumiert `idea_id`/`C-NNN`-Anker + Frontmatter-Sync-Felder (dort AC15–AC17) und die Waisen-aufwärts-Erkennung des `--audit` (dort AC21); Schreibzonen-Vertrag: `obsidian-ingest-subsystem.md` §4b.
+- Vertrag: `docs/architecture/reconcile-subsystem.md` (FINAL; §3 Stufe 3). Konzept: `CONCEPT.md` (Reconcile-Absatz + §11 „Entschieden (Idea-Roundtrip, 07.07.2026)"). CONCEPT §4d (vorwärtige Drift-Disziplin, Gegenstück).
