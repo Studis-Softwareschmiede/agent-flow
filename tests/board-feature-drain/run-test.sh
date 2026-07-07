@@ -29,6 +29,13 @@
 #     kompakt (Endphase, total/total), Zwischen-Arbeitsdateien entfernt;
 #     erneuter Drain-Start überschreibt statt anzuhäufen (Test 10). E6
 #     (abgebrochener Run OHNE Merge) dampft NICHT ein (Test 11).
+#   AC13 — Dossier-Erzeugung (einmalig, VOR der ersten Story-Session):
+#     generate_dossier() erzeugt board/runs/F-001/dossier.md mit erwartetem
+#     Inhalt (Test 13); E4 — Fehlschlag der Dossier-Session (non-zero exit)
+#     blockiert den Drain NICHT, dossier.md existiert danach nicht, Drain
+#     läuft normal bis zum Merge durch (Test 14). Die Dossier-Session läuft
+#     bewusst OHNE --dangerously-skip-permissions (Security-Review-Fix) —
+#     der Mock unterscheidet Dossier- vs. Story-Aufruf am Prompt-Präfix.
 #
 # Verwendet lokale /tmp-Git-Fixtures (bare "origin" + Arbeits-Klon), einen
 # gemockten `gh` (wie tests/board-ship) und einen gemockten "claude"-Aufruf,
@@ -82,10 +89,25 @@ MOCKEOF
 chmod +x "${MOCK_BIN_DIR}/gh"
 export PATH="${MOCK_BIN_DIR}:${PATH}"
 
-# --- Gemockter "claude"-Aufruf: simuliert EINE Story-Sitzung -----------------
-# Nimmt "-p" "/agent-flow:flow --parent F-###" entgegen, ermittelt per echtem
-# `board next --parent` die nächste bereite Story (dieselbe Queue-Logik wie
-# in echt). Erfolgsfall: simuliert coder→reviewer→tester, landet dann über
+# --- Gemockter "claude"-Aufruf: simuliert ZWEI verschiedene Sitzungstypen ----
+# BOARD_FEATURE_DRAIN_CLAUDE_CMD wird an ZWEI Stellen im Skript aufgerufen:
+#   (a) generate_dossier() — "-p" "<langer Freitext-Dossier-Prompt>" (OHNE
+#       --dangerously-skip-permissions, s. AC13-Review-Fix), erkennbar am
+#       charakteristischen Prompt-Präfix "Fasse für das Feature ".
+#   (b) Story-Sitzung — "-p" "/agent-flow:flow --parent F-###"
+#       --dangerously-skip-permissions (unverändert).
+# Der Mock unterscheidet beide Aufrufstellen anhand des Prompt-Präfixes in
+# "$2", statt (wie zuvor) beide Formen fälschlich als Story-Simulation zu
+# behandeln — sonst bleibt generate_dossier() faktisch ungetestet (Review-
+# Finding: AC13-Erfolgsfall und E4-Fehlerfall liefen nie durch den Mock).
+#
+# Dossier-Zweig: Erfolgsfall (Standard) schreibt einen erwarteten Markdown-
+# Inhalt auf stdout (das Skript selbst leitet das per Redirect in dossier.md
+# um — der Mock ruft keine Tools auf, reines Prompt-rein/Text-raus). Über
+# MOCK_DOSSIER_FAIL=1 kann der E4-Fehlerfall erzwungen werden (non-zero exit,
+# keine Ausgabe).
+#
+# Story-Zweig (unverändert): simuliert coder→reviewer→tester, landet dann über
 # das ECHTE, bereits separat getestete board-ship.sh --target-branch (kein
 # Nachbau der Merge-Logik im Mock — höhere Testtreue, echte Integration).
 # Blockade-Fall: kein Code zu landen (Loop-Schutz griff vor tester-PASS) —
@@ -95,8 +117,27 @@ MOCK_CLAUDE="${TEST_WORK_DIR}/mock-claude.sh"
 cat > "$MOCK_CLAUDE" <<MOCKCLAUDE
 #!/usr/bin/env bash
 set -euo pipefail
-# Argumente: -p "/agent-flow:flow --parent F-###" --dangerously-skip-permissions
+# Argumente entweder:
+#   -p "Fasse für das Feature ... " (Dossier, KEIN --dangerously-skip-permissions)
+#   -p "/agent-flow:flow --parent F-###" --dangerously-skip-permissions (Story)
 PROMPT="\$2"
+
+if [[ "\$PROMPT" == "Fasse für das Feature "* ]]; then
+  # --- Dossier-Zweig (AC13/E4) ---
+  if [[ "\${MOCK_DOSSIER_FAIL:-0}" == "1" ]]; then
+    echo "[mock-claude] simulierter Dossier-Fehlschlag (E4)" >&2
+    exit 1
+  fi
+  DOSSIER_CONTENT="# Feature-Kontext-Dossier (Mock)
+
+Feature-Ziel: Test-Dossier-Inhalt."
+  echo "\$DOSSIER_CONTENT"
+  if [[ -n "\${BOARD_FEATURE_DRAIN_DOSSIER_SENTINEL:-}" ]]; then
+    echo "\$DOSSIER_CONTENT" > "\${BOARD_FEATURE_DRAIN_DOSSIER_SENTINEL}"
+  fi
+  exit 0
+fi
+
 FID="\$(echo "\$PROMPT" | grep -oE 'F-[0-9]+')"
 NEXT_JSON="\$(bash "$BOARD_SCRIPT" next --parent "\$FID" 2>/dev/null || true)"
 [[ -n "\$NEXT_JSON" ]] || { echo "[mock-claude] nichts bereit für \$FID"; exit 0; }
@@ -672,6 +713,85 @@ if cd "$T9_WORK" && git log origin/feature/F-001 --name-only 2>/dev/null | grep 
   fail "Test 12: mindestens ein Commit im Feature-Branch enthält board/runs/ — AC11 verletzt"
 else
   pass "Test 12: kein Commit im Feature-Branch enthält board/runs/ (AC11)"
+fi
+
+# ===========================================================================
+# Test 13 — AC13 Erfolgsfall: generate_dossier() erzeugt VOR der ersten
+# Story-Session board/runs/F-001/dossier.md mit dem erwarteten Mock-Inhalt.
+# Da die Eindampfung (AC12) dossier.md nach erfolgreichem Merge wieder
+# entfernt, schreibt der Mock beim Dossier-Aufruf zusätzlich zu stdout (das
+# echte Skript leitet das in dossier.md um) eine Sentinel-Datei AUSSERHALB
+# von board/runs/, sofern BOARD_FEATURE_DRAIN_DOSSIER_SENTINEL gesetzt ist —
+# die überlebt die Eindampfung und macht den Test unabhängig vom Zeitpunkt.
+# ===========================================================================
+echo ""
+echo "--- Test 13: AC13 — generate_dossier() erzeugt dossier.md mit erwartetem Inhalt (Erfolgsfall) ---"
+T13_WORK="$(setup_fixture "${TEST_WORK_DIR}/test13" 1)"
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+T13_SENTINEL="${TEST_WORK_DIR}/test13-dossier-sentinel.md"
+rm -f "$T13_SENTINEL"
+export BOARD_FEATURE_DRAIN_DOSSIER_SENTINEL="$T13_SENTINEL"
+T13_OUTPUT="$(cd "$T13_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T13_EXIT=$?
+unset BOARD_FEATURE_DRAIN_DOSSIER_SENTINEL
+if [[ $T13_EXIT -eq 0 ]]; then
+  pass "Test 13a: Drain mit Dossier-Erzeugung läuft ohne Fehler durch (exit 0)"
+else
+  fail "Test 13a: exit=${T13_EXIT}"
+  echo "  Output: $T13_OUTPUT"
+fi
+if [[ -f "$T13_SENTINEL" ]] && grep -q "Feature-Kontext-Dossier (Mock)" "$T13_SENTINEL"; then
+  pass "Test 13b: generate_dossier() hat die claude -p-Session mit dem erwarteten Dossier-Inhalt aufgerufen (AC13)"
+else
+  fail "Test 13b: Sentinel fehlt oder hat unerwarteten Inhalt — Dossier-Session wurde nicht wie erwartet aufgerufen"
+fi
+if echo "$T13_OUTPUT" | grep -q "Feature-Kontext-Dossier erzeugt"; then
+  pass "Test 13c: Log-Zeile bestätigt erfolgreiche Dossier-Erzeugung"
+else
+  fail "Test 13c: erwartete Log-Zeile zur Dossier-Erzeugung fehlt"
+  echo "  Output: $T13_OUTPUT"
+fi
+
+# ===========================================================================
+# Test 14 — E4: schlägt die Dossier-Session fehl (non-zero exit/leere
+# Ausgabe), läuft der Drain TROTZDEM vollständig durch (best-effort, kein
+# Abbruch), dossier.md existiert danach nicht (wurde gelöscht), und
+# last_error in state.yaml vermerkt den Fehlgrund (darf danach von einem
+# erfolgreichen Folge-Schritt wieder auf null zurückgesetzt werden — hier
+# wird direkt nach dem Dossier-Schritt anhand des Log-Outputs geprüft, nicht
+# ausschließlich anhand des state.yaml-Endstands, da last_error am Ende bei
+# insgesamt erfolgreichem Feature wieder null sein kann).
+# ===========================================================================
+echo ""
+echo "--- Test 14: E4 — Dossier-Fehlschlag blockiert den Drain NICHT, dossier.md existiert danach nicht ---"
+T14_WORK="$(setup_fixture "${TEST_WORK_DIR}/test14" 1)"
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+export MOCK_DOSSIER_FAIL=1
+T14_OUTPUT="$(cd "$T14_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T14_EXIT=$?
+unset MOCK_DOSSIER_FAIL
+if [[ $T14_EXIT -eq 0 ]]; then
+  pass "Test 14a: Drain läuft trotz Dossier-Fehlschlag vollständig durch (exit 0, E4 — kein Abbruch)"
+else
+  fail "Test 14a: erwartete exit 0 trotz Dossier-Fehlschlag, bekam exit=${T14_EXIT}"
+  echo "  Output: $T14_OUTPUT"
+fi
+if [[ ! -f "${T14_WORK}/board/runs/F-001/dossier.md" ]]; then
+  pass "Test 14b: dossier.md existiert nach dem Fehlschlag nicht (wurde entfernt)"
+else
+  fail "Test 14b: dossier.md existiert trotz simuliertem Fehlschlag"
+fi
+if echo "$T14_OUTPUT" | grep -q "Dossier-Erzeugung fehlgeschlagen"; then
+  pass "Test 14c: Log-Zeile bestätigt den best-effort-Fehlschlag (E4)"
+else
+  fail "Test 14c: erwartete Log-Zeile zum Dossier-Fehlschlag fehlt"
+  echo "  Output: $T14_OUTPUT"
+fi
+T14_STATUS="$(git -C "$T14_WORK" show origin/main:board/stories/S-901-test.yaml 2>/dev/null | grep '^status:' || true)"
+if echo "$T14_STATUS" | grep -q "Done"; then
+  pass "Test 14d: die Story wurde trotz Dossier-Fehlschlag ganz normal fertig (Done) — kein Blockieren des Feature-Drains"
+else
+  fail "Test 14d: Story ist nicht Done (Status: ${T14_STATUS}) — Dossier-Fehlschlag hat den Drain offenbar doch beeinträchtigt"
 fi
 
 # ===========================================================================
