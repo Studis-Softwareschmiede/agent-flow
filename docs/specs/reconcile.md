@@ -11,6 +11,7 @@ spec_format: use-case-2.0
 
 > **Schicht 3 von 3.** Testbares **Verhalten + Verträge**, sprach-/paradigma-unabhängig (Intent, keine Idiome/Klassen).
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien + Coverage-Gate), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
+> **Konzept-Herkunft (Stufe 3):** `(← C-002)` — CONCEPT.md §11 „Entschieden (Idea-Roundtrip, 07.07.2026)", entstanden aus Ideennotiz `IDEA-002` (`Agent Flow – Konzept Idea-Intake.md`).
 > **Erweitert 07.07.2026 (Idea-Roundtrip):** **Stufe 3 (Obsidian-Rückspielung)** neu, AC16–AC21 — Stufen 1+2 sind gebaut, Stufe 3 noch nicht.
 > **Subsystem-Vertrag (verbindlich, FINAL):** `docs/architecture/reconcile-subsystem.md`. Diese Spec setzt nur den **agent-flow-Teil** des Vertrags um (Skill + Stufe 1 + Stufe 2 + Stufe 3 + Logbuch). Der **dünne dev-gui-Button** (§2/§5) lebt im separaten `dev-gui`-Repo und ist hier **nur Cross-Repo-Abhängigkeit**, kein Board-Item.
 

@@ -13,6 +13,7 @@ spec_format: use-case-2.0
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien + Coverage-Gate), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
 > **Subsystem-Vertrag (verbindlich):** `docs/architecture/obsidian-ingest-subsystem.md`. Diese Spec setzt den **agent-flow-Teil** um (Pipeline + Reader + Fragenkatalog-Gate + Profilfeld). Der **dünne dev-gui-Button** (Anzeige/Bedienung) lebt im separaten `dev-gui`-Repo und ist hier **nur Cross-Repo-Abhängigkeit**, kein Board-Item — nur die **Schnittstelle** (Aufruf + Rückgabeformat) ist hier definiert, damit dev-gui andockt.
 > **Schwester-Spec:** `[[obsidian-sync]]` (der Re-Sync-Modus) teilt Reader + Fragenkatalog-Gate dieser Spec.
+> **Konzept-Herkunft:** `(← C-002)` — CONCEPT.md §11 „Entschieden (Idea-Roundtrip, 07.07.2026)", entstanden aus Ideennotiz `IDEA-002` (`Agent Flow – Konzept Idea-Intake.md`).
 > **Erweitert 07.07.2026 (Idea-Roundtrip, Subsystem-Vertrag §4b/§5a):** ID-Kette + Frontmatter-Stempel (AC15–AC18) und `--audit`-Modus (AC19–AC22); das frühere Komplett-Verbot „kein Schreiben in den Vault" ist durch das **Zonen-Modell** ersetzt (AC6/AC17). Der Rückkanal Repo→Vault ist NICHT hier, sondern `[[reconcile]]` Stufe 3.
 
 ## Zweck
