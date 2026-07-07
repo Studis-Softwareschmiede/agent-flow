@@ -2,7 +2,7 @@ id: S-056
 parent: F-025
 title: 'Feature-Kontext-Dossier: einmalige Erzeugung im Drain + Injektion in /flow
   --parent'
-status: In Progress
+status: Done
 priority: P2
 spec: docs/specs/feature-batch-orchestration.md
 implements:
@@ -21,8 +21,8 @@ estimate_note: 'S/M-Heuristik: n_ac=2 (AC13/14) + n_comp=3 (board-feature-drain.
 confidence: medium
 tok_est: null
 branch: feat/s-056-feature-kontext-dossier
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/311
 blocked_reason: null
 created_at: '2026-07-07T09:54:42Z'
-updated_at: '2026-07-07T14:15:55Z'
-done_at: null
+updated_at: '2026-07-07T14:56:18Z'
+done_at: '2026-07-07T14:56:17Z'
