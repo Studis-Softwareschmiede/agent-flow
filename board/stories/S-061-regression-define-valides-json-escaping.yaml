@@ -2,7 +2,7 @@ id: S-061
 parent: F-019
 title: 'regression-define: Agent muss valides JSON in ergebnis_datei schreiben (Escaping-Bug
   bei deutschen Texten mit Anführungszeichen)'
-status: Blocked
+status: To Do
 priority: P1
 spec: docs/specs/regression-define.md
 implements:
@@ -27,21 +27,8 @@ blocked_reason: 'Loop-Schutz N=3 — nach 3 Iterationen weiterhin CHANGES-REQUIR
   (z.B. Temp-.py-Datei statt python3 -c mit interpolierten Werten) statt weiterer
   Delimiter-Iteration'
 created_at: '2026-07-08T13:15:00Z'
-updated_at: '2026-07-08T16:21:13Z'
+updated_at: '2026-07-08T16:40:00Z'
 done_at: null
 tok_est: null
 area: rollen-agenten
-befund_2026_07_08: 'Vierter E2E-Befund 2026-07-08 (Datei-Übergabe funktioniert jetzt,
-  aber): Der regression-define-Agent schreibt in die ergebnis_datei INVALIDES JSON
-  — nicht-escaptes gerades ASCII-Anführungszeichen mitten in einem deutschen String-Wert.
-  Konkret (dev-gui bereich=vps, Datei 1c6fe822...json, Zeile 13): "Die VPS-Ansicht
-  öffnen (Kachel „VPS")" — das gerade " nach VPS schließt den JSON-String vorzeitig
-  → JSONDecodeError "Expecting , delimiter" (line 13). Der Runner meldet korrekt "Ergebnisdatei
-  kein gültiges JSON". WURZEL: Der Agent generiert das JSON per Hand-Text; bei deutschen
-  Prüf-/Schritt-Texten mit eingebetteten Anführungszeichen entstehen Escaping-Fehler.
-  FIX-RICHTUNG: Der Agent MUSS garantiert valides JSON produzieren — String-Werte
-  strikt escapen (alle " → \" bzw. konsequent typografische „ " verwenden), ODER das
-  Objekt strukturiert bauen und serialisieren statt frei zu tippen. Testfall: ein
-  Vorschlag mit Anführungszeichen in schritte/pruefpunkte muss valides JSON in ergebnis_datei
-  ergeben (json.load erfolgreich). Optional dev-gui-seitig: Runner-Toleranz (best-effort-Repair)
-  erwägen, aber Primärfix ist der Agent.'
+neuer_ansatz_2026_07_08: 'Drei Versuche scheiterten, weil der Agent das JSON von Hand tippt und bei deutschem Text mit Anführungszeichen ein gerades " nicht escapt (bricht den JSON-String). KEIN vierter Blind-Versuch — Methodenwechsel mit zwei HARTEN Regeln: (1) URSACHE BESEITIGEN — in ALLEN JSON-String-Werten ausschliesslich TYPOGRAFISCHE Anführungszeichen verwenden (deutsche „ und “ bzw. ‚ ’); ein gerades " darf NUR als JSON-Delimiter vorkommen, NIE innerhalb eines Wertes. Das passt zur deutschen Typografie und entfernt die Hauptfehlerquelle strukturell. (2) SICHERHEITSNETZ (verifizierbar, PFLICHT) — nach dem Schreiben der ergebnis_datei MUSS der Agent die Datei mit einem echten JSON-Parser gegenprüfen (z. B. python3 -c "import json; json.load(open(PFAD))" oder node -e), bei Fehler reparieren und erneut prüfen — Schleife bis die Datei nachweislich valide parst. Erst dann gilt der Lauf als fertig. So kann kein invalides JSON mehr die Runde verlassen, unabhängig von der Ursache. Umzusetzen in agents/regression-define.md (Output-/ergebnis_datei-Schritt beider Modi) + Spec AC13. PFLICHT-Testfall: ein Vorschlag mit Anführungszeichen in schritte/pruefpunkte muss valide JSON in der ergebnis_datei ergeben (json.load erfolgreich). tester: volle Suite + Lint.'
