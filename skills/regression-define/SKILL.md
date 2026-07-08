@@ -84,8 +84,13 @@ eigenen Vorgehens, `.claude/profile.md` `merge_policy`/`default_branch`). Dieser
 
 ## 2. Ergebnis
 
-Die Ausgabe des Agenten (Rückgabeformat bei `vorschlag`, PR-Link + Secrets-/Nicht-datengetrieben-Zusammenfassung
-bei `uebersetzen`) unverändert an den Aufrufer zurückgeben — der Skill fügt nichts hinzu und kürzt nichts.
+Die Ausgabe des Agenten (Rückgabeformat bei `vorschlag`, Ergebnis-Objekt mit PR-Link/`Abgelehnt:`-Status bei
+`uebersetzen`) unverändert an den Aufrufer zurückgeben — der Skill fügt nichts hinzu und kürzt nichts. Der Agent
+liefert bereits headless-diszipliniert (AC12 der Spec): keine umschliessende Prosa, keine Rückfrage; der Skill
+darf diese Disziplin durch eigene Zusätze nicht brechen. **HART: Die finale Ausgabe DEINER Session ist
+ausschliesslich dieses Rückgabeformat-JSON bzw. Ergebnis-Objekt** — keine Zusammenfassung davor, keine Frage
+danach; Anmerkungen gehören ins `hinweise[]`-Feld des Formats (headless-Aufrufer wie der dev-gui-Runner parsen
+die Finalausgabe maschinell).
 
 ## Grenzen
 
