@@ -125,7 +125,7 @@ Für `verbund: <verbund-name>` bestimmt der Agent die „Verbund-relevanten Spec
 
 ## Edge-Cases & Fehlerverhalten
 
-- **Bereich/Verbund ohne deckende Specs** → der Agent meldet „keine deckenden Specs im Bereich/Verbund `<id>`" statt einen leeren/erfundenen Vorschlag zu liefern.
+- **Bereich/Verbund ohne deckende Specs** → der Agent meldet „keine deckenden Specs im Bereich/Verbund `<id>`" statt einen leeren/erfundenen Vorschlag zu liefern. Diese Meldung ist gemäß AC12 Teil der strukturierten Ausgabe (Rückgabeformat mit leerem `vorschlag`-Array und der Meldung in `hinweise[]`), **nicht** ein separater Freitext-Absatz vor/nach einem JSON-Objekt.
 - **Redigierte Fassung entfernt alle Beispieldaten** → der Test wird ohne Datentabelle erzeugt (nicht-datengetrieben); die Begleitbeschreibung vermerkt das.
 
 ## NFRs
