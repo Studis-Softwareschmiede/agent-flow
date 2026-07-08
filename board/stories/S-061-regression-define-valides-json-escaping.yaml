@@ -19,16 +19,12 @@ dispo_forecast: null
 estimate_note: S — Escaping-Härtung + Testfall mit Anführungszeichen. Vierter E2E-Befund,
   Datei-Übergabe selbst funktioniert.
 confidence: medium
-branch: feat/S-061-regression-define-json-escaping
+branch: null
 pr: null
-blocked_reason: 'Loop-Schutz N=3 — nach 3 Iterationen weiterhin CHANGES-REQUIRED:
-  Bash-Quoting-Delimiter-Kollisionsklasse (Anführungszeichen vs. Apostroph) wiederholt
-  neu eingeführt statt beseitigt; braucht wahrscheinlich einen robusteren Mechanismus
-  (z.B. Temp-.py-Datei statt python3 -c mit interpolierten Werten) statt weiterer
-  Delimiter-Iteration'
+blocked_reason: null
 created_at: '2026-07-08T13:15:00Z'
-updated_at: '2026-07-08T16:40:00Z'
+updated_at: '2026-07-08T17:20:00Z'
 done_at: null
 tok_est: null
 area: rollen-agenten
-neuer_ansatz_2026_07_08: 'Drei Versuche scheiterten, weil der Agent das JSON von Hand tippt und bei deutschem Text mit Anführungszeichen ein gerades " nicht escapt (bricht den JSON-String). KEIN vierter Blind-Versuch — Methodenwechsel mit zwei HARTEN Regeln: (1) URSACHE BESEITIGEN — in ALLEN JSON-String-Werten ausschliesslich TYPOGRAFISCHE Anführungszeichen verwenden (deutsche „ und “ bzw. ‚ ’); ein gerades " darf NUR als JSON-Delimiter vorkommen, NIE innerhalb eines Wertes. Das passt zur deutschen Typografie und entfernt die Hauptfehlerquelle strukturell. (2) SICHERHEITSNETZ (verifizierbar, PFLICHT) — nach dem Schreiben der ergebnis_datei MUSS der Agent die Datei mit einem echten JSON-Parser gegenprüfen (z. B. python3 -c "import json; json.load(open(PFAD))" oder node -e), bei Fehler reparieren und erneut prüfen — Schleife bis die Datei nachweislich valide parst. Erst dann gilt der Lauf als fertig. So kann kein invalides JSON mehr die Runde verlassen, unabhängig von der Ursache. Umzusetzen in agents/regression-define.md (Output-/ergebnis_datei-Schritt beider Modi) + Spec AC13. PFLICHT-Testfall: ein Vorschlag mit Anführungszeichen in schritte/pruefpunkte muss valide JSON in der ergebnis_datei ergeben (json.load erfolgreich). tester: volle Suite + Lint.'
+neuer_ansatz_2026_07_08: 'Drei Versuche scheiterten, weil der Agent das JSON von Hand tippt und bei deutschem Text mit Anführungszeichen ein gerades " nicht escapt (bricht den JSON-String). KEIN vierter Blind-Versuch — Methodenwechsel mit zwei HARTEN Regeln: (1) URSACHE BESEITIGEN — in ALLEN JSON-String-Werten ausschliesslich TYPOGRAFISCHE Anführungszeichen verwenden (deutsche „ und “ bzw. ‚ ’); ein gerades " darf NUR als JSON-Delimiter vorkommen, NIE innerhalb eines Wertes. Das passt zur deutschen Typografie und entfernt die Hauptfehlerquelle strukturell. (2) SICHERHEITSNETZ (verifizierbar, PFLICHT) — nach dem Schreiben der ergebnis_datei MUSS der Agent die Datei mit einem echten JSON-Parser gegenprüfen (z. B. python3 -c "import json; json.load(open(PFAD))" oder node -e), bei Fehler reparieren und erneut prüfen — Schleife bis die Datei nachweislich valide parst. Erst dann gilt der Lauf als fertig. So kann kein invalides JSON mehr die Runde verlassen, unabhängig von der Ursache. Umzusetzen in agents/regression-define.md (Output-/ergebnis_datei-Schritt beider Modi) + Spec AC13. PFLICHT-Testfall: ein Vorschlag mit Anführungszeichen in schritte/pruefpunkte muss valide JSON in der ergebnis_datei ergeben (json.load erfolgreich). tester: volle Suite + Lint. ZUSATZ (aus Loop-Schutz-Befund des Drains): Die Selbstvalidierung NICHT mit python3 -c "…" und in den Shell-String interpolierten JSON-/Text-Werten bauen — das erzeugt immer wieder dieselbe Bash-Quoting-Kollision (Anführungszeichen vs. Apostroph). Stattdessen den Pfad als ARGUMENT übergeben und den Inhalt NICHT in die Shell interpolieren, z. B. eine feste Mini-Helferdatei scripts/validate-json.py <pfad> (liest sys.argv[1], json.load) oder node --input-type bzw. node -e mit Pfad aus process.argv — Datei-Inhalt wird gelesen, nie interpoliert. So kollidiert kein Delimiter mehr. Das ist der robustere Mechanismus, den der bisherige Loop vermissen liess.'
