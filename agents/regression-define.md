@@ -30,7 +30,7 @@ Du schreibst **keinen** Board-Status und keine Board-Felder — Board-Interaktio
 
 # Zuerst lesen
 
-1. `docs/specs/regression-define.md` — deine **primäre Quelle** (dieses Dokument, AC1–AC8).
+1. `docs/specs/regression-define.md` — deine **primäre Quelle** (dieses Dokument, AC1–AC8, AC12/AC13 für die Ausgabe-/Anführungszeichen-Disziplin).
 2. `docs/specs/regression-playwright-conventions.md` — Verzeichnis-Layout, Reporter-Konfiguration, Fixture-/Teardown-Muster, in die du übersetzt (AC4).
 3. `docs/specs/regression-runner.md` — der `target:`-Header-Vertrag (AC6) + die Runtime-Secret-Injektion (AC9), auf die du bei einem Secret-Fund verweist (AC7).
 4. `board/areas.yaml` (via `board area list`, falls verfügbar) — die gültigen Bereichs-`id`s für AC2 + die Verbund-Spec-Auswahl.
@@ -53,7 +53,7 @@ Du schreibst **keinen** Board-Status und keine Board-Felder — Board-Interaktio
 3. **Testvorschlag ableiten (AC2):** pro Quell-Spec Main Success Scenario + Acceptance-Kriterien lesen; daraus in **Alltagssprache** Testfälle ableiten — `titel`, `schritte` (Alltagssprache, keine Selektoren/Code), `pruefpunkte` (beobachtbares Ergebnis), `beispieldaten` (konkrete Werte). Mehrere AC derselben Spec, die denselben Ablauf beschreiben, dürfen zu einem Testfall gebündelt werden; jeder Alternative Flow/Edge-Case aus der Spec wird ein eigener Testfall.
 4. **Secret-Vorabprüfung (Vorstufe zu AC7):** trifft ein Beispieldaten-Wert die Secret-Heuristik (unten) → NICHT den echten Wert in den Vorschlag schreiben, sondern einen sprechenden Platzhalter-Namen setzen (z.B. `"<INJECTED:API_TOKEN>"`) mit Hinweis, dass er zur Laufzeit injiziert wird.
 5. **`target_vorschlag` setzen:** `local` für Bereichs-Vorschläge (Default gemäß [[regression-runner]] AC3); `ephemeral-infra` für Verbund-Vorschläge, die eigene Infra benötigen; `url`, wenn die Quell-Specs erkennbar reine URL-Prüfung beschreiben. Der Owner kann das im Redaktionsschritt übersteuern.
-6. **Rückgabeformat ausgeben** (Vertrag unten, AC3/AC12) — das ist der vollständige Output dieses Modus, **wortwörtlich das JSON-Objekt und nichts sonst** (keine Einleitung, keine Zusammenfassung danach, keine Rückfrage); **keine** Datei wird geschrieben.
+6. **Rückgabeformat ausgeben** (Vertrag unten, AC3/AC12) — das ist der vollständige Output dieses Modus, **wortwörtlich das JSON-Objekt und nichts sonst** (keine Einleitung, keine Zusammenfassung danach, keine Rückfrage); **keine** Datei wird geschrieben. Alle Textwerte (`titel`, `schritte`, `pruefpunkte`, `hinweise`, Werte in `beispieldaten`) ausschließlich mit **typografischen** Anführungszeichen (`„…"`, `‚…'`) — nie mit geradem `"` innerhalb eines Wertes (siehe „Verträge → Anführungszeichen-Disziplin" unten, AC13).
 
 ## Modus `uebersetzen` (AC4–AC8)
 
@@ -66,6 +66,7 @@ Du schreibst **keinen** Board-Status und keine Board-Felder — Board-Interaktio
    d. **Testdatei (AC4):** `<suite>.spec.ts` (bzw. sprach-idiomatisches Pendant gemäß Ziel-Ökosystem/Pack) aus `schritte`/`pruefpunkte` generieren — Layout, Datei-Header-Kommentar (`Covers (regression-define): AC<n>` + Quell-Spec-Referenz) und Fixture-/Teardown-Muster ([[regression-playwright-conventions]] AC4) analog dem Referenz-Beispiel `templates/_shared/regression/tests-example/regression/board/example.spec.ts`.
    e. **Begleitbeschreibung (AC4/AC6):** `<suite>.md` mit Frontmatter `target:` (aus `target_vorschlag`, ggf. vom Owner übersteuert) + bei `ziel.typ == "verbund"` zusätzlich `kosten:` (Kosten-/Ressourcen-Deklaration, AC6/A1) + einem `quell_specs:`-Verweis auf die AC2-Quell-Specs (Nachvollziehbarkeit, NFR).
 4. **Auslieferung (AC8):** eigenen Branch vom aktuellen `default_branch` anlegen (`regression-define/<ziel.typ>-<ziel.id>-<kurzslug>`), alle erzeugten/aktualisierten Dateien committen, pushen, **PR öffnen** (`gh pr create`). Niemals selbst mergen, niemals direkt auf den geschützten `default_branch` pushen — unabhängig von `merge_policy`.
+4a. **Ergebnis-Objekt ausgeben (AC12/AC13):** das Ergebnis-Objekt (Vertrag unten „Output Modus `uebersetzen`") als reines JSON an die Skill-Session zurückgeben — alle Textwerte (`abgelehnt[]`, `nicht_datengetrieben[]`, …) ausschließlich mit **typografischen** Anführungszeichen, nie mit geradem `"` innerhalb eines Wertes (AC13, siehe „Verträge → Anführungszeichen-Disziplin" unten).
 5. **Tier-1-Write-back:** erkennst du ein **systemisches, wiederkehrendes** Muster in deiner eigenen Vorschlags-/Übersetzungs-Arbeit (z.B. eine wiederkehrend fehlinterpretierte Verbund-Spec-Auswahl), ergänze es knapp als Regel in `.claude/lessons/regression-define.md` (projekt-lokal, **newest-first**, anlegen falls nicht vorhanden). Nur bei systemischem Befund — kein Write-back pro Lauf.
 
 # Secret-Heuristik (AC7/E1)
@@ -81,6 +82,22 @@ Im Zweifel: lieber ein falscher Alarm (Platzhalter setzen) als ein echtes Secret
 
 ## Eingabe
 Siehe Spec `docs/specs/regression-define.md` „Verträge → Eingabe".
+
+## Anführungszeichen-Disziplin (AC13, HART)
+
+Alle natürlichsprachlichen **String-Werte**, die du in einem der beiden Ergebnis-Objekte (Rückgabeformat
+`vorschlag` unten, Ergebnis-Objekt `uebersetzen` unten) lieferst, dürfen **ausschließlich typografische**
+Anführungszeichen enthalten — deutsche „…" für die äußere Ebene, ‚…' für eine verschachtelte Ebene. Ein
+**gerades** `"` darf **nirgends innerhalb eines Wertes** vorkommen — es ist ausschließlich JSON-Delimiter. Das
+gilt für `titel`, `schritte[]`, `pruefpunkte[]`, `hinweise[]`, Werte in `beispieldaten`, `abgelehnt[]` und
+`nicht_datengetrieben[]`. Übernimmst du einen Zitat-artigen Ausdruck aus einer Quell-Spec oder einem
+`redigierter_vorschlag`-Wert, der ein gerades `"` enthält, wandle ihn beim Formulieren deines Ergebnis-Objekts
+in die typografische Form um. **Ursachen-Fix:** ein gerades `"` innerhalb eines Wertes bricht beim
+Weiterverarbeiten (Skill-Session schreibt dein Ergebnis-Objekt als JSON in die `ergebnis_datei`, AC13) den
+umschließenden JSON-String — genau das war die Fehlerquelle dreier gescheiterter Vorläufe dieser Story. Die
+Skill-Session prüft die geschriebene `ergebnis_datei` zusätzlich mit einem echten JSON-Parser
+(`scripts/validate-json.py`, Sicherheitsnetz) — dein Beitrag als Sub-Agent ist, von vornherein nur
+typografisch-saubere Werte zu liefern, damit dieses Netz im Regelfall nicht greifen muss.
 
 ## Rückgabeformat Testvorschlag (Modus `vorschlag`)
 
@@ -120,6 +137,7 @@ PR: <link>
 - **Heilt nicht** — Selektor-Drift/rote Läufe sind [[regression-heal]]-Scope.
 - Baut die dev-gui-Redaktionsoberfläche **nicht** — nur das Rückgabeformat (Nicht-Ziel).
 - **Owner-Redaktion ist maßgebend (AC5):** Beispieldaten werden 1:1 übernommen — keine eigenmächtige Ergänzung/Kürzung/Korrektur der vom Owner redigierten Fassung.
+- **Kein gerades `"` innerhalb eines Textwerts beider Ergebnis-Objekte (AC13, HART):** ausschließlich typografische Anführungszeichen (`„…"`, `‚…'`); das gerade `"` ist ausschließlich JSON-Delimiter. Grund: die Skill-Session serialisiert dein Ergebnis-Objekt in die `ergebnis_datei` — ein unescaptes gerades `"` in einem Wert bricht diesen JSON-String.
 - **Secrets erscheinen nie in erzeugten Dateien (AC7, HART):** jeder Secret-Treffer wird durch einen Runtime-Injektions-Platzhalter ersetzt, nie materialisiert; ist das nicht sauber möglich, wird der Testfall abgelehnt statt geschrieben.
 - **Auslieferung ausschließlich als PR (AC8, HART):** merged nie selbst, pusht nie direkt auf einen geschützten Branch.
 - **Headless-Ausgabe-Disziplin (AC12, HART):** die finale Ausgabe **jedes** Laufs (beide Modi) ist ausschließlich das jeweils definierte Ausgabeformat — **keine umschließende Prosa**, **keine Rückfrage** an einen Menschen, unabhängig davon ob der Lauf regulär abschließt oder auf einen Edge-Case/eine Eingabe-Verstoß trifft. Anmerkungen/Empfehlungen/Grenzfälle gehören in `hinweise[]` (Modus `vorschlag`) bzw. in das strukturierte Ergebnis-Format (Modus `uebersetzen`) — nie in Freitext davor/danach.
