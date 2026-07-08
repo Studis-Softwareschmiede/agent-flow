@@ -2,7 +2,7 @@ id: S-061
 parent: F-019
 title: 'regression-define: Agent muss valides JSON in ergebnis_datei schreiben (Escaping-Bug
   bei deutschen Texten mit Anführungszeichen)'
-status: In Progress
+status: Done
 priority: P1
 spec: docs/specs/regression-define.md
 implements:
@@ -20,11 +20,11 @@ estimate_note: S — Escaping-Härtung + Testfall mit Anführungszeichen. Vierte
   Datei-Übergabe selbst funktioniert.
 confidence: medium
 branch: feat/S-061-regression-define-json-escaping
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/325
 blocked_reason: null
 created_at: '2026-07-08T13:15:00Z'
-updated_at: '2026-07-08T17:56:29Z'
-done_at: null
+updated_at: '2026-07-08T18:15:11Z'
+done_at: '2026-07-08T18:14:58Z'
 tok_est: null
 area: rollen-agenten
 neuer_ansatz_2026_07_08: 'Drei Versuche scheiterten, weil der Agent das JSON von Hand
