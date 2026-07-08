@@ -1,0 +1,114 @@
+# Knowledge Pack: web3-evm  (Domäne — EVM-Wallet-Rescue / EIP-7702)
+
+> **Scope:** Sprachunabhängiges EVM-Protokoll-/Domänenwissen für ein Wallet-Rescue-Tool (kompromittierte Wallets sichern, bevor Sweeper-Bots die Assets abziehen). WAS + Fallstricke — **keine** sprachspezifischen Code-Idiome (die folgen aus dem Sprach-Pack des gewählten Stacks, z. B. `python.md`).
+> **Stand:** Bootstrap Juli 2026, ausschließlich aus Primärquellen (offizielle EIP-Specs, Anbieter-Docs, offizielle Repos/Blogs). Punkte, die sich nicht primärquellen-verifizieren ließen, sind explizit als **Vorbehalt** markiert — nicht als Fakt behaupten, vor Implementierung selbst nachprüfen.
+> **Kern-Reviewer-Fokus:** Rescue ist ein sicherheitskritisches Werkzeug — der größte Teil dieses Packs ist NICHT "wie baue ich Feature X", sondern "welche Fallen zerstören genau das, was gerettet werden soll" (§7).
+
+Regel-IDs: `web3-evm/R<NN>`.
+
+---
+
+## Coder-Guidance
+
+### 1. EIP-7702 (Set Code for EOAs, Pectra)
+
+- `web3-evm/R01` — Neuer Transaktionstyp `0x04` ("set code transaction") erlaubt einem EOA, per **Authorization-Tuple** `[chain_id, address, nonce, y_parity, r, s]` auf eine Implementierungs-Adresse zu **delegieren**. Der EOA behält Adresse + eigenen Private Key. Nach dem Setzen enthält `eth_getCode(eoa)` den 23-Byte-Marker `0xef0100 || address` (`0xef` ist laut EIP-3541 als Contract-Code verboten → eindeutig als Delegation-Indicator erkennbar, kein regulärer Contract kann diesen Code tragen). Reset auf reinen EOA: Authorization-Tuple mit `address = 0x0000…0000` signieren. Quelle: [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702)
+- `web3-evm/R02` — Signatur-Nachricht ist exakt `keccak(MAGIC || rlp([chain_id, address, nonce]))` mit `MAGIC = 0x05`; Autorität wird per `ecrecover` wiederhergestellt. Das MAGIC-Prefix trennt 7702-Signaturen strikt von normalen Tx-Signaturen (kein Cross-Type-Replay). Eine falsche Feldreihenfolge oder ein fehlendes MAGIC-Byte macht die Signatur ungültig/unsicher. Quelle: [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702)
+- `web3-evm/R03` — `chain_id = 0` im Authorization-Tuple gilt **universell über alle Chains** ("universal deployment") → erhöhtes Cross-Chain-Replay-Risiko. Ein spezifischer `chain_id` beschränkt die Autorisierung auf genau diese Chain — für Rescue-Zwecke ist ein expliziter, chain-spezifischer Wert der sichere Default. Quelle: [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702)
+- `web3-evm/R04` — **Aktivierung Ethereum Mainnet: 7. Mai 2025 (Pectra, Epoch 364032).** Für L2s primärquellen-**verifiziert**: OP-Stack-Mainnet-Superchain (Base, OP Mainnet) via **Isthmus-Hardfork, Fr. 9. Mai 2025, 16:00:01 UTC**; Arbitrum One + Nova via **ArbOS 40 "Callisto", live 18. Juni 2025** (inkl. EIP-7702). **Vorbehalt:** Für Polygon zkEVM, Scroll und Linea kursieren Sekundärquellen-Angaben ("post-Pectra-Rollout bis Mitte 2025"), aber keine primärquellen-bestätigten Aktivierungsdaten gefunden — vor Deploy auf diesen Chains die jeweilige offizielle Upgrade-Doku direkt prüfen. Quellen: [Optimism Docs — Upgrade 15 Isthmus](https://docs.optimism.io/notices/upgrade-15) · [Arbitrum Docs — ArbOS 40 Callisto](https://docs.arbitrum.io/run-arbitrum-node/arbos-releases/arbos40) · [EF Pectra Mainnet Announcement](https://blog.ethereum.org/2025/04/23/pectra-mainnet)
+- `web3-evm/R05` — Nonce der Autorität wird bei Verarbeitung des Authorization-Tuples um 1 erhöht — **separat** vom Tx-Nonce des Senders führen; bei Self-Sponsoring (Autorität == Tx-Sender) existieren Sonderregeln für den Nonce-Versatz. Ein delegierter EOA kann während der Ausführung `CREATE` aufrufen → Nonce kann sich innerhalb einer Tx mehrfach erhöhen. Quelle: [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702)
+
+### 2. Flashbots (Mainnet-Rescue ohne Mempool-Exposition)
+
+- `web3-evm/R06` — Ein **Bundle** ist ein Array streng geordneter, signierter Transaktionen, das atomar in genau einem Block landet oder gar nicht — nie im öffentlichen Mempool. `eth_sendBundle`-Parameter: `txs` (max. 100, ≤300 KB), `blockNumber`, optional `minTimestamp`/`maxTimestamp`, `revertingTxHashes`, `replacementUuid`. Quelle: [Flashbots Docs — Send Tx & Bundles](https://docs.flashbots.net/guide-send-tx-bundle)
+- `web3-evm/R07` — `eth_callBundle` simuliert das Bundle gegen einen `stateBlockNumber` und liefert Gas/Value-Transfers **vor** dem echten Senden — als Trockenlauf zwingend einplanen, bevor ein Bundle gesendet wird. Quelle: [Flashbots Docs — RPC Endpoint](https://docs.flashbots.net/flashbots-auction/advanced/rpc-endpoint)
+- `web3-evm/R08` — Auth-Header `X-Flashbots-Signature: <address>:<signature>` ist ein EIP-191-signierter **Reputations-Identifier**, KEIN Fund-Key — dieser Signing-Key darf nie mit einem Wallet-/Fund-Key verwechselt oder vermischt werden. Quelle: [Flashbots Docs — RPC Endpoint](https://docs.flashbots.net/flashbots-auction/advanced/rpc-endpoint)
+- `web3-evm/R09` — **Searcher-sponsored-tx-Pattern:** Bundle strikt geordnet — (1) Sponsor-Tx (sicherer Account → kompromittierter Account, reines ETH-Funding), (2) Executor-Tx(s), signiert mit dem kompromittierten Key, verbrauchen die frisch erhaltene ETH ausschließlich als Gas und bewegen Assets im **selben Block**. Seit EIP-1559 muss jede Tx mind. `baseFee` zahlen → ein Zero-Gas-Sweep-Trick ist tot, weshalb dieses Sponsor-Pattern nötig ist. Quelle: [flashbots/searcher-sponsored-tx](https://github.com/flashbots/searcher-sponsored-tx)
+- `web3-evm/R10` — **Netzwerk-Support (primärquellen-verifiziert, Stand Juli 2026):** Flashbots Protect RPC + Bundle-Relay unterstützen laut aktueller Doku **ausschließlich Ethereum Mainnet + Sepolia** (kein Layer-2, keine Ankündigung eines konkreten L2-Termins gefunden). **Rescue auf L2 kann NICHT auf Flashbots-Bundles bauen** — dort greift stattdessen der reine Atomaritäts-Schutz einer EIP-7702/ERC-7821-Batch-Tx (§4/§7). Quellen: [Flashbots Docs — Protect Quick Start](https://docs.flashbots.net/flashbots-protect/quick-start) · [Flashbots Docs — RPC Endpoint](https://docs.flashbots.net/flashbots-auction/advanced/rpc-endpoint)
+
+### 3. Foundry / Anvil (Fork-Simulation)
+
+- `web3-evm/R11` — `anvil --fork-url <rpc>` startet einen lokalen Node, der State lazy von einem Remote-RPC nachlädt; `--fork-block-number` fixiert einen deterministischen Fork-Punkt. Ein Archive-fähiger RPC-Provider ist nötig, sonst schlagen Zugriffe auf alte Blöcke fehl. Quelle: [Anvil Reference](https://getfoundry.sh/anvil/reference/)
+- `web3-evm/R12` — `anvil_impersonateAccount <addr>` erlaubt das Senden von Txs im Namen einer fremden Adresse **ohne** deren Private Key — ausschließlich für Simulation/Test, niemals im produktiven Rescue-Pfad. Ein simulierter "Erfolg" beweist nur die Transferlogik, **nicht** realen Key-Besitz. Quelle: [Foundry Book — Cheatcodes](https://book.getfoundry.sh/cheatcodes)
+- `web3-evm/R13` — `evm_snapshot` liefert eine Snapshot-ID, `evm_revert(id)` setzt den kompletten EVM-State zurück (löscht alle danach erzeugten Snapshots) — vor jeder Simulationsvariante snapshotten, nach Fehlschlag reverten für reproduzierbare, isolierte Läufe. Quelle: [Foundry — State Snapshots](https://www.getfoundry.sh/reference/cheatcodes/state-snapshots)
+- `web3-evm/R14` — Ein Fork simuliert NICHT: (a) künftige/externe Zustandsänderungen (Oracle-Preise, fremde Txs, Sweeper-Reaktion), (b) upgradebare Proxies deren Implementierung sich real nach dem Fork-Punkt ändert, (c) exakte reale Gas-/`baseFee`-Dynamik, (d) reale Mempool-Race gegen einen Sweeper. Ein grüner Fork-Testlauf ist notwendig, aber keine hinreichende Erfolgsgarantie. Quelle: [Anvil Reference](https://getfoundry.sh/anvil/reference/)
+
+### 4. Solady — ERC-7821 (Minimal Batch Executor) als 7702-Delegate
+
+- `web3-evm/R15` — ERC-7821-Interface: `execute(bytes32 mode, bytes executionData)` (payable); `executionData` dekodiert zu `Call[]` (optional `+ bytes opData`) via `abi.decode`. `Call = {address to; uint256 value; bytes data}`, `to == address(0)` wird als `address(this)` interpretiert. Ist `opData` leer, SOLL die Implementierung `msg.sender == address(this)` verlangen; ist `opData` gesetzt, autorisiert eine darin enthaltene Signatur einen externen Caller. Quellen: [EIP-7821 Spec](https://eips.ethereum.org/EIPS/eip-7821) · [Solady ERC7821.sol](https://github.com/vectorized/solady/blob/main/src/accounts/ERC7821.sol)
+- `web3-evm/R16` — **`mode`-Byte-Layout verifiziert** (übereinstimmend aus EIP-7821-Spec und `ERC7821.sol`): `bytes32 mode` = `[0]` `0x01` (Batch-Call) · `[1]` `0x00` (Revert bei jedem Fehler) · `[2..5]` reserviert (ERC-7579) · `[6..9]` unterscheidet den Sub-Modus · `[10..31]` frei/unused. Die drei definierten Werte: **Single Batch, kein `opData`** → `0x0100000000` + Nullen in `[6..9]`; **Single Batch mit `opData`** → `[6..9] = 0x78210001`; **Batch-of-Batches** → `[6..9] = 0x78210002`. Für Rescue: den All-or-nothing-Single-Batch-Modus (kein `opData`, `msg.sender == address(this)`) verwenden — kein Teil-Erfolg möglich. Quellen: [EIP-7821 Spec](https://eips.ethereum.org/EIPS/eip-7821) · [Solady ERC7821.sol](https://github.com/vectorized/solady/blob/main/src/accounts/ERC7821.sol)
+- `web3-evm/R17` — **Audit-Scope differenziert (verifiziert):** `EIP7702Proxy.sol` (Coinbase) durchlief eine **eigene, separate** Cantina-Competition (20.–25. März 2025, Scope exakt `EIP7702Proxy.sol` + `DefaultReceiver.sol` + `NonceTracker.sol` + `IAccountStateValidator.sol` + `CoinbaseSmartWalletValidator.sol`, 120 Findings; `CoinbaseSmartWallet` selbst explizit **außerhalb** des Scopes). Für `ERC7821.sol` (Solady) konnte **keine** Bestätigung gefunden werden, dass es Teil des allgemeinen Cantina/Spearbit/Coinbase-Solady-Audits war (Auditzeitraum 3. Dez. 2024 – 12. Jan. 2025; alle gefundenen Scope-Beschreibungen nennen SignatureCheckerLib/Lifebuoy/ERC721/ERC4337/Timelock/P256/LibClone/ERC20/ERC1967Factory, nie ERC7821) — zusätzlich zeigt die Commit-Historie von `ERC7821.sol` substanzielle Änderungen **nach** Auditende (1. Apr. 2025, 11. Jul. 2025). **Vorbehalt:** `ERC7821.sol` als Delegate-Implementierung NICHT pauschal als "vom Coinbase-Solady-Audit abgedeckt" behandeln — eigene gründliche Prüfung/Tests einplanen, ggf. das PDF direkt gegenlesen. Quellen: [Cantina — EIP7702Proxy Competition](https://cantina.xyz/competitions/b0a948cd-c861-4807-b36e-d680d82598bf) · [Cantina — Solady Portfolio](https://cantina.xyz/portfolio/7e2e1e8b-fdbd-4fa4-9368-7916ad97e3e8) · [Solady Commit-Historie ERC7821.sol](https://github.com/Vectorized/solady/commits/main/src/accounts/ERC7821.sol) · [Audit-PDF im Repo](https://github.com/Vectorized/solady/blob/main/audits/cantina-spearbit-coinbase-solady-report.pdf)
+- `web3-evm/R18` — **Lizenz verifiziert:** `ERC7821.sol` trägt exakt `// SPDX-License-Identifier: MIT` als einzige Lizenzangabe im Dateikopf, keine zusätzliche Copyright-Kopfzeile. MIT-Auflage bei Vendoring: Lizenztext/-hinweis erhalten, keine Copyleft-Pflicht. Quelle: [Solady ERC7821.sol (raw)](https://raw.githubusercontent.com/Vectorized/solady/main/src/accounts/ERC7821.sol)
+- `web3-evm/R19` — Solady macht **keine** klassischen SemVer-Releases/Tags — es existiert kein "der eine" empfohlene Pin-Commit, der hier statisch fixierbar wäre. Vor Vendoring per Foundry (`forge install vectorized/solady`) explizit auf einen **konkreten Commit-Hash** pinnen (kein Floating `main`), diesen zum jeweiligen Implementierungszeitpunkt selbst auswählen und gegen die dann aktuelle Commit-Historie/den Audit-Stand prüfen. **Vorbehalt:** kein fixer Commit-Hash aus diesem Pack übernehmbar. Quelle: [Solady Repo](https://github.com/Vectorized/solady)
+
+### 5. Asset-Diagnose (read-only)
+
+- `web3-evm/R20` — `eth_getCode`-Deutung: `0x`/leer → reiner EOA; beginnt mit `0xef0100` → 7702-delegierter EOA, nächste 20 Byte = Delegate-Adresse (legitim ODER Sweeper); sonstiger nicht-leerer Code → Contract-Wallet (Safe/4337 o. ä.). Quelle: [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702)
+- `web3-evm/R21` — ERC-165 `supportsInterface(bytes4)` per `eth_call`/STATICCALL (Selektor `0x01ffc9a7` = ERC-165 selbst) identifiziert Token-Typ (ERC-721/ERC-1155) verlässlicher als Heuristik. Quelle: [EIP-165](https://eips.ethereum.org/EIPS/eip-165)
+- `web3-evm/R22` — Ownership/Balance rein lesend abfragen: `ownerOf(tokenId)` (ERC-721), `balanceOf(addr)` (ERC-20), `balanceOf(addr, id)` (ERC-1155) — alles via `eth_call`, keine Signatur, kein State-Change. Diagnose-Phase strikt auf `eth_call`/`eth_getCode` beschränken, nie signieren.
+- `web3-evm/R23` — Ein `eth_call`-Trockenlauf des geplanten `transfer`/`safeTransferFrom` gegen `latest` (oder Fork) filtert offensichtlich nicht-transferierbare Assets (Pausable, Blacklist, Freeze, fehlendes Approval, Soulbound) — Erfolg im `eth_call` ist aber **keine** Garantie für reale Transferierbarkeit (State kann sich zwischen Simulation und realer Tx ändern).
+
+### 6. Bewertungs-/Daten-APIs
+
+- `web3-evm/R24` — Alchemy: RPC (inkl. Archive/Fork-Quelle) + Token-API + NFT-API (`getNFTsForOwner` v3). **`alchemy-sdk-js` ist deprecated und wird Januar 2026 archiviert** → gegen REST-Endpunkte oder einen aktuell gewarteten Client bauen, nicht gegen das alte SDK. Quelle: [alchemy-sdk-js Repo](https://github.com/alchemyplatform/alchemy-sdk-js)
+- `web3-evm/R25` — CoinGecko für Krypto-/ETH-Fiat-Preise; Demo-Plan gratis (100 calls/min, 10k/Monat) — Rate-Limit + Retry/Backoff einplanen. Quelle: [CoinGecko API](https://www.coingecko.com/en/api)
+- `web3-evm/R26` — OpenSea API v2 als NFT-Cross-Check (Collection/Metadata/NFTs-by-Owner); kostenlos, aber API-Key nur per Antragsformular. Quelle: [OpenSea API Docs](https://docs.opensea.io/reference/get_nft)
+- `web3-evm/R27` — **Reservoir hat NFT-/API-Services zum 15. Oktober 2025 eingestellt** (Ankündigung 24.04.2025), Migrationsempfehlung Alchemy/0xSequence — Reservoir NICHT mehr als NFT-Preis-/Discovery-Quelle einplanen. **Vorbehalt:** die konkrete Floor-Price-Feldabdeckung je Anbieter (Alchemy/OpenSea/CoinGecko) für 2026 wurde nicht einzeln verifiziert — vor Nutzung gegenprüfen; Preis-/Bewertungsquellen als austauschbare Adapter bauen, Rescue-Entscheidung nie von einem einzelnen Preis-Feed abhängig machen. Quelle: [Reservoir-Shutdown-Bericht](https://crypto.news/reservoir-infra-provider-for-coinbase-and-metamask-shuts-down-nft-services/)
+
+### 7. Sicherheitsfallen Wallet-Rescue (Kern des Reviewer-Fokus)
+
+- `web3-evm/R28` — **Fremde Private Keys signieren ausschließlich client-seitig** (Browser/lokal beim Betroffenen) — nie an einen Server übertragen, loggen oder persistieren. Serverseitig sieht man höchstens die fertig signierte Tx. Quelle: [MyCrypto Anti-Sweeper Guide](https://blog.mycrypto.com/how-to-beat-an-ethereum-based-sweeper-and-recover-your-assets/)
+- `web3-evm/R29` — Sweeper-Bots beobachten kompromittierte Accounts 24/7 auf Mempool-Ebene und ziehen eingehende ETH ab, bevor sie für Gas genutzt werden kann. **Atomarität ist der eigentliche Schutz, nicht Unsichtbarkeit:** sowohl Flashbots-Bundle (§2) als auch 7702/ERC-7821-Batch-Tx (§4) koppeln Funding + Asset-Rettung untrennbar im selben Block — selbst wenn der Sweeper alles sieht, kann er in eine atomare Ausführung nicht dazwischenfunken. Quellen: [OneKey — Sweeping Bots](https://onekey.so/blog/ecosystem/what-are-sweeping-bots/) · [MetaMask — Fighting Sweeper Bots](https://support.metamask.io/stay-safe/protect-yourself/fighting-back-against-sweeper-bots/)
+- `web3-evm/R30` — Eine bereits **bestehende, unbekannte 7702-Delegation** ist ein Signal für ein vollständig kompromittiertes Wallet — reines "Revoken" (Reset auf `address=0`) reicht nicht als alleinige Maßnahme, wenn die Delegation bereits einen automatischen Sweeper-Contract adressiert, der Assets im selben Block drained, in dem sie ankommen. Delegate-Adresse vor Nutzung gegen bekannte, geauditete Implementierungen pinnen/verifizieren. Quelle: [Relay Support — Malicious EIP-7702 Delegations](https://support.relay.link/en/articles/12213430-malicious-eip-7702-delegations-and-how-to-stay-safe)
+- `web3-evm/R31` — **Sponsor-Hot-Wallet-Hygiene:** minimal dotieren (nur benötigtes Gas aus Simulation), Key strikt getrennt von Flashbots-Signing-Key und Ziel-/Fee-Empfänger-Adresse, regelmäßig rotieren.
+- `web3-evm/R32` — **Startup-Assertion Key→Adresse:** beim Laden eines Keys sofort prüfen, dass die abgeleitete Adresse == erwartete kompromittierte Adresse; harter Abbruch bei Mismatch — verhindert versehentliches Signieren mit falschem Key oder Arbeiten an falscher Adresse.
+- `web3-evm/R33` — Rollen strikt trennen: Ziel-/"Safe"-Adresse (wohin gerettet wird), Sponsor-Adresse (zahlt Gas) und Flashbots-Reputations-Key dürfen sich nie in einem einzigen Key vermischen.
+- `web3-evm/R34` — Auf Mainnet: Flashbots-Bundle (§2). Auf L2 (kein Flashbots-Support, R10): 7702/ERC-7821-Batch-Atomarität (§4) als Ersatzmechanismus — das reine "kein öffentlicher Mempool"-Argument von Flashbots gilt dort nicht, es muss auf reine Tx-Atomarität ausgewichen werden.
+- `web3-evm/R35` — Rescue-Transfers als All-or-nothing bauen (kein Pfad, der ETH ungeschützt im kompromittierten Account zurücklässt); direkte `transfer`/`safeTransferFrom` bevorzugen statt `approve`+`transferFrom`, damit kein stehendes Approval an Dritte als Nebeneffekt entsteht.
+
+---
+
+## Reviewer-Checklist
+
+**Critical (Rescue-Sicherheitsfallen, §7 — schwerstes Gewicht):**
+- Kein privater Schlüssel eines fremden/kompromittierten Wallets verlässt den Client — kein Key/Seed in Server-Requests, Logs, Fehlermeldungen, Persistenz, Telemetrie (`web3-evm/R28`).
+- Rescue wird ausschließlich atomar ausgeführt (Flashbots-Bundle auf Mainnet ODER 7702/ERC-7821-Batch auf L2) — kein Zwischenzustand, in dem ETH ungeschützt im kompromittierten Account liegt (`web3-evm/R29`, `R34`, `R35`).
+- Startup-Assertion Key→erwartete Adresse fehlt oder ist kein Hard-Fail (`web3-evm/R32`).
+- Eine bestehende 7702-Delegation wird NICHT erkannt/behandelt, oder das Wallet wird nach Fund einer unbekannten Delegation nur "revoked" statt als vollkompromittiert eingestuft (`web3-evm/R30`).
+- Sponsor-Key, Flashbots-Signing-Key und Rescue-Ziel-/Fee-Adresse sind nicht sauber getrennt (`web3-evm/R31`, `R33`).
+- **Upgradebare Proxies flaggen:** ist die diagnostizierte Delegate-/Wallet-Implementierung ein upgradebarer Proxy (ERC-1967 o. ä.), dessen Verhalten sich nach Diagnose-/Simulationszeitpunkt real ändern kann → explizit im Befund markieren, nicht stillschweigend als stabil behandeln (`web3-evm/R14`, `R17`).
+- `anvil_impersonateAccount` oder andere Simulations-Cheatcodes im produktiven Rescue-Pfad statt nur in Tests (`web3-evm/R12`).
+- **Vorsicht-Default bei unlesbaren/uneindeutigen Signalen:** liefert `eth_getCode`/ERC-165/Delegate-Verifikation ein mehrdeutiges oder unbekanntes Ergebnis (z. B. Code-Präfix weder leer noch `0xef0100`-konform, Delegate-Adresse nicht gegen eine bekannte Implementierung verifizierbar, Audit-Scope einer verwendeten Library unklar wie bei `ERC7821.sol`/`R17`) → das Tool MUSS konservativ abbrechen/warnen statt automatisch fortzufahren. Ein Default "einfach weitermachen" bei unklarem Signal ist ein Critical-Befund.
+
+**Important:**
+- `eth_callBundle`/Fork-Trockenlauf fehlt vor einer echten Bundle-/Batch-Ausführung (`web3-evm/R07`, `R11`–`R13`, Test-Approach unten).
+- Delegate-/Executor-Implementierung ist kein gepinnter Commit einer bekannten, quellenoffenen Implementierung (`web3-evm/R19`).
+- ERC-7821-Batch läuft nicht im All-or-nothing-Single-Batch-Modus (`R16`), sondern in einem Modus, der Teil-Erfolge zulässt.
+- Preis-/Bewertungsquelle ist die einzige Grundlage einer Rescue-Entscheidung, statt nur Anzeige/Best-Effort (`web3-evm/R27`).
+- `alchemy-sdk-js` oder Reservoir als Abhängigkeit neu eingeführt (`web3-evm/R24`, `R27`).
+- API-Keys für Bewertungs-APIs im Code/Log statt Env/Secret-Store.
+- Chain-ID im Authorization-Tuple unbegründet auf `0` gesetzt statt chain-spezifisch (`web3-evm/R03`).
+
+**Suggestion:**
+- Fehlende Rate-Limit-/Retry-Behandlung bei Preis-/Indexer-APIs (`web3-evm/R25`).
+- Delegation nach abgeschlossenem Rescue nicht auf `address=0` zurückgesetzt, obwohl der EOA nicht dauerhaft Smart Account bleiben soll (`web3-evm/R01`).
+
+---
+
+## Test-Approach
+
+- **Anvil-Fork-Simulation ist ein Pflicht-Gate vor jeder echten Rescue-Ausführung** — kein Bundle/keine Batch-Tx geht gegen echte Mainnet-/L2-Infrastruktur, bevor sie erfolgreich gegen einen Fork bei aktueller Blockhöhe durchgelaufen ist (`web3-evm/R11`–`R14`). Ablauf: (1) Fork bei `latest`/`--fork-block-number`, (2) `anvil_impersonateAccount` auf den kompromittierten Account, (3) geplante Rescue-Tx-Sequenz (Sponsor-Funding + Asset-Move bzw. ERC-7821-Batch) ausführen, (4) Assets im Ziel-Account + keine sweepbare Zwischen-ETH im kompromittierten Account verifizieren, (5) `evm_revert` für Wiederholung mit Varianten.
+- Für Mainnet-Bundles zusätzlich `eth_callBundle` als eigenständigen Zwischenschritt (Gas/Value-Prüfung) auswerten, bevor überhaupt zum Fork-Test übergegangen wird (`web3-evm/R07`).
+- Diagnose-Pfad (§5) separat testen: Assertion, dass ausschließlich `eth_call`/`eth_getCode` aufgerufen werden (kein `eth_sendTransaction`/Signatur-Call) — z. B. per Mock/Spy auf den RPC-Client in der Diagnose-Phase.
+- Negativtest für die Startup-Assertion (`web3-evm/R32`): falscher Key → Tool muss hart abbrechen, keine Tx darf gebaut werden.
+- Negativtest für unbekannte 7702-Delegation (`web3-evm/R30`): simulierter Account mit fremdem `0xef0100`-Delegate → Tool muss den Account als vollkompromittiert flaggen, nicht automatisch "weiter rescuen".
+- Fork-Limitationen (`web3-evm/R14`) im Testplan dokumentieren: ein grüner Fork-Test ist notwendige, aber keine hinreichende Bedingung für den realen Rescue-Erfolg — reale Ausführung bleibt ein zusätzliches, überwachtes Risiko (Race gegen Sweeper, reale Gas-Dynamik).
+
+---
+
+## Offene Vorbehalte (nicht abschließend verifiziert — vor Nutzung selbst prüfen)
+
+1. Exakte 7702-Aktivierungsdaten für Polygon zkEVM, Scroll, Linea (nur Sekundärquellen gefunden, siehe `R04`).
+2. Ob `ERC7821.sol` Teil des allgemeinen Cantina/Spearbit/Coinbase-Solady-Audits war, bleibt unbestätigt (siehe `R17`) — Audit-PDF selbst gegenlesen.
+3. Es gibt keinen fixen, hier zitierbaren "empfohlenen" Solady-Pin-Commit (siehe `R19`) — Commit-Wahl ist Implementierungszeitpunkt-abhängig.
+4. Floor-Price-Feldabdeckung je NFT-Daten-Anbieter für 2026 nicht einzeln verifiziert (siehe `R27`).
