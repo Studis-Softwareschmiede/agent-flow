@@ -203,7 +203,8 @@ Ablauf         1. Spec-Sektion + AC + Vorgaben + Lessons + Pack lesen
                   (@trace <spec-slug>#AC<n>[,BR-NNN]) für die AC/BR, die er abdeckt.
                4. Spec-Drift vermeiden: kleine Lücke (Edge-Case/Feld/Statuscode) → Spec in
                   docs/specs/ mitpflegen; strukturell/Scope → als SPEC-LÜCKE melden
-               5. Self-Test: profile.build (+ Smoke); rot → fixen, NICHT handoff
+               5. Self-Test (targeted): nur vom Diff betroffene Tests + Lint auf geänderten
+                  Dateien — nicht die komplette Suite (Tester-Gate exklusiv); rot → fixen, NICHT handoff
 Output/Handoff Done:<1 Zeile> | Files:<… inkl. docs/specs falls präzisiert>
                Spec:<unverändert|AC<n> präzisiert|SPEC-LÜCKE:<…>> | Self-Test:<…>
                Review-Handoff: REVIEW REQUIRED (#<n>, Iteration <N>)
@@ -257,7 +258,10 @@ Lese-Pflichten • .claude/profile.md  (build/test/lint/smoke-Befehle)
                • knowledge/<language>.md → „Test-Approach"
 Tools          Read, Bash, Grep, Glob   (ausführen + prüfen; KEIN Edit/Write am Code)
 Ablauf         1. profile.build → muss grün
-               2. profile.test  (Default Smoke; profil-erweiterbar auf echte Suite)
+               2. profile.test — VOLLE Suite (Default Smoke; profil-erweiterbar auf echte Suite),
+                  NICHT auf vom Diff betroffene Tests begrenzt (einzige Stelle mit Voll-Garantie
+                  pro Story; coder-Self-Test ist bewusst nur targeted, s. Abschnitt 2)
+               2a. profile.lint — VOLLE Lint über das gesamte Projekt (nicht nur geänderte Dateien)
                3. AC-Abgleich + Coverage-Gate: Trace-Tags via Pack-Rezept (knowledge/<lang>.md →
                   Spec-Tagging) parsen. Jede genannte AC erfüllt UND von ≥1 Test getaggt; jede von diesen
                   AC referenzierte BR-NNN von ≥1 Test gedeckt. Lücke → FAIL (Grund: „TRACE-GAP: <spec>#<crit>").
