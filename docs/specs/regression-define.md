@@ -2,7 +2,7 @@
 id: regression-define
 title: Regressions-Definier-Agent — Spec-Lesen, NL-Vorschlag, Redaktionsschleife, Playwright-Übersetzung
 status: active
-version: 2
+version: 3
 spec_format: use-case-2.0
 area: rollen-agenten
 ---
@@ -54,6 +54,7 @@ Testdefinition ohne Handarbeit am Testcode: der Agent liest die Specs eines Bere
 - **AC9** — **Slash-Command-Einstieg:** `skills/regression-define/SKILL.md` stellt den Aufruf `/agent-flow:regression-define` bereit (Muster der bestehenden Skills unter `skills/`) und **dispatcht den `regression-define`-Agenten** (`agents/regression-define.md`, Task-Tool) mit dem gemäss Verträge-Abschnitt geparsten Eingabe-Vertrag. Die Skill-Datei enthält **keine** Test-/Übersetzungslogik — sie reicht nur durch (Diskriminator `modus`, `projekt`, `bereich`/`verbund`, `stichworte`) und delegiert. Ohne diesen Skill ist der Agent als Slash-Command nicht aufrufbar (der headless dev-gui-Runner S-307 läuft sonst ins Leere).
 - **AC10** — **Argument-/STDIN-Vertrag:** Der Skill parst den Diskriminator `modus`. In `modus: vorschlag` reicht er `projekt`, `bereich`/`verbund` und optionale `stichworte` als **Aufruf-Argumente** durch. In `modus: uebersetzen` liest er den `redigierter_vorschlag` (JSON, dieselbe Struktur wie das Rückgabeformat) aus **STDIN** — nicht als Inline-Argument, weil die redigierte Fassung beliebig gross werden kann —, sodass der dev-gui-Runner das redigierte JSON via STDIN übergeben kann. Fehlt in `modus: uebersetzen` der STDIN-`redigierter_vorschlag` → der Skill lehnt mit klarer Meldung ab, statt einen leeren/erfundenen Vorschlag zu übersetzen.
 - **AC11** — **Resume-/Zweilauf-Verhalten (dev-gui S-307 Interrupt/Resume):** Der Einstieg unterstützt das zweiläufige Muster — Lauf 1 (`modus: vorschlag`) endet mit dem maschinenlesbaren Rückgabeformat für die Redaktionsschleife; nach der Owner-Redaktion knüpft Lauf 2 (`modus: uebersetzen`) an. Lauf 2 ist **selbst-tragend**: er arbeitet vollständig aus dem `uebersetzen`-Eingabe-Vertrag (`projekt` + `redigierter_vorschlag`) und **benötigt keinen** Zustand aus Lauf 1 (idempotent). Der Skill ist dabei mit `--resume`/Session-Resume kompatibel (der Runner darf denselben Kontext fortsetzen), erzwingt aber keinen Resume-Kontext.
+- **AC12** — **Headless-Ausgabe-Disziplin:** Die **finale Ausgabe eines Skill-Laufs** ist **ausschliesslich** das maschinenlesbare Rückgabeformat (JSON gemäss Verträge-Abschnitt) — **keine Prosa** davor oder danach, **keine Rückfragen** an einen Menschen. Der headless dev-gui-Runner (S-307, `RegressionDefineRunner`) parst genau diese Finalausgabe; jede natürlichsprachliche Zusammenfassung oder Rückfrage im Finaltext bricht das Parsen („Vorschlag konnte nicht gelesen werden") und hat headless keinen Adressaten. Anmerkungen, Empfehlungen und Grenzfälle (z. B. Bereichs-Grenzfall „Löschen gehört zu `deployment`" oder eine Verbund-Empfehlung) gehören in das dafür vorgesehene Feld `hinweise[]` des Rückgabeformats, **nicht** in Freitext. In `modus: uebersetzen` bleibt die Finalausgabe das definierte Ergebnis-Objekt (PR-Link + Secrets-/Nicht-datengetrieben-Status); auch hier keine umschliessende Prosa und keine Rückfragen.
 
 ## Verträge
 
@@ -95,6 +96,8 @@ Der `redigierter_vorschlag` (dieselbe Struktur wie das Rückgabeformat, vom Owne
 Headless-Konsument: dev-gui **S-307** (`RegressionDefineRunner`) startet genau diese beiden Läufe im Interrupt/Resume-Muster.
 
 ### Rückgabeformat Testvorschlag (dev-gui-Redaktionsschleife, maschinenlesbar)
+
+Die **finale Ausgabe** eines `vorschlag`-Laufs ist genau **dieses** JSON-Objekt und **nichts sonst** (AC12) — keine umschliessende Prosa, keine Rückfrage. Alle Anmerkungen/Empfehlungen/Grenzfälle wandern in das Feld `hinweise[]`.
 ```json
 {
   "projekt": "<repo>",
@@ -108,10 +111,13 @@ Headless-Konsument: dev-gui **S-307** (`RegressionDefineRunner`) startet genau d
       "beispieldaten": [ { "<feld>": "<wert>" } ]
     }
   ],
-  "target_vorschlag": "local|ephemeral-infra|url"
+  "target_vorschlag": "local|ephemeral-infra|url",
+  "hinweise": ["<Anmerkung/Empfehlung/Grenzfall in Alltagssprache>", "…"]
 }
 ```
-Nach der Owner-Redaktion wird dieselbe Struktur (redigiert) an den Agenten zurückgegeben und in Playwright-Artefakte übersetzt (AC4/AC5).
+- **`hinweise`** (Array, darf leer sein): trägt alle natürlichsprachlichen Anmerkungen, Empfehlungen und Grenzfall-Hinweise, die früher als Freitext/Rückfrage im Finaltext gelandet wären — z. B. „Löschen gehört fachlich eher zu `deployment`" oder eine Verbund-Empfehlung. Der dev-gui-Runner zeigt diese dem Owner in der Redaktionsschleife an, statt dass der Skill eine Rückfrage stellt (AC12). Keine offenen Fragen an einen Menschen — nur maschinenlesbare Hinweise.
+
+Nach der Owner-Redaktion wird dieselbe Struktur (redigiert, inkl. optional bereinigter `hinweise`) an den Agenten zurückgegeben und in Playwright-Artefakte übersetzt (AC4/AC5).
 
 ### Verbund-Spec-Auswahl (Präzisierung zu AC2)
 
