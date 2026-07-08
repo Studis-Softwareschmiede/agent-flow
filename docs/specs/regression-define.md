@@ -2,7 +2,7 @@
 id: regression-define
 title: Regressions-Definier-Agent — Spec-Lesen, NL-Vorschlag, Redaktionsschleife, Playwright-Übersetzung
 status: active
-version: 3
+version: 4
 spec_format: use-case-2.0
 area: rollen-agenten
 ---
@@ -54,7 +54,8 @@ Testdefinition ohne Handarbeit am Testcode: der Agent liest die Specs eines Bere
 - **AC9** — **Slash-Command-Einstieg:** `skills/regression-define/SKILL.md` stellt den Aufruf `/agent-flow:regression-define` bereit (Muster der bestehenden Skills unter `skills/`) und **dispatcht den `regression-define`-Agenten** (`agents/regression-define.md`, Task-Tool) mit dem gemäss Verträge-Abschnitt geparsten Eingabe-Vertrag. Die Skill-Datei enthält **keine** Test-/Übersetzungslogik — sie reicht nur durch (Diskriminator `modus`, `projekt`, `bereich`/`verbund`, `stichworte`) und delegiert. Ohne diesen Skill ist der Agent als Slash-Command nicht aufrufbar (der headless dev-gui-Runner S-307 läuft sonst ins Leere).
 - **AC10** — **Argument-/STDIN-Vertrag:** Der Skill parst den Diskriminator `modus`. In `modus: vorschlag` reicht er `projekt`, `bereich`/`verbund` und optionale `stichworte` als **Aufruf-Argumente** durch. In `modus: uebersetzen` liest er den `redigierter_vorschlag` (JSON, dieselbe Struktur wie das Rückgabeformat) aus **STDIN** — nicht als Inline-Argument, weil die redigierte Fassung beliebig gross werden kann —, sodass der dev-gui-Runner das redigierte JSON via STDIN übergeben kann. Fehlt in `modus: uebersetzen` der STDIN-`redigierter_vorschlag` → der Skill lehnt mit klarer Meldung ab, statt einen leeren/erfundenen Vorschlag zu übersetzen.
 - **AC11** — **Resume-/Zweilauf-Verhalten (dev-gui S-307 Interrupt/Resume):** Der Einstieg unterstützt das zweiläufige Muster — Lauf 1 (`modus: vorschlag`) endet mit dem maschinenlesbaren Rückgabeformat für die Redaktionsschleife; nach der Owner-Redaktion knüpft Lauf 2 (`modus: uebersetzen`) an. Lauf 2 ist **selbst-tragend**: er arbeitet vollständig aus dem `uebersetzen`-Eingabe-Vertrag (`projekt` + `redigierter_vorschlag`) und **benötigt keinen** Zustand aus Lauf 1 (idempotent). Der Skill ist dabei mit `--resume`/Session-Resume kompatibel (der Runner darf denselben Kontext fortsetzen), erzwingt aber keinen Resume-Kontext.
-- **AC12** — **Headless-Ausgabe-Disziplin:** Die **finale Ausgabe eines Skill-Laufs** ist **ausschliesslich** das maschinenlesbare Rückgabeformat (JSON gemäss Verträge-Abschnitt) — **keine Prosa** davor oder danach, **keine Rückfragen** an einen Menschen. Der headless dev-gui-Runner (S-307, `RegressionDefineRunner`) parst genau diese Finalausgabe; jede natürlichsprachliche Zusammenfassung oder Rückfrage im Finaltext bricht das Parsen („Vorschlag konnte nicht gelesen werden") und hat headless keinen Adressaten. Anmerkungen, Empfehlungen und Grenzfälle (z. B. Bereichs-Grenzfall „Löschen gehört zu `deployment`" oder eine Verbund-Empfehlung) gehören in das dafür vorgesehene Feld `hinweise[]` des Rückgabeformats, **nicht** in Freitext. In `modus: uebersetzen` bleibt die Finalausgabe das definierte Ergebnis-Objekt (PR-Link + Secrets-/Nicht-datengetrieben-Status); auch hier keine umschliessende Prosa und keine Rückfragen.
+- **AC12** — **Headless-Ausgabe-Disziplin (Datei ist der harte Vertrag, stdout nicht mehr):** Der headless dev-gui-Runner (S-307, `RegressionDefineRunner`) liest das maschinenlesbare Ergebnis **aus der per `ergebnis_datei=` übergebenen Datei** (AC13), **nicht** aus dem stdout-Finaltext der Skill-Session. Grund: `claude -p /agent-flow:regression-define` ist eine **äussere Session**, die den `regression-define`-Agenten als Sub-Agent (Task-Tool) dispatcht; der Sub-Agent liefert sauberes Rückgabeformat-JSON, aber die äussere Session fasst dieses Ergebnis konversationell in Prosa zusammen — im finalen stdout kommt dann kein parsebares JSON mehr vor (verifiziert 2026-07-08, zwei fehlgeschlagene E2E-Läufe; Instruktions-Härtungen wirkten nicht, weil eine orchestrierende Session ein Sub-Agent-Ergebnis von Natur aus zusammenfasst). Daher ist die **stdout-Prosa nicht mehr Vertragsgegenstand** (sie bleibt für Menschen im Terminal erlaubt und unschädlich); die frühere „Finaltext = nur JSON"-Forderung wird durch die Datei-Übergabe (AC13) **ersetzt, nicht verschärft**. Der `regression-define`-**Sub-Agent** liefert sein Ergebnis unverändert als reines Rückgabeformat-JSON an die Skill-Session zurück (keine Prosa im Agenten-Result, keine Rückfrage); die Skill-Session schreibt genau dieses JSON in die Datei (AC13). Anmerkungen, Empfehlungen und Grenzfälle (z. B. Bereichs-Grenzfall „Löschen gehört zu `deployment`" oder eine Verbund-Empfehlung) gehören in das Feld `hinweise[]` des Rückgabeformats, **nicht** in Freitext — headless hat eine Rückfrage keinen Adressaten.
+- **AC13** — **Datei-Übergabe des Ergebnis-JSON (`ergebnis_datei=`-Vertrag):** Der Skill akzeptiert in **beiden** Modi ein optionales Aufruf-Argument `ergebnis_datei=<absoluter-pfad>`. Ist es gesetzt, schreibt die Skill-Session das maschinenlesbare Ergebnis des Sub-Agenten **als reines JSON** an **genau diesen** Pfad (fester Pfad-Vertrag — der Runner bestimmt den Pfad, der Skill rät nichts hinzu): `modus: vorschlag` → das Rückgabeformat-JSON (siehe Verträge); `modus: uebersetzen` → das Ergebnis-Objekt-JSON (siehe „Output Modus `uebersetzen`"). Der Schreibvorgang ist **atomar** (Schreiben in eine Temp-Datei im selben Verzeichnis + `rename`), fehlende Elternverzeichnisse werden angelegt (`mkdir -p`). Konventioneller Pfad des Runners: `board/runs/regression-define/<lauf-id>.json` im Ziel-Projekt-Repo — bereits durch die bestehende `board/runs/`-Regel in `.gitignore` (feature-batch-orchestration, [[feature-batch-orchestration]] AC11) abgedeckt, also **nie** Teil der Git-Historie; eine eigene Gitignore-Zeile ist nicht nötig. **Rückwärtskompatibilität:** Fehlt `ergebnis_datei=` (menschlicher Direktaufruf ohne Runner) → der Skill schreibt **keine** Datei und gibt nur stdout aus — **kein** Fehler. Der Wert einer eventuell schon existierenden Datei wird beim Schreiben ersetzt (Überschreiben ist erlaubt, ein Lauf = ein Ergebnis).
 
 ## Verträge
 
@@ -83,21 +84,23 @@ Der Aufruf-Einstieg ist `skills/regression-define/SKILL.md` (Slash-Command `/age
 
 **Lauf 1 — `modus: vorschlag`** (Argumente):
 ```
-/agent-flow:regression-define modus=vorschlag projekt=<repo> (bereich=<bereich-id> | verbund=<verbund-name>) [stichworte=<w1,w2,…>]
+/agent-flow:regression-define modus=vorschlag projekt=<repo> (bereich=<bereich-id> | verbund=<verbund-name>) [stichworte=<w1,w2,…>] [ergebnis_datei=<absoluter-pfad>]
 ```
-Rückgabe: das maschinenlesbare Rückgabeformat (siehe unten) für die dev-gui-Redaktionsschleife.
+Rückgabe: das maschinenlesbare Rückgabeformat (siehe unten) für die dev-gui-Redaktionsschleife. Ist `ergebnis_datei=` gesetzt, schreibt der Skill dieses Rückgabeformat-JSON zusätzlich atomar an den übergebenen Pfad (AC13); der Runner liest **die Datei**, nicht stdout (AC12).
 
 **Lauf 2 — `modus: uebersetzen`** (redigierte Fassung via STDIN):
 ```
-echo '<redigierter_vorschlag-JSON>' | claude -p '/agent-flow:regression-define modus=uebersetzen projekt=<repo>'
+echo '<redigierter_vorschlag-JSON>' | claude -p '/agent-flow:regression-define modus=uebersetzen projekt=<repo> [ergebnis_datei=<absoluter-pfad>]'
 ```
-Der `redigierter_vorschlag` (dieselbe Struktur wie das Rückgabeformat, vom Owner editiert) kommt über **STDIN**, nicht als Inline-Argument (Grösse). Ergebnis: Playwright-Artefakte als PR/Commit (AC4–AC8). Lauf 2 ist selbst-tragend und `--resume`-kompatibel, aber nicht auf Lauf-1-Zustand angewiesen (AC11).
+Der `redigierter_vorschlag` (dieselbe Struktur wie das Rückgabeformat, vom Owner editiert) kommt über **STDIN**, nicht als Inline-Argument (Grösse). Ergebnis: Playwright-Artefakte als PR/Commit (AC4–AC8); ist `ergebnis_datei=` gesetzt, schreibt der Skill das Ergebnis-Objekt-JSON (siehe „Output Modus `uebersetzen`") atomar an den Pfad (AC13). Lauf 2 ist selbst-tragend und `--resume`-kompatibel, aber nicht auf Lauf-1-Zustand angewiesen (AC11).
 
-Headless-Konsument: dev-gui **S-307** (`RegressionDefineRunner`) startet genau diese beiden Läufe im Interrupt/Resume-Muster.
+**Datei-Übergabe-Vertrag (`ergebnis_datei=`, AC12/AC13):** Der Runner übergibt in beiden Läufen einen **absoluten Pfad** `ergebnis_datei=<pfad>` (konventionell `board/runs/regression-define/<lauf-id>.json`, gitignored via bestehender `board/runs/`-Regel). Der Skill schreibt das maschinenlesbare Ergebnis-JSON **genau** dorthin (atomar: tmp + `rename`, `mkdir -p` für Elternverzeichnisse) und liest der Runner **diese Datei** als Vertrag — nicht die stdout-Prosa der äusseren Session. Fehlt `ergebnis_datei=`, schreibt der Skill keine Datei (nur stdout, kein Fehler — Rückwärtskompatibilität für den menschlichen Direktaufruf).
+
+Headless-Konsument: dev-gui **S-307** (`RegressionDefineRunner`) startet genau diese beiden Läufe im Interrupt/Resume-Muster und liest je Lauf die `ergebnis_datei`.
 
 ### Rückgabeformat Testvorschlag (dev-gui-Redaktionsschleife, maschinenlesbar)
 
-Die **finale Ausgabe** eines `vorschlag`-Laufs ist genau **dieses** JSON-Objekt und **nichts sonst** (AC12) — keine umschliessende Prosa, keine Rückfrage. Alle Anmerkungen/Empfehlungen/Grenzfälle wandern in das Feld `hinweise[]`.
+Das **Ergebnis-Result des Sub-Agenten** in `modus: vorschlag` ist genau **dieses** JSON-Objekt und **nichts sonst** — keine umschliessende Prosa, keine Rückfrage. Alle Anmerkungen/Empfehlungen/Grenzfälle wandern in das Feld `hinweise[]`. Die Skill-Session schreibt **exakt dieses Objekt** in die `ergebnis_datei` (AC13), aus der der Runner es liest (AC12); die stdout-Prosa der äusseren Session ist nicht Vertragsgegenstand.
 ```json
 {
   "projekt": "<repo>",
@@ -118,6 +121,22 @@ Die **finale Ausgabe** eines `vorschlag`-Laufs ist genau **dieses** JSON-Objekt 
 - **`hinweise`** (Array, darf leer sein): trägt alle natürlichsprachlichen Anmerkungen, Empfehlungen und Grenzfall-Hinweise, die früher als Freitext/Rückfrage im Finaltext gelandet wären — z. B. „Löschen gehört fachlich eher zu `deployment`" oder eine Verbund-Empfehlung. Der dev-gui-Runner zeigt diese dem Owner in der Redaktionsschleife an, statt dass der Skill eine Rückfrage stellt (AC12). Keine offenen Fragen an einen Menschen — nur maschinenlesbare Hinweise.
 
 Nach der Owner-Redaktion wird dieselbe Struktur (redigiert, inkl. optional bereinigter `hinweise`) an den Agenten zurückgegeben und in Playwright-Artefakte übersetzt (AC4/AC5).
+
+### Output Modus `uebersetzen` (maschinenlesbar, Datei-Ergebnis-Objekt)
+
+Das **Ergebnis-Result des Sub-Agenten** in `modus: uebersetzen` ist genau **dieses** JSON-Objekt (PR-Link + Secrets-/Nicht-datengetrieben-Status + eventuelle Ablehnungen) — keine umschliessende Prosa, keine Rückfrage. Die Skill-Session schreibt es in die `ergebnis_datei` (AC13); der Runner liest die Datei (AC12).
+```json
+{
+  "modus": "uebersetzen",
+  "ziel": { "typ": "bereich|verbund", "id": "<bereich-id|verbund-name>" },
+  "artefakte": ["tests/regression/<bereich|verbund>/<suite>.spec.ts", "…"],
+  "secrets_ersetzt": ["<VAR_NAME>", "…"],
+  "nicht_datengetrieben": ["<suite>", "…"],
+  "abgelehnt": ["<Grund je nicht-materialisiertem Testfall>", "…"],
+  "pr": "<PR-Link | null>"
+}
+```
+- `secrets_ersetzt`, `nicht_datengetrieben`, `abgelehnt` sind Arrays und dürfen leer sein. `pr` ist `null`, wenn (noch) kein PR entstand (z. B. alles abgelehnt). Dieses Objekt ersetzt in der Datei-Übergabe das frühere Freitext-Block-Format des Agenten (`Ziel:`/`Secrets ersetzt:`/…); der menschliche stdout-Block bleibt für das Terminal erlaubt, ist aber nicht Vertragsgegenstand (AC12).
 
 ### Verbund-Spec-Auswahl (Präzisierung zu AC2)
 
@@ -146,4 +165,5 @@ Für `verbund: <verbund-name>` bestimmt der Agent die „Verbund-relevanten Spec
 - `knowledge/playwright.md` — Coder-Guidance, die der Agent beim Übersetzen lädt (`/train --bootstrap`-Folgeaktion).
 - dev-gui-Redaktionsschleife (separate dev-gui-Story) — konsumiert das Rückgabeformat.
 - `skills/regression-define/SKILL.md` — der Slash-Command-Einstieg (AC9–AC11), der diesen Agenten dispatcht; ohne ihn ist `/agent-flow:regression-define` nicht aufrufbar.
-- dev-gui **S-307** (`RegressionDefineRunner`) — headless Konsument, der den Slash-Command im Interrupt/Resume-Muster startet (Cross-Repo-Abhängigkeit).
+- dev-gui **S-307** (`RegressionDefineRunner`) — headless Konsument, der den Slash-Command im Interrupt/Resume-Muster startet und je Lauf die per `ergebnis_datei=` bestimmte Datei liest (AC12/AC13, Cross-Repo-Abhängigkeit).
+- [[feature-batch-orchestration]] AC11 — liefert die bestehende `board/runs/`-Gitignore-Regel, die den `ergebnis_datei`-Pfad (`board/runs/regression-define/<lauf-id>.json`) mit abdeckt; keine eigene Gitignore-Zeile nötig.
