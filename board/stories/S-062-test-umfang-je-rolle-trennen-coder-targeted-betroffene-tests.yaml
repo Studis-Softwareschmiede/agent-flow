@@ -2,7 +2,7 @@ id: S-062
 parent: F-019
 title: 'Test-Umfang je Rolle trennen: coder targeted (betroffene Tests + Lint), tester
   volle Suite + volle Lint'
-status: To Do
+status: Done
 priority: P2
 spec: docs/specs/test-scope-per-role.md
 implements:
@@ -24,9 +24,9 @@ estimate_note: 'S/M-Heuristik (score=7: 5 AC + 2 Komponenten agents/coder.md + a
   leer)'
 confidence: medium
 tok_est: null
-branch: null
-pr: null
+branch: worktree-agent-a73d18981f8bc5dca
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/321
 blocked_reason: null
 created_at: '2026-07-08T15:40:53Z'
-updated_at: '2026-07-08T15:41:09Z'
-done_at: null
+updated_at: '2026-07-08T16:07:35Z'
+done_at: '2026-07-08T16:07:22Z'
