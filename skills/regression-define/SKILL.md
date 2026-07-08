@@ -97,15 +97,60 @@ als Task-Result geliefert hat, **unverändert** an genau diesen Pfad:
 Der Sub-Agent selbst kennt `ergebnis_datei` nicht und schreibt nie eine Datei — er liefert weiterhin nur
 sauberes Rückgabeformat-JSON als Task-Result zurück; **du** als Skill-Session übernimmst das Schreiben.
 
+**Typografische Anführungszeichen in JSON-String-Werten (HART, Ursachen-Fix S-061):** Alle natürlichsprachlichen
+Werte, die der Sub-Agent liefert (`titel`, `schritte[]`, `pruefpunkte[]`, `hinweise[]`, Werte in `beispieldaten`,
+`abgelehnt[]`, `nicht_datengetrieben[]`, …) dürfen innerhalb des Textes **ausschließlich typografische**
+Anführungszeichen enthalten — deutsche „…" (bzw. ‚…' für die verschachtelte Ebene). Ein gerades `"` darf
+**nirgends innerhalb eines Wertes** vorkommen, sondern ausschließlich als JSON-Delimiter selbst. Enthält ein vom
+Sub-Agenten gelieferter Wert ein gerades `"` (z. B. weil eine Quell-Spec oder Owner-Eingabe es enthielt), ersetzt
+du es beim Übernehmen in die zu schreibende Struktur durch die passende typografische Variante (`„`/`"` außen,
+`‚`/`'` innen) — **bevor** du serialisierst. Das entfernt die Fehlerquelle strukturell: gerade Anführungszeichen
+brechen sonst den umschließenden JSON-String, wenn sie unescaped in einen von Hand zusammengesetzten JSON-Text
+geraten (die Ursache der drei gescheiterten Voranläufe dieser Story).
+
 **Vorgehen (fester Pfad-Vertrag, kein eigenes Erraten des Pfads):**
 1. Elternverzeichnis von `ergebnis_datei` sicherstellen: `mkdir -p "$(dirname "<ergebnis_datei>")"`.
-2. **Atomar schreiben:** das JSON zuerst in eine Temp-Datei **im selben Verzeichnis** schreiben (z. B.
-   `<ergebnis_datei>.tmp.$$`), dann per `mv` (rename) auf `<ergebnis_datei>` verschieben — kein direktes
-   Schreiben auf den Zielpfad, damit ein lesender Runner nie eine halbgeschriebene Datei sieht.
-3. Existiert am Zielpfad bereits eine Datei, wird sie durch den `rename` ersetzt (Überschreiben ist erlaubt
+2. **Erstschreib-Schritt — PFLICHT `Write`-Werkzeug, kein Shell-Interpolieren (HART, kein Interpretationsspielraum):**
+   das Task-Result des Sub-Agenten (der Text, den du gerade im Kontext dieser Session vorliegen hast) MUSST du
+   mit dem eingebauten **`Write`-Werkzeug** deiner Ausführungsumgebung direkt in eine Temp-Datei im selben
+   Verzeichnis wie `ergebnis_datei` (z. B. `<ergebnis_datei>.tmp.$$`, siehe Schritt 4) schreiben — genauso, wie
+   du jede andere Datei in dieser Session anlegst. Verboten für diesen Erstschreib-Schritt
+   ist **jeder** Weg, der den Dateiinhalt zuerst durch einen Shell-Befehlsstring schleust, z. B.:
+   - `echo '<Ergebnis-JSON>' > datei` oder `> "<ergebnis_datei>"` mit dem JSON-Text als Argument,
+   - `bash -c "cat > datei <<EOF ... EOF"` bzw. jedes Heredoc, in das der dynamische Ergebnis-Text eingebettet wird,
+   - `python3 -c "...<interpolierter JSON-/Text-Inhalt>..."` oder ein Node-`-e`-Einzeiler mit eingebettetem Text.
+   Der Grund: sobald der natürlichsprachliche Text (der Anführungszeichen enthalten kann) Teil eines
+   Shell-Befehlsstrings wird, kollidiert er mit dessen Quoting — genau das war die Ursache der drei
+   gescheiterten Voranläufe dieser Story. Das `Write`-Werkzeug übernimmt den Text als Datei-Inhalt, nicht als
+   Shell-Argument, und umgeht die Kollision strukturell.
+3. **Danach: Serialisieren/Normalisieren, falls nötig.** Sind nach Schritt 2 noch gerade `"` in Werten
+   übrig (Prüfung, kein erneutes Hand-Zusammensetzen des JSON-Texts in der Shell): eine kurze Python/Node-
+   Inline-Verarbeitung darf die bereits per `Write` geschriebene Temp-Datei **lesen** (Pfad als Argument) und
+   normalisiert **zurück in dieselbe Datei** schreiben (`json.load`/`json.dump` bzw. `JSON.parse`/`JSON.stringify`
+   auf Dateiinhalt, nie auf einen interpolierten Shell-String). Werte zuvor gemäß obigem Absatz auf
+   typografische Anführungszeichen normalisiert.
+4. **Atomar auf den Zielpfad bringen:** die (per `Write` erzeugte, ggf. normalisierte) Temp-Datei **im selben
+   Verzeichnis** wie `ergebnis_datei` (z. B. `<ergebnis_datei>.tmp.$$`) per `mv` (rename) auf `<ergebnis_datei>`
+   verschieben — kein direktes Schreiben auf den Zielpfad, damit ein lesender Runner nie eine halbgeschriebene
+   Datei sieht.
+5. **Sicherheitsnetz — Selbstvalidierung mit echtem JSON-Parser (HART, PFLICHT, verifizierbar):** nach dem
+   `mv` auf den Zielpfad die Datei mit `python3 scripts/validate-json.py <ergebnis_datei>` gegenprüfen (Exit-Code
+   `0` = valide). Wichtig: **niemals** `python3 -c "...<interpolierter JSON-/Text-Inhalt>..."` verwenden — das
+   erzeugt dieselbe Bash-Quoting-Kollision (Anführungszeichen vs. Apostroph), die frühere Anläufe dieser Story
+   scheitern ließ. `scripts/validate-json.py` nimmt **ausschließlich den Dateipfad als Argument** entgegen und
+   liest den Inhalt selbst vom Dateisystem (`sys.argv[1]`, `json.load`) — der Inhalt wird nie in die Shell
+   interpoliert. Meldet die Prüfung einen Fehler (Exit-Code ≠ 0): den Inhalt reparieren (typische Ursache: ein
+   verbliebenes gerades `"` in einem Wert — gemäß obigem Absatz durch die typografische Variante ersetzen, per
+   `Write`/Datei-Lese-Schreib-Zyklus wie in Schritt 3, niemals per Shell-Interpolation), erneut atomar schreiben
+   (Schritt 4) und **erneut validieren** — diese Schleife wiederholen, bis `validate-json.py` Exit-Code `0` liefert.
+   Existiert `scripts/validate-json.py` im Ziel-Projekt-Repo nicht: anlegen (Inhalt siehe Referenz im
+   `agent-flow`-Repo `scripts/validate-json.py` — liest `sys.argv[1]`, `json.load`, Exit `0`/`≠0`). Erst nach
+   nachweislich validem Parse-Ergebnis gilt der Schreibvorgang als abgeschlossen.
+6. Existiert am Zielpfad bereits eine Datei, wird sie durch den `rename` ersetzt (Überschreiben ist erlaubt
    und erwartet — ein Lauf liefert ein Ergebnis).
-4. Fehlt `ergebnis_datei=` im Aufruf → **keine** Datei schreiben, nur die reguläre stdout-Weitergabe
-   (Schritt 2) — kein Fehler, reine Rückwärtskompatibilität für den menschlichen Direktaufruf.
+7. Fehlt `ergebnis_datei=` im Aufruf → **keine** Datei schreiben, nur die reguläre stdout-Weitergabe
+   (Schritt 2 des Hauptablaufs unten) — kein Fehler, reine Rückwärtskompatibilität für den menschlichen
+   Direktaufruf. (Kein Validierungslauf nötig, wenn keine Datei geschrieben wird.)
 
 Konventioneller Pfad des Runners (dev-gui S-307, `RegressionDefineRunner`): `board/runs/regression-define/<lauf-id>.json`
 im Ziel-Projekt-Repo — bereits durch die bestehende `board/runs/`-Gitignore-Regel abgedeckt
@@ -133,3 +178,11 @@ Formats.
 - Erzwingt **keinen** Resume-Kontext (Lauf 2 bleibt auch ohne `--resume` vollständig funktionsfähig).
 - Schreibt **nur** eine `ergebnis_datei`, wenn das Argument explizit gesetzt ist — ohne das Argument keine
   Datei, kein Fehler (Rückwärtskompatibilität, AC13).
+- **Kein gerades `"` innerhalb eines JSON-String-Werts** der `ergebnis_datei` — nur typografische
+  Anführungszeichen (`„`/`"`, `‚`/`'`) in Textwerten; das gerade `"` ist ausschließlich JSON-Delimiter (AC13).
+- Schreibt eine `ergebnis_datei` **nie ohne anschließende Selbstvalidierung** per `scripts/validate-json.py
+  <pfad>` (echter JSON-Parser, Datei-Argument, kein interpolierter Shell-String) — bei Fehler reparieren +
+  erneut validieren, bis das Ergebnis nachweislich valide parst (AC13).
+- **Erstschreib-Schritt der `ergebnis_datei` niemals über einen Shell-Befehl mit interpoliertem Dateiinhalt**
+  (kein `echo '…' > datei`, kein Heredoc mit dynamischem Text, kein `python3 -c "…<Text>…"`/`node -e "…<Text>…"`)
+  — ausschließlich über das eingebaute `Write`-Werkzeug der Skill-Ausführungsumgebung (AC13, HART).
