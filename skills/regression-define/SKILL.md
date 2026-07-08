@@ -1,6 +1,6 @@
 ---
 name: regression-define
-description: Startet den regression-define-Agenten — liest die Specs eines Bereichs/Verbunds und schlägt in Alltagssprache Testfälle für die dev-gui-Redaktionsschleife vor (modus=vorschlag), oder übersetzt eine vom Owner redigierte Fassung deterministisch in Playwright-Testdatei + Datentabelle + Begleitbeschreibung und liefert als PR (modus=uebersetzen, redigierter_vorschlag via STDIN). Enthält selbst keine Test-/Übersetzungslogik — dispatcht nur agents/regression-define.md. Aufruf: /agent-flow:regression-define modus=vorschlag projekt=<repo> (bereich=<id>|verbund=<name>) [stichworte=<w1,w2,…>] | echo '<json>' | claude -p '/agent-flow:regression-define modus=uebersetzen projekt=<repo>'. Im Ziel-Projekt-Repo ausführen.
+description: Startet den regression-define-Agenten — liest die Specs eines Bereichs/Verbunds und schlägt in Alltagssprache Testfälle für die dev-gui-Redaktionsschleife vor (modus=vorschlag), oder übersetzt eine vom Owner redigierte Fassung deterministisch in Playwright-Testdatei + Datentabelle + Begleitbeschreibung und liefert als PR (modus=uebersetzen, redigierter_vorschlag via STDIN). Enthält selbst keine Test-/Übersetzungslogik — dispatcht nur agents/regression-define.md. Optionales ergebnis_datei=<absoluter-pfad> schreibt das Ergebnis-JSON zusätzlich atomar in eine Datei (headless-Konsum, dev-gui S-307). Aufruf: /agent-flow:regression-define modus=vorschlag projekt=<repo> (bereich=<id>|verbund=<name>) [stichworte=<w1,w2,…>] [ergebnis_datei=<pfad>] | echo '<json>' | claude -p '/agent-flow:regression-define modus=uebersetzen projekt=<repo> [ergebnis_datei=<pfad>]'. Im Ziel-Projekt-Repo ausführen.
 ---
 
 # /agent-flow:regression-define [--cost <mode>] modus=<vorschlag|uebersetzen> …
@@ -33,12 +33,13 @@ Dispatch.
 
 Erwartete Argumente (Aufruf-Vertrag, `docs/specs/regression-define.md` „Verträge → Eingabe"):
 ```
-/agent-flow:regression-define modus=vorschlag projekt=<repo> (bereich=<bereich-id> | verbund=<verbund-name>) [stichworte=<w1,w2,…>]
+/agent-flow:regression-define modus=vorschlag projekt=<repo> (bereich=<bereich-id> | verbund=<verbund-name>) [stichworte=<w1,w2,…>] [ergebnis_datei=<absoluter-pfad>]
 ```
 - `projekt` **und** genau eines von `bereich=`/`verbund=` sind Pflicht — fehlt eines oder sind beide gesetzt,
   reicht der Skill den Aufruf trotzdem an den Agenten durch (der Agent validiert selbst, AC1 der Spec); der
   Skill selbst rät nichts hinzu und erfindet keinen Bereich.
 - `stichworte=<w1,w2,…>` ist optional, kommaseparierte Liste → als Array durchreichen.
+- `ergebnis_datei=<absoluter-pfad>` ist optional — siehe Abschnitt „Datei-Übergabe (`ergebnis_datei=`, AC12/AC13)" unten.
 - **Kein STDIN nötig** in diesem Modus.
 
 Dispatch (Task-Tool) an den `regression-define`-Agenten mit:
@@ -56,9 +57,10 @@ gibt die Agenten-Ausgabe unverändert weiter.
 
 Erwarteter Aufruf (die redigierte Fassung kommt über **STDIN**, nicht als Inline-Argument — Größe):
 ```
-echo '<redigierter_vorschlag-JSON>' | claude -p '/agent-flow:regression-define modus=uebersetzen projekt=<repo>'
+echo '<redigierter_vorschlag-JSON>' | claude -p '/agent-flow:regression-define modus=uebersetzen projekt=<repo> [ergebnis_datei=<absoluter-pfad>]'
 ```
 - `projekt=<repo>` ist Pflicht-Argument.
+- `ergebnis_datei=<absoluter-pfad>` ist optional — siehe Abschnitt „Datei-Übergabe (`ergebnis_datei=`, AC12/AC13)" unten.
 - **STDIN lesen:** den kompletten STDIN-Inhalt als `redigierter_vorschlag` (JSON, dieselbe Struktur wie das
   Rückgabeformat aus `modus=vorschlag`) entgegennehmen.
 - **Fehlt STDIN** (leer/kein Input verfügbar) → der Skill **lehnt sofort ab** mit einer klaren Meldung
@@ -82,15 +84,46 @@ Der Agent übersetzt, liefert als **PR** (AC4–AC8 der Spec — Auth/Auslieferu
 eigenen Vorgehens, `.claude/profile.md` `merge_policy`/`default_branch`). Dieser Skill selbst ruft
 `ensure-gh-auth.sh` **nicht** auf — die PR-Auslieferung liegt vollständig beim Agenten.
 
+## 1a. Datei-Übergabe (`ergebnis_datei=`, AC12/AC13)
+
+Ist in **beiden** Modi das optionale Aufruf-Argument `ergebnis_datei=<absoluter-pfad>` gesetzt, schreibst
+**du selbst** (die Skill-Session, nicht der Sub-Agent) nach dessen Rückkehr aus dem Task-Tool zusätzlich zur
+Weitergabe an den Aufrufer (Schritt 2) das maschinenlesbare Ergebnis-JSON, das der `regression-define`-Agent
+als Task-Result geliefert hat, **unverändert** an genau diesen Pfad:
+
+- `modus=vorschlag` → das Rückgabeformat-JSON (siehe Spec „Rückgabeformat Testvorschlag").
+- `modus=uebersetzen` → das Ergebnis-Objekt-JSON (siehe Spec „Output Modus `uebersetzen`").
+
+Der Sub-Agent selbst kennt `ergebnis_datei` nicht und schreibt nie eine Datei — er liefert weiterhin nur
+sauberes Rückgabeformat-JSON als Task-Result zurück; **du** als Skill-Session übernimmst das Schreiben.
+
+**Vorgehen (fester Pfad-Vertrag, kein eigenes Erraten des Pfads):**
+1. Elternverzeichnis von `ergebnis_datei` sicherstellen: `mkdir -p "$(dirname "<ergebnis_datei>")"`.
+2. **Atomar schreiben:** das JSON zuerst in eine Temp-Datei **im selben Verzeichnis** schreiben (z. B.
+   `<ergebnis_datei>.tmp.$$`), dann per `mv` (rename) auf `<ergebnis_datei>` verschieben — kein direktes
+   Schreiben auf den Zielpfad, damit ein lesender Runner nie eine halbgeschriebene Datei sieht.
+3. Existiert am Zielpfad bereits eine Datei, wird sie durch den `rename` ersetzt (Überschreiben ist erlaubt
+   und erwartet — ein Lauf liefert ein Ergebnis).
+4. Fehlt `ergebnis_datei=` im Aufruf → **keine** Datei schreiben, nur die reguläre stdout-Weitergabe
+   (Schritt 2) — kein Fehler, reine Rückwärtskompatibilität für den menschlichen Direktaufruf.
+
+Konventioneller Pfad des Runners (dev-gui S-307, `RegressionDefineRunner`): `board/runs/regression-define/<lauf-id>.json`
+im Ziel-Projekt-Repo — bereits durch die bestehende `board/runs/`-Gitignore-Regel abgedeckt
+([[feature-batch-orchestration]] AC11), keine eigene Gitignore-Zeile nötig. Die stdout-Prosa/Rückgabe an den
+Aufrufer (Schritt 2) bleibt zusätzlich zur Datei bestehen — sie ist für Menschen im Terminal erlaubt, aber
+nicht mehr Vertragsgegenstand des headless-Konsumenten (AC12): der Runner liest ausschließlich die Datei.
+
 ## 2. Ergebnis
 
 Die Ausgabe des Agenten (Rückgabeformat bei `vorschlag`, Ergebnis-Objekt mit PR-Link/`Abgelehnt:`-Status bei
-`uebersetzen`) unverändert an den Aufrufer zurückgeben — der Skill fügt nichts hinzu und kürzt nichts. Der Agent
-liefert bereits headless-diszipliniert (AC12 der Spec): keine umschliessende Prosa, keine Rückfrage; der Skill
-darf diese Disziplin durch eigene Zusätze nicht brechen. **HART: Die finale Ausgabe DEINER Session ist
-ausschliesslich dieses Rückgabeformat-JSON bzw. Ergebnis-Objekt** — keine Zusammenfassung davor, keine Frage
-danach; Anmerkungen gehören ins `hinweise[]`-Feld des Formats (headless-Aufrufer wie der dev-gui-Runner parsen
-die Finalausgabe maschinell).
+`uebersetzen`) unverändert an den Aufrufer zurückgeben — der Skill fügt nichts hinzu und kürzt nichts. Ist
+`ergebnis_datei=` gesetzt, ist Schritt 1a (Datei-Schreiben) **zusätzlich** zu dieser stdout-Weitergabe
+auszuführen, nicht anstelle davon. Der Agent liefert bereits headless-diszipliniert (AC12 der Spec): keine
+umschliessende Prosa, keine Rückfrage; der Skill darf diese Disziplin durch eigene Zusätze nicht brechen.
+Die stdout-Ausgabe DEINER Session bleibt für den menschlichen Direktaufruf im Terminal wertvoll, ist aber —
+seit AC12/AC13 — **nicht mehr der harte Vertrag** für den headless-Konsumenten: dieser liest ausschließlich
+die per `ergebnis_datei=` geschriebene Datei (Schritt 1a). Anmerkungen gehören ins `hinweise[]`-Feld des
+Formats.
 
 ## Grenzen
 
@@ -98,3 +131,5 @@ die Finalausgabe maschinell).
 - Schreibt **keinen** Board-Status und keine Board-Felder.
 - Erfindet **nie** einen `redigierter_vorschlag`, wenn STDIN in `modus=uebersetzen` fehlt — Ablehnung statt Rätselns.
 - Erzwingt **keinen** Resume-Kontext (Lauf 2 bleibt auch ohne `--resume` vollständig funktionsfähig).
+- Schreibt **nur** eine `ergebnis_datei`, wenn das Argument explizit gesetzt ist — ohne das Argument keine
+  Datei, kein Fehler (Rückwärtskompatibilität, AC13).
