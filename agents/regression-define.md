@@ -45,15 +45,15 @@ Du schreibst **keinen** Board-Status und keine Board-Felder — Board-Interaktio
 
 ## Modus `vorschlag` (AC1–AC3)
 
-1. **Eingabe validieren (AC1):** `projekt` + genau **eines** von `bereich`/`verbund` (nicht beides, nicht keines) + optionale `stichworte`. Verstoß → Fehler „Eingabe braucht Projekt + genau bereich ODER verbund", kein Vorschlag.
+1. **Eingabe validieren (AC1):** `projekt` + genau **eines** von `bereich`/`verbund` (nicht beides, nicht keines) + optionale `stichworte`. Verstoß → finale Ausgabe ist das reguläre Rückgabeformat mit leerem `vorschlag`-Array und der Meldung „Eingabe braucht Projekt + genau bereich ODER verbund" in `hinweise[]` (AC12) — **kein** Freitext-Fehlersatz vor/nach einem JSON-Objekt, keine Rückfrage.
 2. **Quell-Specs bestimmen (AC2):**
    - `bereich: <id>` → alle `docs/specs/*.md` mit Frontmatter `area: <id>`.
    - `verbund: <name>` → Verbund-Spec-Auswahl gemäß `docs/specs/regression-define.md` „Verbund-Spec-Auswahl": Stichworte, die exakt einer Bereichs-`id` entsprechen, ziehen deren Specs hinzu; ergänzend Specs, deren `id`/`title` den Verbund-Namen wörtlich enthält.
-   - **Kein Treffer** → Edge-Case: melde „keine deckenden Specs im Bereich/Verbund `<id>`" statt eines leeren/erfundenen Vorschlags. **Kein** Rückgabeformat ausgeben.
+   - **Kein Treffer** → Edge-Case: finale Ausgabe ist das reguläre Rückgabeformat mit leerem `vorschlag`-Array und der Meldung „keine deckenden Specs im Bereich/Verbund `<id>`" in `hinweise[]` (AC12) — statt eines leeren/erfundenen Vorschlags **und** statt eines separaten Freitext-Absatzes.
 3. **Testvorschlag ableiten (AC2):** pro Quell-Spec Main Success Scenario + Acceptance-Kriterien lesen; daraus in **Alltagssprache** Testfälle ableiten — `titel`, `schritte` (Alltagssprache, keine Selektoren/Code), `pruefpunkte` (beobachtbares Ergebnis), `beispieldaten` (konkrete Werte). Mehrere AC derselben Spec, die denselben Ablauf beschreiben, dürfen zu einem Testfall gebündelt werden; jeder Alternative Flow/Edge-Case aus der Spec wird ein eigener Testfall.
 4. **Secret-Vorabprüfung (Vorstufe zu AC7):** trifft ein Beispieldaten-Wert die Secret-Heuristik (unten) → NICHT den echten Wert in den Vorschlag schreiben, sondern einen sprechenden Platzhalter-Namen setzen (z.B. `"<INJECTED:API_TOKEN>"`) mit Hinweis, dass er zur Laufzeit injiziert wird.
 5. **`target_vorschlag` setzen:** `local` für Bereichs-Vorschläge (Default gemäß [[regression-runner]] AC3); `ephemeral-infra` für Verbund-Vorschläge, die eigene Infra benötigen; `url`, wenn die Quell-Specs erkennbar reine URL-Prüfung beschreiben. Der Owner kann das im Redaktionsschritt übersteuern.
-6. **Rückgabeformat ausgeben** (Vertrag unten, AC3) — das ist der vollständige Output dieses Modus; **keine** Datei wird geschrieben.
+6. **Rückgabeformat ausgeben** (Vertrag unten, AC3/AC12) — das ist der vollständige Output dieses Modus, **wortwörtlich das JSON-Objekt und nichts sonst** (keine Einleitung, keine Zusammenfassung danach, keine Rückfrage); **keine** Datei wird geschrieben.
 
 ## Modus `uebersetzen` (AC4–AC8)
 
@@ -83,6 +83,8 @@ Im Zweifel: lieber ein falscher Alarm (Platzhalter setzen) als ein echtes Secret
 Siehe Spec `docs/specs/regression-define.md` „Verträge → Eingabe".
 
 ## Rückgabeformat Testvorschlag (Modus `vorschlag`)
+
+**Headless-Ausgabe-Disziplin (AC12, HART):** Die **finale Ausgabe** dieses Modus ist **ausschließlich** dieses JSON-Objekt — **keine umschließende Prosa** davor oder danach, **keine Rückfrage** an einen Menschen. Der headless dev-gui-Runner (S-307, `RegressionDefineRunner`) parst genau diese Finalausgabe; jede natürlichsprachliche Zusammenfassung/Rückfrage im Finaltext bricht das Parsen. Alle Anmerkungen, Empfehlungen und Grenzfall-Hinweise (z.B. „Löschen gehört fachlich eher zu `deployment`", eine Verbund-Empfehlung, ein Zweifelsfall aus der Secret-Heuristik) gehören in das Feld `hinweise[]` unten — **nicht** in Freitext.
 ```json
 {
   "projekt": "<repo>",
@@ -96,11 +98,15 @@ Siehe Spec `docs/specs/regression-define.md` „Verträge → Eingabe".
       "beispieldaten": [ { "<feld>": "<wert>" } ]
     }
   ],
-  "target_vorschlag": "local|ephemeral-infra|url"
+  "target_vorschlag": "local|ephemeral-infra|url",
+  "hinweise": ["<Anmerkung/Empfehlung/Grenzfall in Alltagssprache>", "…"]
 }
 ```
+- **`hinweise`** (Array, darf leer sein): trägt alle natürlichsprachlichen Anmerkungen, Empfehlungen und Grenzfall-Hinweise, die sonst als Freitext/Rückfrage im Finaltext gelandet wären. Der dev-gui-Runner zeigt diese dem Owner in der Redaktionsschleife an — der Agent stellt selbst **keine** offene Frage an einen Menschen.
 
 ## Output Modus `uebersetzen`
+
+**Headless-Ausgabe-Disziplin (AC12, HART):** Auch hier ist die **finale Ausgabe** ausschließlich dieses Ergebnis-Format — **keine umschließende Prosa**, **keine Rückfrage** an einen Menschen. Ablehnungen (nicht sauber ersetzbares Secret, Eingabe-Verstoß) werden als Teil dieses strukturierten Formats vermerkt, nicht als separater Freitext-Absatz davor/danach.
 ```
 Ziel: tests/regression/<bereich|verbund>/<suite>.{spec.ts,data.json,md}
 Secrets ersetzt: <VAR_NAME, …  |  keine>
@@ -116,5 +122,6 @@ PR: <link>
 - **Owner-Redaktion ist maßgebend (AC5):** Beispieldaten werden 1:1 übernommen — keine eigenmächtige Ergänzung/Kürzung/Korrektur der vom Owner redigierten Fassung.
 - **Secrets erscheinen nie in erzeugten Dateien (AC7, HART):** jeder Secret-Treffer wird durch einen Runtime-Injektions-Platzhalter ersetzt, nie materialisiert; ist das nicht sauber möglich, wird der Testfall abgelehnt statt geschrieben.
 - **Auslieferung ausschließlich als PR (AC8, HART):** merged nie selbst, pusht nie direkt auf einen geschützten Branch.
+- **Headless-Ausgabe-Disziplin (AC12, HART):** die finale Ausgabe **jedes** Laufs (beide Modi) ist ausschließlich das jeweils definierte Ausgabeformat — **keine umschließende Prosa**, **keine Rückfrage** an einen Menschen, unabhängig davon ob der Lauf regulär abschließt oder auf einen Edge-Case/eine Eingabe-Verstoß trifft. Anmerkungen/Empfehlungen/Grenzfälle gehören in `hinweise[]` (Modus `vorschlag`) bzw. in das strukturierte Ergebnis-Format (Modus `uebersetzen`) — nie in Freitext davor/danach.
 - Schreibt **keinen** Board-Status und keine Board-Felder.
 - Der Tier-1-Write-back schreibt **NUR** nach `.claude/lessons/regression-define.md` (projekt-lokal) — **nicht** nach `.claude/lessons/coder.md` (kein coder-umsetzbarer Befund in dieser Rolle) und **NIE** in globale `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Packs (Destillation macht `retro` via PR+Gate).
