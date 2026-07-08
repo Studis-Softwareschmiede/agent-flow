@@ -126,26 +126,30 @@ geraten (die Ursache der drei gescheiterten Voranläufe dieser Story).
 3. **Danach: Serialisieren/Normalisieren, falls nötig.** Sind nach Schritt 2 noch gerade `"` in Werten
    übrig (Prüfung, kein erneutes Hand-Zusammensetzen des JSON-Texts in der Shell): eine kurze Python/Node-
    Inline-Verarbeitung darf die bereits per `Write` geschriebene Temp-Datei **lesen** (Pfad als Argument) und
-   normalisiert **zurück in dieselbe Datei** schreiben (`json.load`/`json.dump` bzw. `JSON.parse`/`JSON.stringify`
+   normalisiert **zurück in dieselbe Temp-Datei** schreiben (`json.load`/`json.dump` bzw. `JSON.parse`/`JSON.stringify`
    auf Dateiinhalt, nie auf einen interpolierten Shell-String). Werte zuvor gemäß obigem Absatz auf
    typografische Anführungszeichen normalisiert.
-4. **Atomar auf den Zielpfad bringen:** die (per `Write` erzeugte, ggf. normalisierte) Temp-Datei **im selben
-   Verzeichnis** wie `ergebnis_datei` (z. B. `<ergebnis_datei>.tmp.$$`) per `mv` (rename) auf `<ergebnis_datei>`
-   verschieben — kein direktes Schreiben auf den Zielpfad, damit ein lesender Runner nie eine halbgeschriebene
-   Datei sieht.
-5. **Sicherheitsnetz — Selbstvalidierung mit echtem JSON-Parser (HART, PFLICHT, verifizierbar):** nach dem
-   `mv` auf den Zielpfad die Datei mit `python3 scripts/validate-json.py <ergebnis_datei>` gegenprüfen (Exit-Code
-   `0` = valide). Wichtig: **niemals** `python3 -c "...<interpolierter JSON-/Text-Inhalt>..."` verwenden — das
-   erzeugt dieselbe Bash-Quoting-Kollision (Anführungszeichen vs. Apostroph), die frühere Anläufe dieser Story
-   scheitern ließ. `scripts/validate-json.py` nimmt **ausschließlich den Dateipfad als Argument** entgegen und
-   liest den Inhalt selbst vom Dateisystem (`sys.argv[1]`, `json.load`) — der Inhalt wird nie in die Shell
-   interpoliert. Meldet die Prüfung einen Fehler (Exit-Code ≠ 0): den Inhalt reparieren (typische Ursache: ein
-   verbliebenes gerades `"` in einem Wert — gemäß obigem Absatz durch die typografische Variante ersetzen, per
-   `Write`/Datei-Lese-Schreib-Zyklus wie in Schritt 3, niemals per Shell-Interpolation), erneut atomar schreiben
-   (Schritt 4) und **erneut validieren** — diese Schleife wiederholen, bis `validate-json.py` Exit-Code `0` liefert.
-   Existiert `scripts/validate-json.py` im Ziel-Projekt-Repo nicht: anlegen (Inhalt siehe Referenz im
-   `agent-flow`-Repo `scripts/validate-json.py` — liest `sys.argv[1]`, `json.load`, Exit `0`/`≠0`). Erst nach
-   nachweislich validem Parse-Ergebnis gilt der Schreibvorgang als abgeschlossen.
+4. **Sicherheitsnetz — Selbstvalidierung auf der TEMP-Datei, VOR dem Veröffentlichen (HART, PFLICHT,
+   verifizierbar, Reihenfolge kritisch):** die **Temp-Datei** (noch NICHT den Zielpfad!) mit
+   `python3 scripts/validate-json.py <temp-datei>` gegenprüfen (Exit-Code `0` = valide). Wichtig: **niemals**
+   `python3 -c "...<interpolierter JSON-/Text-Inhalt>..."` verwenden — das erzeugt dieselbe Bash-Quoting-Kollision
+   (Anführungszeichen vs. Apostroph), die frühere Anläufe dieser Story scheitern ließ. `scripts/validate-json.py`
+   nimmt **ausschließlich den Dateipfad als Argument** entgegen und liest den Inhalt selbst vom Dateisystem
+   (`sys.argv[1]`, `json.load`) — der Inhalt wird nie in die Shell interpoliert. Meldet die Prüfung einen Fehler
+   (Exit-Code ≠ 0): den Inhalt der **Temp-Datei** reparieren (typische Ursache: ein verbliebenes gerades `"` in
+   einem Wert — durch die typografische Variante ersetzen, per `Write`/Datei-Lese-Schreib-Zyklus wie in Schritt 3,
+   niemals per Shell-Interpolation) und **erneut die Temp-Datei validieren** — diese Schleife wiederholen, bis
+   `validate-json.py` auf der Temp-Datei Exit-Code `0` liefert. Existiert `scripts/validate-json.py` im
+   Ziel-Projekt-Repo nicht: anlegen (Inhalt siehe Referenz im `agent-flow`-Repo `scripts/validate-json.py` —
+   liest `sys.argv[1]`, `json.load`, Exit `0`/`≠0`).
+5. **ERST NACH nachweislich validem Parse-Ergebnis: atomar auf den Zielpfad bringen.** Die **validierte**
+   Temp-Datei **im selben Verzeichnis** wie `ergebnis_datei` per `mv` (rename) auf `<ergebnis_datei>` verschieben.
+   Der Zielpfad erhält damit **ausschließlich bereits geprüften** Inhalt in **einem** atomaren Schritt — ein
+   lesender Runner sieht nie eine halbgeschriebene ODER noch ungeprüfte (evtl. ungültige) Fassung.
+   **HART: niemals** direkt auf den Zielpfad schreiben und danach reparieren — genau diese Reihenfolge
+   (publish-then-fix) ließ den Runner eine ungültige Zwischenfassung lesen (Ursache des Timing-Bugs nach S-061).
+   Nach dem `mv` zur Sicherheit noch einmal `validate-json.py <ergebnis_datei>` (muss Exit `0` sein, da bereits
+   auf der Temp geprüft).
 6. Existiert am Zielpfad bereits eine Datei, wird sie durch den `rename` ersetzt (Überschreiben ist erlaubt
    und erwartet — ein Lauf liefert ein Ergebnis).
 7. Fehlt `ergebnis_datei=` im Aufruf → **keine** Datei schreiben, nur die reguläre stdout-Weitergabe
