@@ -7,10 +7,11 @@ source scripts/_lib.sh
 [[ -f .env.gpg ]] || { echo "✖ .env.gpg fehlt" >&2; exit 1; }
 umask 077
 
-if pass_file="$(resolve_pass_file)"; then
-  gpg --batch --yes --pinentry-mode loopback --passphrase-file "$pass_file" -d .env.gpg > .env
-elif [[ -n "${GPG_PASSPHRASE:-}" ]]; then
+# Per-App-Modell: $GPG_PASSPHRASE (env) hat Vorrang (siehe _lib.sh / encrypt-env.sh).
+if [[ -n "${GPG_PASSPHRASE:-}" ]]; then
   printf '%s' "$GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 -d .env.gpg > .env
+elif pass_file="$(resolve_pass_file)"; then
+  gpg --batch --yes --pinentry-mode loopback --passphrase-file "$pass_file" -d .env.gpg > .env
 else
   gpg --pinentry-mode loopback -d .env.gpg > .env
 fi

@@ -7,12 +7,13 @@ _app_root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 source "$_app_root/scripts/_lib.sh"
 
 if [[ -f "$_app_root/.env.gpg" ]]; then
+  # Per-App-Modell: $GPG_PASSPHRASE (env) hat Vorrang (siehe _lib.sh); dann $GPG_PASS_FILE; sonst Prompt.
   _app_pf="$(resolve_pass_file || true)"
   set -a
-  if [[ -n "${_app_pf:-}" ]]; then
-    eval "$(gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$_app_pf" -d "$_app_root/.env.gpg")"
-  elif [[ -n "${GPG_PASSPHRASE:-}" ]]; then
+  if [[ -n "${GPG_PASSPHRASE:-}" ]]; then
     eval "$(printf '%s' "$GPG_PASSPHRASE" | gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 0 -d "$_app_root/.env.gpg")"
+  elif [[ -n "${_app_pf:-}" ]]; then
+    eval "$(gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$_app_pf" -d "$_app_root/.env.gpg")"
   else
     eval "$(gpg --quiet --pinentry-mode loopback -d "$_app_root/.env.gpg")"
   fi
