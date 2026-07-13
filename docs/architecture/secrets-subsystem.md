@@ -1,6 +1,6 @@
-# Architecture — Secrets-Subsystem (GPG-symmetrisch, geteilte Fabrik-Passphrase)
+# Architecture — Secrets-Subsystem (GPG-symmetrisch, per-App-Passphrase)
 
-> **Bindend.** Diese Spec beschreibt **wie** jede von der Fabrik **erzeugte** (`/new-project`) oder **adoptierte** (`/adopt`) Applikation ihre Secrets standardisiert verwaltet: Klartext in `.env` (gitignored), verschlüsselte, committete Kopie `.env.gpg` (GPG-symmetrisch AES256), aufgelöst über die geteilte Fabrik-Passphrase. Sie verdrahtet das bestehende GPG-Muster der Fabrik (`scripts/{_lib.sh,encrypt-env,decrypt-env,load-env}.sh`) als per-App-Scaffold, reconciled es mit dem Secret-Scan-Gate (`security/R01` + gitleaks) und legt den Laufzeit-Konsum beim Rollout fest. Implementierung erfolgt in drei Wellen (Fundament/Spec → Scaffold → Wiring; §12). Abweichungen sind Review-Kriterium.
+> **Bindend.** Diese Spec beschreibt **wie** jede von der Fabrik **erzeugte** (`/new-project`) oder **adoptierte** (`/adopt`) Applikation ihre Secrets standardisiert verwaltet: Klartext in `.env` (gitignored), verschlüsselte, committete Kopie `.env.gpg` (GPG-symmetrisch AES256), aufgelöst über eine **App-eigene** Passphrase (Doktrin-Wechsel, Owner 2026-07-13 — ehemals eine geteilte Fabrik-Passphrase, §2 GE1/§3). Sie verdrahtet das bestehende GPG-Muster der Fabrik (`scripts/{_lib.sh,encrypt-env,decrypt-env,load-env}.sh`) als per-App-Scaffold, reconciled es mit dem Secret-Scan-Gate (`security/R01` + gitleaks) und legt den Laufzeit-Konsum beim Rollout fest. Implementierung erfolgt in drei Wellen (Fundament/Spec → Scaffold → Wiring; §12). Abweichungen sind Review-Kriterium.
 
 ---
 
@@ -8,11 +8,11 @@
 
 **Zweck.** Bisher löst die Fabrik **ihre eigenen** Secrets (GitHub-App-Credentials für `gh`) über `.env.gpg` + `scripts/load-env.sh`. Die von der Fabrik betreuten **Applikationen** haben jedoch keinen standardisierten Secret-Mechanismus — jede App erfindet ihn neu (oder committet Klartext, was das Secret-Scan-Gate blockiert). Diese Spec macht den App-Secret-Aspekt zur **erstklassigen, einheitlichen** Achse: jede App trägt `.env` (Klartext, lokal) + `.env.gpg` (verschlüsselt, committet) + ein schlankes per-App-Script-Set, das exakt das bestehende Fabrik-Muster spiegelt.
 
-**Modell in einem Satz.** `.env` ist die lokale Klartext-Wahrheit (NIE committed); `.env.gpg` ist die verschlüsselte, **committete** Repräsentation; die Verschlüsselung ist GPG-symmetrisch AES256 mit der **geteilten** Fabrik-Passphrase; konsumiert wird **zur Laufzeit** beim Rollout (`decrypt → docker run --env-file .env`).
+**Modell in einem Satz.** `.env` ist die lokale Klartext-Wahrheit (NIE committed); `.env.gpg` ist die verschlüsselte, **committete** Repräsentation; die Verschlüsselung ist GPG-symmetrisch AES256 mit einer **App-eigenen** Passphrase (§2 GE1, §3); konsumiert wird **zur Laufzeit** beim Rollout (`decrypt → docker run --env-file .env`).
 
 **In Scope.**
 - Das `.env` / `.env.gpg`-Dateimodell + per-App-Script-Set (`encrypt-env.sh`, `decrypt-env.sh`, `load-env.sh`, `_lib.sh`).
-- Schlüssel-Auflösung über die geteilte Passphrase-Kette (`resolve_pass_file()`, §3).
+- Schlüssel-Auflösung über die App-eigene Passphrase-Kette (`resolve_pass_file()`, §3).
 - `.gitignore`- + gitleaks-Allowlist-Konvention (Klartext blockiert, `.env.gpg` erlaubt — §5, §6).
 - Reconciliation mit `security/R01` + dem Secret-Scan-Gate (`build.yml`, `security.yml`).
 - Laufzeit-Konsum beim Rollout (`--env-file`, §7).
@@ -20,10 +20,10 @@
 - `coder`/`/flow` Re-Encrypt-Konvention + Sync-Gate (ist `.env.gpg` aktuell ggü. `.env`? — §9).
 
 **Out of Scope (P1).**
-- **Per-App-Bitwarden-Item / per-App-Schlüssel.** Gelockt: EIN geteilter Schlüssel für alle Apps (§3, GE1). Kein Bitwarden-Schritt in `/new-project`.
+- **Bitwarden-Provisionierung/-Zugang im Plugin selbst.** Die App-eigene Passphrase wird von **dev-gui** provisioniert und dem Plugin ausschließlich als Datei (`$GPG_PASS_FILE`) durchgereicht (§2 GE1, §3) — das Plugin spricht **nie** selbst mit Bitwarden; kein Bitwarden-Zugang/-Schritt in `/new-project` oder sonst im Repo. Die Provisionierungs-/Rotations-Seite ist Sache von dev-gui ([[per-app-gpg-passphrase-provisioning]], [[per-app-gpg-passphrase-rotation]], dev-gui-Repo).
 - **Build-Time-Secret-Konsum** (z.B. private Registries, Build-Args mit Secrets). Pfad dokumentiert, aber **inaktiv** (§8 — „Tür offen, nicht beschritten").
 - **History-Rewrite adoptierter Repos.** Vorhandenes Klartext-`.env` in der History wird **nicht** umgeschrieben — nur als Audit-Finding gemeldet (§11, GE5).
-- **Secret-Rotation / Versionierung der Passphrase.** Die Passphrase ist umgebungs-gebunden (Bitwarden-Item `studis-softwareschmiede-gpg-passphrase`); ihre Rotation ist ein Ops-Vorgang außerhalb dieses Subsystems.
+- **Secret-Rotation / Versionierung der Passphrase.** Jede App hat ihr eigenes Bitwarden-Item `env.gpg-passphrase-<app>` (GE1); Rotation ist ein dev-gui-Vorgang außerhalb dieses Subsystems ([[per-app-gpg-passphrase-rotation]], dev-gui-Repo).
 - **Asymmetrische GPG / per-Recipient-Keys, SOPS, Vault, sealed-secrets.** Bewusst nicht — das bestehende symmetrische Muster der Fabrik wird wiederverwendet (GE2), kein neuer Mechanismus.
 
 ---
@@ -32,7 +32,7 @@
 
 Diese Festlegungen sind **vorab getroffen** und in dieser Spec bindend — sie sind **nicht** offene Fragen, sondern Invarianten, an denen `reviewer`/`dba`/`tester` messen.
 
-- **GE1 — Schlüssel-Scope: EIN geteilter Schlüssel für alle Apps.** Wiederverwendung des bestehenden Bitwarden-Items `studis-softwareschmiede-gpg-passphrase`. **KEIN** per-App-Bitwarden-Item, **KEIN** Bitwarden-Schritt in `/new-project`. Begründung: Die Passphrase ist **umgebungs-gebunden** (lebt auf dem Fabrik-Host/-Operator), nicht repo-gebunden — sie wandert nicht mit dem Repo, also braucht das Repo keinen eigenen Schlüssel-Setup-Schritt.
+- **GE1 — Schlüssel-Scope: EINE eigene Passphrase je App (Doktrin-Wechsel, Owner 2026-07-13; ehemals EIN geteilter Schlüssel für alle Apps).** Jede App bekommt eine eigene, kryptografisch starke Passphrase; Bitwarden-Item-Konvention `env.gpg-passphrase-<app>` (`<app>` = Ziel-Slug, identisch zur Deploy-Abruf-Konvention). **Passphrasen-Quelle ist ausschließlich die dev-gui-Provisionierung** ([[per-app-gpg-passphrase-provisioning]], dev-gui-Repo): dev-gui ist der einzige Bitwarden-vertraute Knoten der Fabrik, erzeugt/pflegt die per-App-Passphrasen in Bitwarden und reicht sie dem Plugin **ausschließlich als Datei** durch (`$GPG_PASS_FILE`, temporäre `0600`-Datei — §3). **agent-flow bleibt strikt Bitwarden-agnostisch:** das Plugin liest die Passphrase nur aus `$GPG_PASS_FILE` (Fallback: bisheriges interaktives Verfahren, §3); es spricht **nie** selbst mit Bitwarden — **kein** Bitwarden-Zugang/-Schritt im Repo oder im Plugin. Begründung für den Wechsel: eine geteilte Passphrase machte **jede** App bei Kompromittierung/Rotation gleichzeitig betroffen (jeder Fabrik-Host mit der Passphrase konnte jede App entschlüsseln); die per-App-Passphrase begrenzt Blast-Radius und Rotation auf **genau eine** App, ohne dass das Repo selbst einen Bitwarden-Zugang braucht — die Bitwarden-Mechanik bleibt vollständig bei dev-gui.
 - **GE2 — Mechanismus: bestehendes GPG-Muster wiederverwenden.** Die per-App-Scripts sind **schlanke Kopien** von `scripts/{encrypt-env,decrypt-env,load-env}.sh` + `_lib.sh` mit **identischer** Passphrase-Kette (§3). Kein neuer Krypto-Mechanismus, kein Eigenbau (`security/R06`).
 - **GE3 — Konsum-Zeitpunkt: NUR zur Laufzeit.** Beim Deploy/Rollout `.env.gpg` → entschlüsseln → `docker run --env-file .env`. GitHub Actions / Docker-Build brauchen **KEINEN** Schlüssel (§7, §8).
 - **GE4 — Initial: leeres `.env.gpg` ab Tag 1.** `/new-project` legt sofort ein initiales (leeres/Platzhalter-)verschlüsseltes `.env.gpg` an und committet es, damit `.gitignore`/gitleaks-Allowlist/Script-Pfade ab Tag 1 erprobt sind (§10).
@@ -41,21 +41,23 @@ Diese Festlegungen sind **vorab getroffen** und in dieser Spec bindend — sie s
 
 ---
 
-## 3. Schlüssel-Auflösung — die geteilte Passphrase-Kette
+## 3. Schlüssel-Auflösung — die App-eigene Passphrase-Kette
 
-**Quelle.** Die Fabrik nutzt heute schon `resolve_pass_file()` in `scripts/_lib.sh`. Das per-App-`_lib.sh` ist eine **identische Kopie** dieser Funktion — keine Abweichung, keine projekt-spezifische Variante.
+**Quelle.** Die Fabrik-eigene `scripts/_lib.sh` (eigene Secret-Domäne der Fabrik selbst — GitHub-App-Credentials etc.) behält ihre bestehende, geteilte Auflösungs-Kette mit Org-Datei-Fallback unverändert; das ist eine **andere** Secret-Domäne und **nicht** Gegenstand dieser Spec. Das per-App-`templates/_shared/secrets/_lib.sh` (App-Secrets, dieses Subsystem) hat davon **bewusst abweichend** eine **eigene, engere** `resolve_pass_file()` (Doktrin-Wechsel, Owner 2026-07-13): **keine** Auto-Erkennung geteilter Org-Dateien — nur ein **explizit** gesetztes `$GPG_PASS_FILE` wird akzeptiert.
 
-**Auflösungs-Kette (exakt wie heute, `scripts/_lib.sh`):**
+**Auflösungs-Kette (per-App-Modell, `templates/_shared/secrets/_lib.sh` + `encrypt-env.sh`/`decrypt-env.sh`/`load-env.sh`, identisch):**
 
 ```
-$GPG_PASS_FILE  >  /etc/softwareschmiede/gpg.pass  >  ~/.config/softwareschmiede/gpg.pass  >  $GPG_PASSPHRASE  >  interaktiver Prompt
+$GPG_PASSPHRASE  >  $GPG_PASS_FILE (explizit, app-eigen)  >  interaktiver Prompt
 ```
 
-- Erste les-/vorhandene Quelle gewinnt (`resolve_pass_file()` gibt den Pfad zurück; ist keine Datei da, fällt `encrypt`/`decrypt`/`load-env` auf `$GPG_PASSPHRASE` bzw. den interaktiven Prompt zurück).
-- **Passphrase-Inhalt** = das Bitwarden-Item `studis-softwareschmiede-gpg-passphrase` (geteilt, GE1). Wie die Datei `gpg.pass` auf den Host kommt (manuell, via `scripts/setup-bw-items.sh`-Analogon, Ops-Provisioning), ist **außerhalb** dieses Subsystems — die App-Scripts kennen nur die Kette, nicht die Bitwarden-Mechanik.
-- **Cipher:** GPG-symmetrisch, `--cipher-algo AES256`, `--pinentry-mode loopback` (batch-fähig, kein TTY-Pinentry). Identisch zu `scripts/encrypt-env.sh`.
+- **`$GPG_PASSPHRASE`** ist der **Laufzeit-/Deploy-Weg**: der Deploy-Orchestrator (dev-gui) injiziert die App-eigene Passphrase beim Rollout direkt als Umgebungsvariable in den Container (`docker run -e GPG_PASSPHRASE=…`); der App-eigene `docker-entrypoint.sh` entschlüsselt `.env.gpg` damit beim Start. Woher dev-gui die Passphrase für die Injektion bezieht (Bitwarden-Login/Unlock/Read): [[deploy-bitwarden-gpg-injection]] (dev-gui-Repo) — außerhalb dieses Subsystems.
+- **`$GPG_PASS_FILE`** ist der **Scaffold-/Provisionierungs-Weg** (GE4, §10): dev-gui ist der einzige Bitwarden-vertraute Knoten der Fabrik ([[per-app-gpg-passphrase-provisioning]], dev-gui-Repo) und reicht die neu erzeugte Passphrase dem `/new-project`-Scaffold **ausschließlich als Datei** durch — eine temporäre `0600`-Datei, deren Pfad vor dem Scaffold-Lauf als `$GPG_PASS_FILE` gesetzt wird und die nach Abschluss (Erfolg oder Fehler) garantiert gelöscht wird. `resolve_pass_file()` akzeptiert **nur** einen so explizit gesetzten, lesbaren Pfad.
+- Ist nichts gesetzt (kein `$GPG_PASSPHRASE`, kein lesbares `$GPG_PASS_FILE`), fragt `gpg` interaktiv (Fallback — z.B. ein lokal-manueller Workflow ohne dev-gui-Kontext).
+- **agent-flow bleibt strikt Bitwarden-agnostisch:** das Plugin kennt nur diese Kette und spricht **nie** selbst mit Bitwarden; der Bitwarden-Zugang verlässt dev-gui nie (S3 der dev-gui-Spec).
+- **Cipher:** GPG-symmetrisch, `--cipher-algo AES256`, `--pinentry-mode loopback` (batch-fähig, kein TTY-Pinentry). Identisch zu `scripts/encrypt-env.sh` (Fabrik-eigen).
 
-**Warum geteilt statt per-App (GE1, Begründung als Invariante).** Die Passphrase lebt im Operator-Environment (eine der vier Quellen oben), nicht im Repo. Damit ist `.env.gpg` portabel — jeder Fabrik-Host mit der provisionierten Passphrase kann jede App entschlüsseln; das Repo trägt kein Schlüssel-Setup, `/new-project` braucht keinen Bitwarden-Schritt.
+**Warum per-App statt geteilt (GE1, Begründung als Invariante).** Eine geteilte Fabrik-Passphrase bedeutete: Kompromittierung oder Rotation betrafen **alle** Apps gleichzeitig, und jeder Fabrik-Host mit der Passphrase konnte jede App entschlüsseln. Die per-App-Passphrase begrenzt Blast-Radius und Rotation auf **genau eine** App. Der Trade-off (das Repo muss die App-eigene Passphrase kennen) wird über `$GPG_PASSPHRASE`/`$GPG_PASS_FILE` gelöst, **ohne** dass das Repo oder das Plugin selbst einen Bitwarden-Zugang braucht — die Bitwarden-Mechanik bleibt vollständig bei dev-gui (GE1).
 
 ---
 
@@ -159,7 +161,7 @@ paths = [
 - `useDefault = true` bleibt gesetzt — die Allowlist **erweitert** das Default-Regelset, sie ersetzt es nicht.
 - Sowohl `build.yml` (`--no-git`, push-Scan) als auch `security.yml` (History-Scan) respektieren `.gitleaks.toml` automatisch (gitleaks lädt die Repo-Root-Config). Es ist **kein** zusätzliches Flag in den Workflows nötig — der `cicd`-Agent härtet die Allowlist nur „mit Beweis" (siehe `cicd.md` Abschnitt E, „gitleaks-Whitelist nur mit Beweis"); der `.env.gpg`-Eintrag **ist** der dokumentierte, bewiesene Standard-Fall.
 
-**`security/R01`-Präzisierung (landet in `knowledge/security.md` — §13, Item #4).** Der Floor-Wortlaut wird von „Keine Secrets im Code/Repo" geschärft zu: *Klartext-Secrets (Keys/Tokens/Passwörter/Connection-Strings) im Repo → Critical; die **verschlüsselte** `.env.gpg`-Datei (GPG symmetric, geteilte Fabrik-Passphrase) ist der **vorgesehene** Weg, App-Secrets versioniert mitzuführen, und ist KEIN Befund.* Die Reviewer-Checklist erhält den Spiegel-Eintrag.
+**`security/R01`-Präzisierung (landet in `knowledge/security.md` — §13, Item #4).** Der Floor-Wortlaut wird von „Keine Secrets im Code/Repo" geschärft zu: *Klartext-Secrets (Keys/Tokens/Passwörter/Connection-Strings) im Repo → Critical; die **verschlüsselte** `.env.gpg`-Datei (GPG symmetric, App-eigene Passphrase — §2 GE1) ist der **vorgesehene** Weg, App-Secrets versioniert mitzuführen, und ist KEIN Befund.* Die Reviewer-Checklist erhält den Spiegel-Eintrag.
 
 ---
 
@@ -190,9 +192,9 @@ docker run -d --name "$app" \
 
 **Wenn eine App es künftig braucht (Aktivierungspfad, NICHT P1):**
 - Der Schlüssel kommt **nicht** aus `.env.gpg` (das Repo-Artefakt braucht keine CI-Passphrase) — sondern als **GitHub-Actions-Secret** (`secrets.<NAME>`), in `build.yml` als `build-args`/`--secret` injiziert.
-- Begründung: Build läuft in GitHub Actions ohne die Fabrik-Passphrase (GE3). Ein dortiges decrypt würde die geteilte Passphrase in die CI-Umgebung exponieren — das vermeiden wir. Build-Secrets sind ein **separater** Trust-Boundary (CI-Runner) und gehören in den GitHub-Secret-Store, nicht in den `.env.gpg`-Pfad.
+- Begründung: Build läuft in GitHub Actions ohne die App-eigene Passphrase (GE3). Ein dortiges decrypt würde die Passphrase in die CI-Umgebung exponieren — das vermeiden wir. Build-Secrets sind ein **separater** Trust-Boundary (CI-Runner) und gehören in den GitHub-Secret-Store, nicht in den `.env.gpg`-Pfad.
 
-**Invariante (P1):** `build.yml` enthält **keinen** decrypt-Schritt und **keinen** App-Secret. Ein Diff, der die Fabrik-Passphrase oder einen `.env.gpg`-decrypt in einen GitHub-Workflow einführt, ist ein **Critical**-Befund (exponiert die geteilte Passphrase in die CI). Dieser Abschnitt wird als Kommentar-Notiz in `templates/_shared/build.yml` referenziert (§13, Item #6).
+**Invariante (P1):** `build.yml` enthält **keinen** decrypt-Schritt und **keinen** App-Secret. Ein Diff, der die App-eigene Passphrase oder einen `.env.gpg`-decrypt in einen GitHub-Workflow einführt, ist ein **Critical**-Befund (exponiert die Passphrase in die CI). Dieser Abschnitt wird als Kommentar-Notiz in `templates/_shared/build.yml` referenziert (§13, Item #6).
 
 ---
 
@@ -229,8 +231,8 @@ docker run -d --name "$app" \
 3. **`.gitignore` ergänzen** um den `gitignore.snippet` (§5, idempotent).
 4. **`.gitleaks.toml` kopieren** ans Repo-Root (§6 Allowlist-Scaffold).
 5. **Initiales `.env.gpg` anlegen + committen (GE4):**
-   - Aus `.env.example` (oder einem leeren/Platzhalter-`.env`) per `bash scripts/encrypt-env.sh` ein initiales `.env.gpg` erzeugen — **vorausgesetzt die Passphrase-Kette (§3) ist auf dem Scaffold-Host auflösbar**.
-   - **Passphrase nicht auflösbar** (kein `gpg.pass`, kein `$GPG_PASSPHRASE`, non-interaktiv): kein Hard-Fail — Backlog-Item „Initiales `.env.gpg` erzeugen (`bash scripts/encrypt-env.sh`, sobald Passphrase provisioniert)" + Konsolen-Warnung. Das Scaffold (Scripts, `.gitignore`, `.gitleaks.toml`, `.env.example`) liegt trotzdem.
+   - Aus `.env.example` (oder einem leeren/Platzhalter-`.env`) per `bash scripts/encrypt-env.sh` ein initiales `.env.gpg` erzeugen — **vorausgesetzt die Passphrase-Kette (§3) ist auf dem Scaffold-Host auflösbar**. **Regelweg (GE1):** dev-gui provisioniert vor dem Scaffold-Lauf automatisch eine neue per-App-Passphrase ([[per-app-gpg-passphrase-provisioning]], dev-gui-Repo) und reicht sie **ausschließlich als temporäre `0600`-Datei** über `$GPG_PASS_FILE` durch — das Plugin erzeugt/kennt selbst keine Bitwarden-Mechanik, es liest nur die Datei.
+   - **Passphrase nicht auflösbar** (kein `$GPG_PASS_FILE`, kein `$GPG_PASSPHRASE`, non-interaktiv — z.B. `/new-project` außerhalb eines dev-gui-Kontexts): kein Hard-Fail — Backlog-Item „Initiales `.env.gpg` erzeugen (`bash scripts/encrypt-env.sh`, sobald Passphrase provisioniert)" + Konsolen-Warnung. Das Scaffold (Scripts, `.gitignore`, `.gitleaks.toml`, `.env.example`) liegt trotzdem.
    - **Zweck (GE4):** ab Tag 1 ist die ganze Kette erprobt — `.gitignore` hält `.env` draußen, die gitleaks-Allowlist lässt `.env.gpg` durch, die Script-Pfade existieren. Der erste echte `git push` mit committetem `.env.gpg` darf das Secret-Scan-Gate **nicht** rot färben (das ist genau der Reconciliation-Test, GE6).
 6. **README um Secrets-Abschnitt erweitern:** Verweis auf diese Spec, `.env`/`.env.gpg`-Modell, Workflow (`decrypt-env.sh` lokal → `.env` editieren → `encrypt-env.sh` → `.env.gpg` committen).
 
@@ -286,13 +288,13 @@ Testbar — der Vertrag für `coder`/`reviewer`/`tester`. Board-Items referenzie
 
 - **AC1 — Modell.** Ein konformes Repo trägt `.env` (gitignored, NIE im Index/History committed) UND ein committetes `.env.gpg`. `git ls-files` zeigt `.env.gpg`, aber **nie** `.env` oder `.env.*` (außer `.env.example`).
 - **AC2 — Verschlüsselung.** `.env.gpg` ist mit GPG-symmetrisch `AES256` erzeugt (`gpg --list-packets .env.gpg` zeigt symmetric/AES256). `decrypt-env.sh` stellt aus `.env.gpg` ein `.env` (0600) wieder her, wenn die Passphrase über die Kette (§3) auflösbar ist.
-- **AC3 — Geteilte Passphrase-Kette.** Das per-App-`scripts/_lib.sh` enthält `resolve_pass_file()` **identisch** zur Fabrik-Quelle (`scripts/_lib.sh`): Reihenfolge `$GPG_PASS_FILE` → `/etc/softwareschmiede/gpg.pass` → `~/.config/softwareschmiede/gpg.pass` → `$GPG_PASSPHRASE` → Prompt. Kein per-App-Schlüssel, kein Bitwarden-Schritt im Repo (GE1).
+- **AC3 — App-eigene Passphrase-Kette.** Das per-App-`scripts/_lib.sh` enthält eine **eigene**, bewusst von der Fabrik-Quelle (`scripts/_lib.sh`) **abweichende** `resolve_pass_file()` (keine Auto-Erkennung geteilter Org-Dateien): Reihenfolge `$GPG_PASSPHRASE` → `$GPG_PASS_FILE` (explizit, app-eigen) → Prompt. Kein Bitwarden-Zugang im Repo/Plugin — die Passphrase kommt entweder als Laufzeit-Env (Deploy-Injektion, dev-gui) oder als Datei (`$GPG_PASS_FILE`, Scaffold-Provisionierung, dev-gui); beide Quellen liegen außerhalb des Plugins (GE1).
 - **AC4 — Script-Set.** `scripts/{encrypt-env,decrypt-env,load-env}.sh` existieren, sind executable, nutzen `set -euo pipefail`, sourcen `_lib.sh`, tragen keine hartkodierte Passphrase. `decrypt-env.sh` setzt `umask 077` + `chmod 600 .env` (GE2).
 - **AC5 — `.gitignore`.** Die `.gitignore` ignoriert `.env` + `.env.*`, negiert (`!`) `.env.example` und `.env.gpg`. Ein versuchter `git add .env` schlägt am Ignore (bzw. erzeugt einen Reviewer-Critical, falls erzwungen).
 - **AC6 — gitleaks-Allowlist (Reconciliation).** Das Repo trägt eine `.gitleaks.toml` mit `useDefault = true` und einer Allowlist, die **ausschließlich** `^\.env\.gpg$` erlaubt. Ein `gitleaks detect` über ein Repo mit committetem `.env.gpg` ist **grün**; ein committeter Klartext-Wert (z.B. `.env` mit `API_KEY=…`) ist **rot** (GE6).
 - **AC7 — `security/R01`-Schärfung.** `knowledge/security.md` formuliert `R01` so, dass Klartext-Secrets Critical bleiben UND `.env.gpg` explizit als zulässiger Weg benannt ist; die Reviewer-Checklist trägt den Spiegel-Eintrag. Ein Reviewer flaggt committeten Klartext als Critical, `.env.gpg` **nicht**.
 - **AC8 — Laufzeit-Konsum.** Der `cicd`/`preview`-Rollout führt vor `docker run` `decrypt-env.sh` aus und übergibt `--env-file .env`. Das Image enthält **keine** App-Secrets; `build.yml` enthält **keinen** decrypt-Schritt und **kein** App-Secret (GE3).
-- **AC9 — Build-Time inaktiv.** `templates/_shared/build.yml` trägt eine Kommentar-Notiz, die den Build-Time-Pfad als inaktiv markiert (Aktivierung künftig via GitHub-Actions-Secret, nicht via `.env.gpg`-decrypt in CI). Ein Diff, der die Fabrik-Passphrase oder einen `.env.gpg`-decrypt in einen Workflow einführt, ist ein Critical-Befund (§8).
+- **AC9 — Build-Time inaktiv.** `templates/_shared/build.yml` trägt eine Kommentar-Notiz, die den Build-Time-Pfad als inaktiv markiert (Aktivierung künftig via GitHub-Actions-Secret, nicht via `.env.gpg`-decrypt in CI). Ein Diff, der die App-eigene Passphrase oder einen `.env.gpg`-decrypt in einen Workflow einführt, ist ein Critical-Befund (§8).
 - **AC10 — `/new-project` initial.** Nach `/new-project` existiert das vollständige Scaffold (Scripts, `.env.example`, `.gitignore`-Regeln, `.gitleaks.toml`) und — bei auflösbarer Passphrase — ein committetes initiales `.env.gpg`; der erste `git push` löst das Secret-Scan-Gate **grün** aus. Bei nicht auflösbarer Passphrase: Backlog-Item statt Hard-Fail (GE4).
 - **AC11 — `/adopt` Audit, kein Rewrite.** `/adopt` ergänzt fehlendes Scaffold idempotent (überschreibt nichts), legt bei getracktem Klartext-`.env` einen Critical-Befund und bei Klartext-`.env` in der **History** ein Important-Backlog-Item an — **ohne** die git-History umzuschreiben (GE5).
 - **AC12 — Sync-Konvention.** Führt ein Diff eine neue App-env-Variable ein, ohne `.env.example` zu ergänzen (oder ohne `.env.gpg` zu re-encrypten), meldet der `reviewer` den dokumentierten Sync-Befund (§9); reiner App-Code ohne neue env-Variable triggert das Gate nicht.
@@ -315,12 +317,12 @@ Testbar — der Vertrag für `coder`/`reviewer`/`tester`. Board-Items referenzie
 
 ## 15. Nicht-Ziele
 
-- **Per-App-Schlüssel / Bitwarden-Schritt im Repo** (GE1 — ausgeschlossen).
+- **Bitwarden-Zugang/-Mechanik im Plugin selbst** (GE1 — ausgeschlossen; das Plugin bleibt strikt Bitwarden-agnostisch, Passphrasen-Provisionierung + Bitwarden-Zugang liegen ausschließlich bei dev-gui).
 - **History-Rewrite adoptierter Repos** (GE5 — nur Audit-Finding).
 - **Build-Time-Secret-Konsum in P1** (§8 — Tür offen, inaktiv).
 - **Bit-genaues `.env`↔`.env.gpg`-Diff-Gate** (`.env` liegt nicht im Repo — das Sync-Gate ist eine dokumentierte Heuristik, §9, kein kryptografischer Beweis).
 - **Asymmetrische/Multi-Recipient-Krypto, SOPS, Vault** (GE2 — bestehendes symmetrisches Muster wird wiederverwendet).
-- **Secret-Rotation/-Versionierung der geteilten Passphrase** (Ops-Vorgang außerhalb dieses Subsystems).
+- **Secret-Rotation/-Versionierung der App-eigenen Passphrase** (dev-gui-Vorgang außerhalb dieses Subsystems — [[per-app-gpg-passphrase-rotation]], dev-gui-Repo).
 
 ---
 
@@ -331,3 +333,4 @@ Testbar — der Vertrag für `coder`/`reviewer`/`tester`. Board-Items referenzie
 - **Scaffold-Klasse:** `templates/_shared/` (neu: `templates/_shared/secrets/`).
 - **Skills/Agenten:** `skills/new-project`, `skills/adopt`, `skills/flow`; `agents/coder`, `agents/reviewer`, `agents/cicd`.
 - **Verwandte Subsysteme (Pattern-Vorbild):** `docs/architecture/db-subsystem.md` (Scaffold-Fragment-/Wellen-/Detection-Muster).
+- **Cross-Repo (Doktrin-Quelle per-App-Passphrase, GE1, koordiniert per PR — nie Direkt-Edit):** `docs/specs/per-app-gpg-passphrase-provisioning.md` + `docs/specs/deploy-bitwarden-gpg-injection.md` (dev-gui-Repo) — Provisionierung/Rotation/Deploy-Injektion der per-App-Passphrasen; das Plugin bleibt Bitwarden-agnostisch und kennt nur `$GPG_PASS_FILE`/`$GPG_PASSPHRASE` (§3).
