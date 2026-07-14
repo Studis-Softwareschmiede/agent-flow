@@ -1,6 +1,6 @@
 ---
 pack: migration/alembic
-pack_version: 1.0
+pack_version: 1.1
 framework_version_range: ""
 pack_date: 2026-07-14
 primary_sources:
