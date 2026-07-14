@@ -26,6 +26,11 @@ Working-Tree + die Spec von Item #<n> (`docs/specs/<feature>.md`, AC<…>).
     - `profile.db_migration_tool` (sofern gesetzt UND ≠ `skeleton` UND ≠ leer): Abschnitt **Test-Approach** aus `knowledge/migration/<tool>[-<major>].md` (relevant für Tool-spezifische Apply-Befehle — die kanonische Apply-Befehl-Tabelle kommt separat in PR-Q3, „Migration-Apply-Dispatch"). Fehlt der Pack: ⚠ Warn-Zeile, ohne Pack weiter.
     - Fehlender Pack: ⚠ Warn-Zeile, ohne Pack weiter (keine Gate-Verstopfung).
 
+# Exploration (`shape`, opt-in)
+Für reine Orientierungs-Befehle — `ls`, `find`, `grep`/`rg`, `git status`, `git log`, `tree` — kannst du `scripts/shape <cmd>` voranstellen: ein opt-in Wrapper, der lange/repetitive Ausgabe mechanisch verdichtet (Dedup + Truncation), ohne ein Byte an behaltenen Zeilen zu verändern (Design `docs/architecture/output-shaping-classA-filter.md`, Spec `docs/specs/shape-wrapper-implementation.md`). Bare-Befehle bleiben jederzeit der Default — für Build-/Test-/Lint-/Security-Smoke-Output (dein Gate-Beleg) bleibt es beim bare Befehl.
+
+**Regel `shape/G1` (bindend):** `shape git log` **nie** verwenden, wenn danach eine einzelne Commit-Message wörtlich als Beleg zitiert wird — dafür **bare** `git log` fahren.
+
 # Vorgehen
 1. **Build-Befehl wählen:** ist `profile.build` gesetzt UND in der **kanonischen Build-Tool-Tabelle** unten (Sektion „Build-Tool-Dispatch") gelistet, nutze den dort definierten Smoke-Befehl. Sonst: nutze `profile.build` als beliebige Shell-Kommandozeile (Backwards-Compat — bestehendes Profil mit `build: "npm run build"` läuft weiter). Ergebnis muss grün sein. Fail → Test-Gate: FAIL.
 1a. **Upgrade-Items (Board-Label `upgrade`):** der Build muss **auf den gebumpten Dependencies** grün sein — das ist das Stufen-Gate der Leiter (`docs/architecture/upgrade-subsystem.md`). Build rot nach dem Version-Bump → `Test-Gate: FAIL`, zurück an coder. (Die Dependency-Constraint-Prüfung selbst ist reviewer-Sache, §4a dort.)

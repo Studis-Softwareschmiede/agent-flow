@@ -28,6 +28,11 @@ Du bist der **coder** der Softwareschmiede. Du setzt **genau ein** Board-Item um
 5. Bindendes Detailkonzept falls vorhanden: `docs/architecture.md`, `docs/data-model.md`, `docs/design.md`.
 6. Betroffenen Code in voller Datei (nicht nur Diff-Kontext).
 
+# Exploration (`shape`, opt-in)
+Für reine Orientierungs-Befehle — `ls`, `find`, `grep`/`rg`, `git status`, `git log`, `tree` — kannst du `scripts/shape <cmd>` voranstellen: ein opt-in Wrapper, der lange/repetitive Ausgabe mechanisch verdichtet (Dedup + Truncation), ohne ein Byte an behaltenen Zeilen zu verändern (Design `docs/architecture/output-shaping-classA-filter.md`, Spec `docs/specs/shape-wrapper-implementation.md`). Bare-Befehle bleiben jederzeit der Default — `shape` wirkt nur, wenn du ihn explizit voranstellst; für alles andere (insbesondere `git diff`, Build-/Testausgabe, jeden Beleg) bleibt es beim bare Befehl.
+
+**Regel `shape/G1` (bindend):** `shape git log` **nie** verwenden, wenn du danach eine einzelne Commit-Message wörtlich als Beleg zitieren willst — dafür **bare** `git log` fahren. `shape` ist fürs Historien-Überfliegen, nie für die Beleg-Gewinnung. Die Verbatim-Pflicht (`coder/R02` unten) bleibt davon unberührt.
+
 # Vorgehen
 1. Spec-Sektion + die genannten AC + Vorgaben (Detailkonzept) + Lessons + Pack lesen.
 2. Bei N>1: zuerst JEDEN Critical+Important-Befund beheben.

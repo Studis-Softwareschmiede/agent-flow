@@ -1,0 +1,31 @@
+id: S-068
+parent: F-029
+title: shape-Wrapper bauen + Fidelity-Test-Gate + Adoption in agents/*.md
+status: Done
+priority: P2
+spec: docs/specs/shape-wrapper-implementation.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+- AC6
+depends: null
+labels:
+- tokens
+size_est: M
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'M: bash-Wrapper scripts/shape (Allowlist/Barrieren/2 Transforms) +
+  3 Fidelity-Suiten mit Fixtures (tests/shape/) + Adoption in 3 agents/*.md; Bauplan
+  liegt als Design-ADR vor. 6 AC, kein db/security-Label.'
+confidence: medium
+tok_est: null
+branch: feat/S-068-shape-wrapper
+pr: null
+blocked_reason: null
+created_at: '2026-07-14T10:41:55Z'
+updated_at: '2026-07-14T11:07:17Z'
+done_at: '2026-07-14T11:07:17Z'

@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.4, pytest-7.4.0, pluggy-1.2.0
+rootdir: /repo
+collected 4 items
+
+tests/test_widget.py .F..                                              [100%]
+
+=================================== FAILURES ===================================
+_______________________________ test_widget_sum ________________________________
+
+    def test_widget_sum():
+        widget = Widget(a=1, b=2)
+>       assert widget.total() == 4
+E       assert 3 == 4
+E        +  where 3 = <bound method Widget.total of <Widget a=1 b=2>>()
+
+tests/test_widget.py:17: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_widget.py::test_widget_sum - assert 3 == 4
+========================= 1 failed, 3 passed in 0.12s ===========================

@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+# scripts/shape <cmd> [args...]
+#
+# Opt-in Wrapper für Klasse-A-Explorationsbefehle (Design S-067,
+# docs/architecture/output-shaping-classA-filter.md; Spec
+# docs/specs/shape-wrapper-implementation.md, AC1-AC6).
+#
+# Zweck: reine Orientierungs-Ausgabe (ls/find/grep/git status/git log/...)
+# per Dedup+Truncation mechanisch verdichten -- OHNE jemals Klasse-B/C-Ausgabe
+# (git diff, Test-/Lint-Logs, Verbatim-Zitate) anzufassen. Die Klasse-B/C-
+# Unversehrtheit ist eine STRUKTURELLE Eigenschaft, keine verhaltensbasierte:
+#
+#   Barriere 1 (Invocation-Boundary): shape wird nur explizit vorangestellt.
+#     Jeder bare Befehl (der Default fuer ausnahmslos alles) sieht diesen
+#     Wrapper nie -- er ist nicht im Pfad.
+#   Barriere 2 (geschlossene Allowlist, fuer den Fall versehentlichen
+#     Wrappens): nur explizit gelistete Befehlskoepfe/Subcommands gelten als
+#     Klasse A. Alles andere -> roh durchgereicht (fail-open).
+#
+# Ausfuehrung: direkter argv-Exec (KEIN `sh -c`) -- Verkettung/Pipes/Subshells
+# sind damit konstruktiv unmoeglich. Exit-Code des Kindprozesses wird
+# unveraendert durchgereicht.
+#
+# Allowlist (Klasse A, geschlossen -- KEIN --all/"alle Befehle"-Modus):
+#   ls, tree, find, grep, rg, git status, git log,
+#   docker ps, docker images, kubectl get, npm ls, pip list
+#
+# Fail-open (roh durchreichen, Original-Exit-Code, NIE leer/abgeschnitten) bei:
+#   - unbekanntem Befehlskopf
+#   - Shell-Metazeichen im argv (&& || ; | ` $( > < &)
+#   - programm-startenden find-Flags (-exec -execdir -ok -okdir)
+#   - NUL-Bytes/Binaerinhalt in der eingefangenen stdout (siehe unten --
+#     awk kappt auf BSD/macOS Zeilen am ersten \0 -> stille Korruption,
+#     E1-Verstoss; deshalb VOR dem Transform geprueft, nicht danach)
+#   - jedem internen Fehler
+#
+# Transforms (NUR auf stdout eines allowlisteten Befehls; stderr IMMER roh):
+#   (a) Dedup identischer AUFEINANDERFOLGENDER Zeilen -> eine Zeile + " (×N)"
+#       (Summe der Counts = Original-Zeilenzahl, keine Umsortierung)
+#   (b) Truncation bei > 200 Zeilen: Kopf+Fuss behalten, Marker
+#       "[… M Zeilen ausgelassen (gesamt N) …]" dazwischen
+#   Jede behaltene Zeile ist BYTE-IDENTISCH zur Quelle. Sonst nichts (keine
+#   Tail-Heuristik, kein Strippen/Reflow/Umsortieren).
+#
+# Nicht-Ziele (AC6): kein PreToolUse-Hook, keine knowledge/<lang>.md
+# Output-Contract-Kopplung (der Wrapper liest sie NICHT), kein --all-Modus.
+#
+# Regel shape/G1 (siehe agents/*.md): shape git log NIE verwenden, wenn
+# danach eine Commit-Message woertlich als Beleg zitiert wird -- dafuer
+# bare `git log` fahren.
+
+set -u
+
+TRUNCATE_THRESHOLD=200
+
+# ─── Transform-Helfer (nur fuer stdout eines allowlisteten Befehls) ─────────
+
+# Liest stdin, gibt dedupte Ausgabe (identische aufeinanderfolgende Zeilen ->
+# eine Zeile + " (×N)") + Truncation (Kopf/Fuss bei > TRUNCATE_THRESHOLD
+# Zeilen, mit Marker) aus. Byte-Identitaet fuer behaltene Zeilen: es wird nur
+# über vollstaendige Zeilen (getrennt per \n) gearbeitet -- Bytes innerhalb
+# einer Zeile werden nie veraendert.
+_shape_transform() {
+  awk -v threshold="$TRUNCATE_THRESHOLD" '
+    BEGIN { n = 0; prev_set = 0 }
+    {
+      line = $0
+      if (prev_set && line == prev_line) {
+        count++
+        next
+      }
+      if (prev_set) {
+        lines[n] = prev_line
+        counts[n] = count
+        n++
+      }
+      prev_line = line
+      count = 1
+      prev_set = 1
+    }
+    END {
+      if (prev_set) {
+        lines[n] = prev_line
+        counts[n] = count
+        n++
+      }
+
+      # Original-Zeilenzahl = Summe aller Counts
+      total_orig = 0
+      for (i = 0; i < n; i++) total_orig += counts[i]
+
+      if (n <= threshold) {
+        for (i = 0; i < n; i++) {
+          emit(lines[i], counts[i])
+        }
+      } else {
+        head_n = 100
+        tail_n = 100
+        if (head_n + tail_n > n) {
+          head_n = int(n / 2)
+          tail_n = n - head_n
+        }
+        omitted_orig_lines = total_orig
+        for (i = 0; i < head_n; i++) {
+          emit(lines[i], counts[i])
+          omitted_orig_lines -= counts[i]
+        }
+        for (i = n - tail_n; i < n; i++) {
+          omitted_orig_lines -= counts[i]
+        }
+        printf("[… %d Zeilen ausgelassen (gesamt %d) …]\n", omitted_orig_lines, total_orig)
+        for (i = n - tail_n; i < n; i++) {
+          emit(lines[i], counts[i])
+        }
+      }
+    }
+    function emit(l, c) {
+      if (c > 1) {
+        printf("%s (×%d)\n", l, c)
+      } else {
+        print l
+      }
+    }
+  '
+}
+
+# ─── Barriere 2: Klassifikation ─────────────────────────────────────────────
+
+# Prueft argv auf Shell-Metazeichen. Rueckgabe 0 = enthaelt Metazeichen.
+_shape_has_shell_metachars() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      *'&&'*|*'||'*|*';'*|*'|'*|*'`'*|*'$('*|*'>'*|*'<'*|*'&'*)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+# Prueft eine Datei auf NUL-Bytes (Binaerinhalt). Rueckgabe 0 = enthaelt NUL.
+# Portabel fuer macOS/BSD- UND GNU-Coreutils: `grep -qU $'\x00'` schlaegt auf
+# beiden fehl (NUL ueberlebt die argv-Uebergabe nicht als Suchmuster), daher
+# Byte-Groessenvergleich vor/nach `tr -d '\000'` -- funktioniert ueberall.
+_shape_has_nul_bytes() {
+  local file="$1"
+  local orig_size stripped_size
+  orig_size="$(wc -c < "$file" | tr -d ' ')"
+  stripped_size="$(LC_ALL=C tr -d '\000' < "$file" | wc -c | tr -d ' ')"
+  [[ "$orig_size" != "$stripped_size" ]]
+}
+
+# Prueft argv auf programm-startende find-Flags. Rueckgabe 0 = gefunden.
+_shape_has_find_exec_flags() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -exec|-execdir|-ok|-okdir)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+# Klassifiziert argv. Gibt "A" (Klasse A, transformierbar) oder "raw" auf
+# stdout aus.
+_shape_classify() {
+  local head="$1"
+  shift
+
+  case "$head" in
+    ls|tree|find|grep|rg)
+      if [[ "$head" == "find" ]] && _shape_has_find_exec_flags "$@"; then
+        echo "raw"
+        return
+      fi
+      echo "A"
+      return
+      ;;
+    git)
+      local sub="${1:-}"
+      if [[ "$sub" == "status" || "$sub" == "log" ]]; then
+        echo "A"
+      else
+        echo "raw"
+      fi
+      return
+      ;;
+    docker)
+      local sub="${1:-}"
+      if [[ "$sub" == "ps" || "$sub" == "images" ]]; then
+        echo "A"
+      else
+        echo "raw"
+      fi
+      return
+      ;;
+    kubectl)
+      local sub="${1:-}"
+      if [[ "$sub" == "get" ]]; then
+        echo "A"
+      else
+        echo "raw"
+      fi
+      return
+      ;;
+    npm)
+      local sub="${1:-}"
+      if [[ "$sub" == "ls" ]]; then
+        echo "A"
+      else
+        echo "raw"
+      fi
+      return
+      ;;
+    pip)
+      local sub="${1:-}"
+      if [[ "$sub" == "list" ]]; then
+        echo "A"
+      else
+        echo "raw"
+      fi
+      return
+      ;;
+    *)
+      echo "raw"
+      return
+      ;;
+  esac
+}
+
+# ─── Main ────────────────────────────────────────────────────────────────
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: shape <cmd> [args...]" >&2
+  exit 2
+fi
+
+# Fail-open bei Shell-Metazeichen im argv (Zusatzfall (i), AC3/Suite 1).
+if _shape_has_shell_metachars "$@"; then
+  "$@"
+  exit $?
+fi
+
+CLASS="$(_shape_classify "$@" 2>/dev/null)"
+
+if [[ "$CLASS" != "A" ]]; then
+  # Fail-open: roh durchreichen, Original-Exit-Code.
+  "$@"
+  exit $?
+fi
+
+# Klasse A: stdout durch die Transforms schleusen, stderr IMMER roh.
+STDOUT_TMP="$(mktemp)"
+trap 'rm -f "$STDOUT_TMP"' EXIT
+
+"$@" >"$STDOUT_TMP" 2>&2
+CMD_EXIT=$?
+
+if [[ ! -s "$STDOUT_TMP" ]]; then
+  # Keine stdout-Ausgabe -- nichts zu transformieren, nichts droppen.
+  exit "$CMD_EXIT"
+fi
+
+if _shape_has_nul_bytes "$STDOUT_TMP"; then
+  # NUL-Bytes/Binaerinhalt: awk (insb. BSD/macOS one-true-awk) kappt Zeilen
+  # am ersten \0 -> stille Byte-Korruption. Fail-open: roh durchreichen,
+  # NIE transformieren (E1).
+  cat "$STDOUT_TMP"
+  exit "$CMD_EXIT"
+fi
+
+if ! _shape_transform < "$STDOUT_TMP"; then
+  # Interner Transform-Fehler -> fail-open: rohe stdout nachreichen.
+  cat "$STDOUT_TMP"
+fi
+
+exit "$CMD_EXIT"
