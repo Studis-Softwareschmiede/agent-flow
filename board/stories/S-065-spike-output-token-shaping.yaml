@@ -10,6 +10,7 @@ implements:
 - AC3
 - AC4
 - AC5
+- AC6
 depends: null
 labels:
 - spike
