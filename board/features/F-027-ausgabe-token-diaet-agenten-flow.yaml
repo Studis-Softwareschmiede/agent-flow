@@ -1,0 +1,29 @@
+id: F-027
+title: Ausgabe-Token-Diät im Agenten-Flow
+goal: 'Den Token-Verbrauch der Bash-Ausgaben quer durch die Pipeline (coder/reviewer/tester/cicd)
+  gezielt senken — inspiriert von RTK (rtk-ai/rtk), aber selektiv: filtern nur bei
+  Explorations-Befehlen, roh bleiben bei allem, was die Review-/Test-Gates und die
+  Verbatim-Belege speist. Ergebnis ist eine belastbare Entscheidung (Eigenbau vs.
+  RTK-Binary vs. Prompt-Ebene) statt eine ungeprüfte Flächen-Aktivierung.
+
+  '
+status: Backlog
+priority: P2
+spec: docs/specs/output-token-shaping.md
+definition_of_done: 'Trennlinie (Allow-/Denylist) dokumentiert, Weg-C-Empfehlung erstellt,
+  Weg-B-Pilot gemessen (rtk gain + Gate-Gegenprobe), Entscheidung als ADR mit Token-Zahlen
+  und Fidelity-/Supply-Chain-/Telemetrie-Bewertung; AC1-AC5 der Spec grün.
+
+  '
+labels:
+- spike
+- tokens
+- flow-orchestrierung
+depends: null
+owner: alex
+area: flow-orchestrierung
+created_at: '2026-07-14T05:52:00Z'
+updated_at: '2026-07-14T05:52:00Z'
+stories:
+- S-065
+progress: 0/1 done
