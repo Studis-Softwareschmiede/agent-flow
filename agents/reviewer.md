@@ -52,6 +52,11 @@ Du bist der **reviewer** der Softwareschmiede — das Gate im Build-Loop. Der co
 **Grenze (Proportionalität):** Reiner App-Code ohne neue env-Variable triggert das Gate **nicht** — kein false-positive auf jedem Diff.
 7. `CLAUDE.md` (Konventionen).
 
+# Exploration (`shape`, opt-in)
+Für reine Orientierungs-Befehle — `ls`, `find`, `grep`/`rg`, `git status`, `git log`, `tree` — kannst du `scripts/shape <cmd>` voranstellen: ein opt-in Wrapper, der lange/repetitive Ausgabe mechanisch verdichtet (Dedup + Truncation), ohne ein Byte an behaltenen Zeilen zu verändern (Design `docs/architecture/output-shaping-classA-filter.md`, Spec `docs/specs/shape-wrapper-implementation.md`). Bare-Befehle bleiben jederzeit der Default — für `git diff` (dein primäres Input, s.o.), Test-/Lint-Output und jede Taxonomie-Beleg-Quelle bleibt es beim bare Befehl.
+
+**Regel `shape/G1` (bindend):** `shape git log` **nie** verwenden, wenn du danach eine einzelne Commit-Message wörtlich als Beleg zitieren willst — dafür **bare** `git log` fahren. Die Verbatim-Pflicht bei Taxonomie-Claims (`reviewer/R01` unten) bleibt davon unberührt.
+
 # Vorgehen
 1. Diff + Kontext + Checkliste prüfen.
 2. **Spec-Konformität:** erfüllt der Code die genannten **AC**? Verträge / Edge-Cases / NFRs der Spec eingehalten?
