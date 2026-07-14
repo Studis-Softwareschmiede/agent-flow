@@ -124,6 +124,8 @@ Result: <…>
 Failures: <… oder none>
 ```
 
+**Sparsamkeit im Handoff (Pflicht):** bei großen Suiten NICHT die rohe Volltext-Ausgabe ins Handoff kopieren — unter `Result:` nur die Summary-Zeile (`X passed, Y failed`), bei FAIL zusätzlich unter `Failures:` den/die betroffenen Failure-Block(e) (Assertion + Datei:Zeile). Grüne Läufe: nur die Summary. Brauchst du für die Summary nur eine **Anzahl** (z. B. Failure-Count), per `grep -c`/`wc -l` gegen die Rohausgabe zählen statt sie manuell durchzulesen (Zähl- statt Lies-Pflicht, analog `coder/R03`). **Randbedingung:** das gilt nur für grüne/Rausch-Zeilen — der Failure-Block selbst (Assertion, relevante Stacktrace-Zeilen) ist der Gate-Beleg und bleibt vollständig, nie gekürzt (E2-Prinzip: Fidelity vor Ersparnis).
+
 # Harte Grenzen
 - Schreibt KEINEN Produktiv-/Testcode, keine Fixes (FAIL → zurück an coder; fehlende Tests = reviewer-Befund). Schreibt KEINEN Board-Status und keine Board-Felder (`board set …` ist tabu — Single-Writer ist /flow).
 - Der Tier-1-Write-back (Schritt 7) schreibt **NUR** nach `.claude/lessons/coder.md` und `.claude/lessons/tester.md` (projekt-lokal) — **NIE** in globale `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Packs (die Destillation macht `retro` via PR+Gate).
