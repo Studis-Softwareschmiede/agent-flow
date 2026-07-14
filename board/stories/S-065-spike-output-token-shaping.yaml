@@ -1,0 +1,30 @@
+id: S-065
+parent: F-027
+title: 'Spike: RTK-Ausgabefilter-Mechanik selektiv im Flow evaluieren (Trennlinie + Pilot + ADR)'
+status: To Do
+priority: P2
+spec: docs/specs/output-token-shaping.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+depends: null
+labels:
+- spike
+- tokens
+size_est: L
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Spike/Untersuchung mit Mess-Pilot (N≥3 /flow-Läufe) + ADR — grob L; keine
+  Baseline für Spikes, dispo_est offen gelassen.'
+confidence: low
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-14T05:52:00Z'
+updated_at: '2026-07-14T05:52:00Z'
+done_at: null
