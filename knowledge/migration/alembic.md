@@ -2,11 +2,12 @@
 pack: migration/alembic
 pack_version: 1.0
 framework_version_range: ""
-pack_date: 2026-07-12
+pack_date: 2026-07-14
 primary_sources:
   - https://alembic.sqlalchemy.org/en/latest/tutorial.html
   - https://alembic.sqlalchemy.org/en/latest/autogenerate.html
   - https://alembic.sqlalchemy.org/en/latest/cookbook.html
+  - https://alembic.sqlalchemy.org/en/latest/branches.html
 non_sources: [dev.to, medium.com, stackoverflow.com, geeksforgeeks.org, baeldung.com]
 ---
 
@@ -32,6 +33,8 @@ Alembic — das SQLAlchemy-Migrationstool für Python. Geladen bei `profile.db_m
 - `alembic/A12` — **Schema-Level-Multi-Tenancy ist nicht nativ eingebaut**, wird über wiederholte Alembic-Läufe pro Ziel-DB/Schema erreicht (z.B. Postgres `SET search_path`, MySQL/MariaDB `USE <db>`); üblicher Aufruf `alembic -x tenant=<schema> upgrade head`. Verbatim: „Alembic does not currently have explicit multi-tenant support; typically, the approach must involve running Alembic multiple times against different database URLs." Quelle: [Cookbook — Rudimental Schema-Level Multi Tenancy](https://alembic.sqlalchemy.org/en/latest/cookbook.html#rudimental-schema-level-multi-tenancy-for-postgresql-mysql-other-databases).
 - `alembic/A13` — **Leere Autogenerate-Revisionen unterdrücken** via `process_revision_directives`-Hook in `env.py` (entfernt die `MigrationScript`-Direktive, wenn `upgrade_ops.is_empty()`). Quelle: [Cookbook — Don't Generate Empty Migrations with Autogenerate](https://alembic.sqlalchemy.org/en/latest/cookbook.html#don-t-generate-empty-migrations-with-autogenerate).
 - `alembic/A14` — **Für Daten-Migrationen gibt es keine Alembic-eigene Best-Practice-Norm** — Schema- und Daten-Migration sind bewusst getrennt gehalten (Downgrade von Datenlöschungen ist oft nicht sauber umkehrbar). Verbatim: „The solution needs to be designed specifically for each individual application and migration. There are no general rules and the following text is only a recommendation based on experience." Empfohlene Grundmuster: kleine Datenmengen via `op.bulk_insert()` inline, größere/komplexere über ein separates Migrations-Skript, oder Online-Migration mit Anwendungslogik. Quelle: [Cookbook — Data Migrations - General Techniques](https://alembic.sqlalchemy.org/en/latest/cookbook.html#data-migrations-general-techniques).
+- `alembic/A15` — **Multi-Head-Erkennung vor jedem Landen: `alembic heads`.** Bei parallelem Feature-Branch-Arbeiten mit unabhängig erzeugten Revisionen entstehen divergierende Köpfe (`branchpoint`). `alembic heads` listet alle aktuellen Head-Revisionen; bei >1 Head schlägt `alembic upgrade head` fehl. Verbatim: „FAILED: Multiple head revisions are present for given argument 'head'; please specify a specific target revision, '<branchname>@head' to narrow to a specific head, or 'heads' for all heads." Kanonisches Gate: `alembic heads` muss vor dem Mergen eines Feature-Branches genau 1 Zeile liefern. Quelle: [Working with Branches](https://alembic.sqlalchemy.org/en/latest/branches.html#working-with-branches).
+- `alembic/A16` — **`alembic merge` ist der dokumentierte Merge-Point-Mechanismus für divergierende Heads (DAG, kein linked list).** Aufruf: `alembic merge -m "<beschreibung>" <head1> <head2>` (oder `alembic merge -m "..." heads` für alle Heads); die erzeugte Revisionsdatei hat `down_revision` als **Tupel** beider Elternrevisionen. Verbatim: „An Alembic merge is a migration file that joins two or more 'head' files together.“ / „the only new twist is that `down_revision` points to both revisions.“ Der Upgrade-Prozess traversiert die Revisionen per topologischer Sortierung (DAG) und läuft korrekt sowohl auf DBs, die bereits auf dem einen als auch auf dem anderen Head standen — unabhängig davon, welcher Head zuerst appliziert wurde. Quelle: [Working with Branches — Merging Branches](https://alembic.sqlalchemy.org/en/latest/branches.html#merging-branches).
 
 ## B. Anti-Patterns aus Einsatz
 
