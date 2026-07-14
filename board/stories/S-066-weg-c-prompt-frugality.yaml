@@ -1,0 +1,29 @@
+id: S-066
+parent: F-028
+title: 'Weg C: sparsame Befehlswahl in die Agenten-Handoffs einziehen'
+status: Done
+priority: P2
+spec: docs/specs/output-shaping-prompt-frugality.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+depends: null
+labels:
+- tokens
+size_est: S
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'S: reine Textänderung an 2-3 agents/*.md (reviewer/tester, Randbedingung
+  coder), Grundlage ist die fertige ADR-§2.2-Empfehlungsliste; 5 AC, keine db/security/ui-Labels.'
+confidence: high
+tok_est: null
+branch: feat/S-066-weg-c-frugality
+pr: null
+blocked_reason: null
+created_at: '2026-07-14T09:29:46Z'
+updated_at: '2026-07-14T09:36:09Z'
+done_at: '2026-07-14T09:36:09Z'

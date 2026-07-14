@@ -1,0 +1,29 @@
+id: F-028
+title: Ausgabe-Token-Diät umsetzen (Weg C + Weg A)
+goal: 'Die messungs-belegte Empfehlung des ADR output-token-shaping umsetzen: Weg C
+  (Prompt-Ebenen-Sparsamkeit in den Agenten-Handoffs, sofort + risikofrei) und Weg A
+  (Eigenbau-Filter für Klasse-A-Befehle, Design-first). Fremd-Binary RTK wurde verworfen
+  (Pilot S-345); der reale Nutzen (~65-80% auf Erkundungs-Befehlen) wird ohne Hot-Path-Risiko
+  eingefangen, ohne Gate-/Verbatim-Treue anzutasten.
+
+  '
+status: Active
+priority: P2
+spec: docs/architecture/output-token-shaping.md
+definition_of_done: 'Weg C in agents/*.md eingezogen (Fidelity-Doktrin nachweisbar
+  unangetastet); Weg A als freigegebene Architektur-Entscheidung dokumentiert; beide
+  Stories terminal.
+
+  '
+labels:
+- tokens
+- rollen-agenten
+depends: null
+owner: alex
+area: rollen-agenten
+created_at: '2026-07-14T09:29:46Z'
+updated_at: '2026-07-14T09:29:46Z'
+stories:
+- S-066
+- S-067
+progress: 1/2 done
