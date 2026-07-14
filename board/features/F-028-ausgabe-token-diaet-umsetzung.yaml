@@ -7,7 +7,7 @@ goal: 'Die messungs-belegte Empfehlung des ADR output-token-shaping umsetzen: We
   eingefangen, ohne Gate-/Verbatim-Treue anzutasten.
 
   '
-status: Active
+status: Done
 priority: P2
 spec: docs/architecture/output-token-shaping.md
 definition_of_done: 'Weg C in agents/*.md eingezogen (Fidelity-Doktrin nachweisbar
@@ -26,4 +26,4 @@ updated_at: '2026-07-14T09:29:46Z'
 stories:
 - S-066
 - S-067
-progress: 1/2 done
+progress: 2/2 done
