@@ -175,4 +175,5 @@ Neuer Unterabschnitt `## Output-Contract` je Sprach-Pack (analog zur bestehenden
 
 - **Denylist (Klasse C)** ist bindend und unabhängig vom gewählten Weg — s. Spec-Verträge.
 - **Empfehlung (messungs-belegt, 2026-07-14):** C sofort + A mittelfristig (Pack-Verankerung); **B (RTK produktiv) abgelehnt** — Pilot-Fidelity auf Tests durchgefallen + Supply-Chain untauglich (§3.0/§3.2).
+- **Weg-A-Design (S-067):** die mechanische Umsetzung von Weg A ist in [`output-shaping-classA-filter.md`](output-shaping-classA-filter.md) entworfen — Empfehlung: **expliziter opt-in Wrapper-Befehl** (kein prozessweiter Hook), interne Allowlist, fail-open, mit hartem Fidelity-Gate vor Aktivierung.
 - **~~Offene Lücke~~ geschlossen:** gemessene Ersparnis liegt vor (dev-gui S-345, `docs/rtk-output-shaping-pilot-report.md`): Klasse A ~65–80 %, Klasse B marginal/fidelity-untauglich.
