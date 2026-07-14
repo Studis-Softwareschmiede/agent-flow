@@ -2,7 +2,7 @@
 
 > **Ablage-Begründung:** `agent-flow` hat keine dedizierte `docs/adr/`-Konvention (geprüft per `ls docs/` + `grep -rl ADR docs/`). Der bestehende Ort für „ADR-Stil"-Entscheidungsdokumente ist `docs/architecture/*` (`docs/glossary.md`: *„architekt … bindende `docs/architecture.md` (ADR-Stil)"*), belegt durch die vorhandenen Subsystem-Docs (`metrics-subsystem.md`, `secrets-subsystem.md`, `board-cut-runbook.md` — letzteres ohne `-subsystem`-Suffix, also bereits kein starres Namensschema). Dieses Dokument folgt derselben Konvention, benannt nach der zugehörigen Spec-ID (`output-token-shaping`).
 >
-> **Status:** Entwurf (Spike-Ergebnis). Die Empfehlung ist **vorläufig, messungs-vorbehaltlich** — siehe §3 (AC4). Die gemessene Token-Ersparnis ist eine **offene Lücke** bis zur Ausführung des Mess-Protokolls (§2, AC3) in einer Folge-Story gegen ein echtes Konsum-Repo.
+> **Status:** **Final (messungs-belegt, 2026-07-14).** Die ursprünglich vorläufige Empfehlung ist durch den Wegwerf-Piloten in dev-gui (Story **S-345**, Bericht `dev-gui:docs/rtk-output-shaping-pilot-report.md`) bestätigt und geschärft: **Weg C + Weg A empfohlen, Weg B (RTK produktiv) abgelehnt.** Die zuvor offene Mess-Lücke (§3.6) ist geschlossen — siehe **§3.0 (Pilot-Ergebnis)**.
 >
 > **Bezug:** Spec [`docs/specs/output-token-shaping.md`](../specs/output-token-shaping.md) (AC1–AC6), dort insbesondere die AC1-Trennlinien-Tabelle (Klassifikation A/B/C + Signal-vs-Rauschen-Regeln), die die normative Grundlage dieses ADR ist.
 
@@ -36,7 +36,18 @@ Die Arbeits-Agenten (`coder`, `reviewer`, `tester`, `cicd`) sind Bash-lastig; ei
 4. **`agents/reviewer.md` §4b-(c)** (*„per `grep` prüfen, ob ALLE Konsumenten…"*): wo nur Existenz/Anzahl der Konsumenten zählt (nicht der exakte Fundstellen-Kontext), `grep -rln` (Dateiliste) statt `grep -rn` (alle Treffer-Zeilen) erwägen — spart Tokens ohne Aussagekraft-Verlust, nur wenn die Zeile selbst kein Beleg werden muss.
 5. **Generische Konvention „Zähl- statt Lies-Pflicht":** bislang nur reaktiv in `coder/R03` (Handoff-Claim-Selbstverifikation) verankert. Empfehlung: überall dort, wo im Befund/Handoff nur eine **Zahl** gebraucht wird (Testanzahl, Treffer-Anzahl, Zeilenanzahl), `grep -c`/`wc -l` statt Volltext-Ausgabe zu nutzen — beträfe potenziell auch `reviewer` (Zähl von `it(`-Blöcken bei `reviewer/R03`) und `tester` (Zähl von Failures) analog zu `coder/R03`.
 
-## 3. AC4 — Entscheidung (Vorab-Empfehlung, vorläufig)
+## 3. AC4 — Entscheidung (messungs-belegt)
+
+### 3.0 Pilot-Ergebnis (2026-07-14, dev-gui S-345 — schließt die Mess-Lücke §3.6)
+
+Der Wegwerf-Pilot (RTK v0.43.0, gehärtet: gepinnt + checksum-verifiziert, **ohne Hook**, Telemetrie aus, rückstandsfrei entfernt) hat auf **Befehlsebene** gemessen (statt N≥3 `/flow`-Läufe — Begründung im dev-gui-Bericht). Kernbefunde:
+
+- **Klasse A (Exploration — ls, git status, grep, find):** reale, sichere Ersparnis **~65–80 %** (ls 67 %, git status 68 %, grep 70 %, find 81 %; `git log --oneline` nur 7 %, bereits kompakt). Null Fidelity-Risiko.
+- **Klasse B — `git diff`:** marginal (`rtk git diff`-Proxy ~0 %; dediziertes `rtk diff -` 4 % auf additions-lastigem Diff, Fidelity gewahrt).
+- **Klasse B — Test-Ausgabe: Fidelity DURCHGEFALLEN.** `rtk test`/`rtk err` sind eine **naive Tail-Heuristik** („letzte 5 Zeilen" + Log-Datei-Verweis), keine semantische Fehler-Extraktion. Das Fehlersignal (welche Assertion, Testname, Zeile) überlebt nur zufällig (wenn es in den letzten Zeilen steht) — bei mehreren Fehlern / Fehler nicht am Ende / Coverage-Ausgabe danach geht es **still verloren**. Exakt der maskierte-Gate-Fehlschlag (`coder/R02`/`reviewer/R01`-Risiko).
+- **Supply-Chain (jetzt primärquellen-verifiziert, nicht mehr README-Zusammenfassung):** Repo ~6 Monate jung, mehrere Release-Candidate-Builds/Tag, **keine kryptografische Signierung** der Releases (nur `checksums.txt`), **3 veröffentlichte Advisories im Kern-Mechanismus** — darunter **HIGH 7.8** (Permission-Gate-Bypass) und **CVE-2026-45792** (Config-Trust → **stille Verfälschung der dem LLM gezeigten Ausgabe**, gepatcht ab v0.32.0). Telemetrie per Default AUS (im Code bestätigt).
+
+**Schlussfolgerung:** Der reale Nutzen konzentriert sich auf Klasse-A-Explorationsbefehle — genau die kann **Weg A (Eigenbau)** abdecken, ohne Test-/Diff-Ausgabe je anzufassen. Auf den Gate-kritischen Befehlen ist RTK **unzuverlässig** (Tail-Heuristik) und supply-chain-untauglich für den Bash-Hot-Path. **Weg B ist damit abgelehnt** (nicht mehr „bedingt offen").
 
 ### 3.1 Optionen
 
@@ -45,7 +56,9 @@ Die Arbeits-Agenten (`coder`, `reviewer`, `tester`, `cicd`) sind Bash-lastig; ei
 - **C — nur Prompt-Ebene:** die in §2 gelistete Empfehlungsliste in die Agenten-Handoffs einziehen — kein Hook, kein Fremdcode.
 - **Kombination.**
 
-### 3.2 Vorab-Empfehlung: **C sofort + A mittelfristig**, B nur bedingt und zusätzlich
+### 3.2 Empfehlung (messungs-belegt): **C sofort + A mittelfristig, B abgelehnt**
+
+> Ursprünglich als „B nur bedingt" formuliert; durch das Pilot-Ergebnis (§3.0) auf **B abgelehnt** geschärft. Die Begründung unten (Punkte 1–4) ist durch die Messung bestätigt; Punkt 5 ist entsprechend revidiert.
 
 Begründung:
 
@@ -53,7 +66,7 @@ Begründung:
 2. **Supply-Chain:** RTK ist ein Fremd-Binary, das laut Beschreibung *jeden* PreToolUse-Bash-Aufruf umschreibt — ein hochwertiges Angriffsziel (eine kompromittierte Version könnte nicht nur kürzen, sondern Befehle manipulieren). Weg A vermeidet Fremdcode im Hot-Path vollständig. Die Fakten zu RTK stammen aus einer Owner-bereitgestellten README-Zusammenfassung (Stand 2026-07) und sind in diesem Spike **nicht per WebFetch nachverifiziert** (kein WebFetch-Tool in diesem Coder-Lauf verfügbar) — Maintainer-Reputation/Update-Cadence/Release-Signierung sind **offene Prüfpunkte** vor einer B-Adoption.
 3. **Weg A ist der natürliche Anschluss an AC6** (Pack-Verankerung): die Signal-Regeln leben ohnehin toolchain-spezifisch in den Packs (analog zum bestehenden `## Test-Approach`-Abschnitt) und werden über den bestehenden `train`/`retro`-Mechanismus gepflegt — kein neuer Prozess, kein neues Vertrauensproblem.
 4. **Weg C ist risikofrei und sofort umsetzbar** (§2) — kein Hook, keine Fremd-Dependency, nur Prompt-Disziplin. Sollte als erste Maßnahme unabhängig vom A/B-Entscheid landen (separates Board-Item, falls der Owner zustimmt).
-5. **Weg B bleibt optional offen**, aber NUR für Klasse-A-Befehle UND NUR wenn der Pilot (AC3, Folge-Story) eine positive Ersparnis **mit sauberer Pflicht-Gegenprobe** liefert — und selbst dann additiv, nicht als Ersatz für die Pack-Regeln aus Weg A.
+5. **~~Weg B bleibt optional offen~~ → Weg B abgelehnt (revidiert 2026-07-14, §3.0).** Der Pilot hat die Bedingung („positive Ersparnis **mit sauberer Pflicht-Gegenprobe**") **nicht** erfüllt: Die Fidelity-Gegenprobe auf Test-Ausgabe ist durchgefallen (Tail-Heuristik verliert das Fehlersignal), und die Supply-Chain-Prüfung ergab ein für den Hot-Path untaugliches Profil (keine Signierung, Advisory-Historie mit stiller Ausgabe-Verfälschung). Der reale Klasse-A-Nutzen wird stattdessen von Weg A abgedeckt — ohne Fremd-Binary. Weg B wird daher **nicht** weiterverfolgt.
 
 ### 3.3 Fidelity-Risiko-Bewertung
 
@@ -64,15 +77,15 @@ Klasse B (git diff, Test-/Build-Output) ist der eigentliche Risikoträger: eine 
 
 ### 3.4 Supply-Chain-Bewertung
 
-RTK: Rust-Binary, Apache-2.0, laut den bereitgestellten Fakten „zero-dependency". Einzelnes Repo (`rtk-ai/rtk`), aus den gegebenen Fakten keine erkennbare Enterprise-/Foundation-Trägerschaft. **Nicht in diesem Spike verifiziert** (kein WebFetch): Anzahl Contributor, Release-Cadence, Signierung der Releases, CVE-Historie. Diese Punkte sind vor einer tatsächlichen B-Adoption (nach positivem Pilot) nachzuholen — als Auflage in einer Folge-Story, nicht rückwirkend für diesen Spike.
+RTK: Rust-Binary, Apache-2.0, „zero-dependency". Einzelnes Repo (`rtk-ai/rtk`), kleines Kern-Team. **Verifiziert (2026-07-14, Primärquelle GitHub-API/Advisories, §3.0):** ~70.900 Stars/~4.400 Forks, aber ~6 Monate jung; **mehrere Release-Candidate-Builds pro Tag**; **keine kryptografische Signierung** der Releases (nur `checksums.txt` — Integrität, nicht Pipeline-Vertrauen); **3 veröffentlichte Advisories** im Umschreibe-/Filter-Kern (HIGH 7.8 Permission-Gate-Bypass; CVE-2026-45792 Config-Trust/stille Ausgabe-Verfälschung; MEDIUM 6.3 Command-Injection). Fazit: für ein Fremd-Binary im Bash-Hot-Path untauglich → bestätigt die B-Ablehnung (§3.2 Punkt 5).
 
 ### 3.5 Telemetrie-aus-Verifikation
 
-Laut den vom Owner bereitgestellten Fakten (RTK-README-Zusammenfassung, Stand 2026-07): Telemetrie ist **standardmäßig AUS** (opt-in). Bei Aktivierung werden ausschließlich anonyme Aggregat-Metriken übertragen (Command-Counts, Token-Savings, Ecosystem-Verteilung, Parse-Failures), 1×/Tag; explizit ausgeschlossen sind Quellcode, Dateipfade, Secrets und personenbezogene Daten. Das deckt sich mit der Secrets-Doktrin des Projekts (keine Pfade/Secrets/Quelltext-Exfiltration). **Herkunfts-Hinweis:** diese Aussage ist eine vom Owner bereitgestellte Zusammenfassung der Primärquelle (`github.com/rtk-ai/rtk` README) und wurde in diesem Spike **nicht selbst per WebFetch/curl gegen die Primärquelle nachverifiziert** (kein WebFetch-Tool verfügbar) — vor einer produktiven B-Adoption ist ein eigener Spot-Check gegen die Live-README fällig (`coder/R02`-Verbatim-Standard, falls die Aussage später als Klassifikationsgrundlage für einen Rollout-Entscheid zitiert wird).
+Telemetrie ist **standardmäßig AUS** (opt-in). **Verifiziert im Piloten (2026-07-14):** `rtk telemetry status` meldete `consent: never asked / enabled: no`; im Quellcode ist der Default per Test `test_telemetry_default_disabled` (`consent_given.is_none()`) belegt. Das lokale Tracking (SQLite `~/.local/share/rtk/`) bleibt lokal. Das deckt sich mit der Secrets-Doktrin (keine Pfade/Secrets/Quelltext-Exfiltration). Dieser Punkt spricht **nicht** gegen RTK — die B-Ablehnung stützt sich auf Fidelity (§3.0) + Signierung/Advisory-Historie (§3.4), nicht auf Telemetrie.
 
-### 3.6 Offene Lücke: gemessene Token-Ersparnis
+### 3.6 ~~Offene Lücke~~ Geschlossen: gemessene Token-Ersparnis (2026-07-14)
 
-**Nicht Teil dieses Spikes.** Die Vorab-Empfehlung in §3.2 ist **vorläufig, messungs-vorbehaltlich** — sie beruht auf AC1/AC2/AC6-Analyse, nicht auf einer tatsächlichen Messung in diesem Repo (`agent-flow` hat kein Konsum-Profil, s. §4). Erst nach Ausführung des Mess-Protokolls (§4) in einem echten Konsum-Repo (z. B. dev-gui) liegt eine belastbare Zahl vor; diese kann die Empfehlung zwischen A/B/Kombi verschieben, ändert aber nichts an der Denylist (Klasse C bleibt in jedem Fall unantastbar).
+**Geschlossen durch den dev-gui-Piloten (S-345, §3.0).** Die Messung liegt vor: Klasse-A-Ersparnis ~65–80 % (real), Klasse B marginal bzw. fidelity-untauglich (Tests). Die Zahl hat die Empfehlung **nicht** Richtung B verschoben — im Gegenteil, sie hat B disqualifiziert. Die Denylist (Klasse C) bleibt unantastbar (war nie zur Debatte).
 
 ## 4. AC3 — Mess-Protokoll (reproduzierbar, **nicht ausgeführt** — needs real consumer repo)
 
@@ -161,5 +174,5 @@ Neuer Unterabschnitt `## Output-Contract` je Sprach-Pack (analog zur bestehenden
 ## Zusammenfassung (Verweis)
 
 - **Denylist (Klasse C)** ist bindend und unabhängig vom gewählten Weg — s. Spec-Verträge.
-- **Vorab-Empfehlung:** C sofort + A mittelfristig (Pack-Verankerung), B optional/additiv nach positivem Pilot.
-- **Offene Lücke:** gemessene Token-Ersparnis — Folge-Story gegen ein echtes Konsum-Repo (z. B. dev-gui), Protokoll s. §4.
+- **Empfehlung (messungs-belegt, 2026-07-14):** C sofort + A mittelfristig (Pack-Verankerung); **B (RTK produktiv) abgelehnt** — Pilot-Fidelity auf Tests durchgefallen + Supply-Chain untauglich (§3.0/§3.2).
+- **~~Offene Lücke~~ geschlossen:** gemessene Ersparnis liegt vor (dev-gui S-345, `docs/rtk-output-shaping-pilot-report.md`): Klasse A ~65–80 %, Klasse B marginal/fidelity-untauglich.
