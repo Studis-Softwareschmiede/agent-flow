@@ -155,7 +155,7 @@ Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a 
 
 ## 2b. Metrik-Erfassung — Ledger-Touchpoints (Spec [`docs/architecture/metrics-subsystem.md`](../../docs/architecture/metrics-subsystem.md) §2–§4, [`docs/specs/metrics-recording-reliability.md`](../../docs/specs/metrics-recording-reliability.md))
 
-> **Einziger Schreiber:** Nur `/flow` schreibt `${METRICS_ROOT}/.claude/metrics/dispatches.jsonl` + `items.jsonl` — kein anderer Agent berührt diese Dateien (K2). Erfassung ist deterministische Arithmetik, **~0 zusätzliche LLM-Token**. Jeder Metrik-Fehler wird **still übergangen** (K3) — Messen blockiert nie den Loop und verändert kein Gate.
+> **Einziger Schreiber:** Nur `/flow` schreibt `${METRICS_ROOT}/.claude/metrics/dispatches.jsonl` + `items.jsonl` — kein anderer Agent berührt diese Dateien (K2). Erfassung ist deterministische Arithmetik, **~0 zusätzliche LLM-Token**. Ein Metrik-Fehler blockiert nie den Loop und verändert kein Gate (K3) — aber er wird **sichtbar gemeldet** (Hinweis mit Ursache), nie stumm verschluckt. K3 rechtfertigt Nicht-Blockieren, nicht Unsichtbarkeit (Vorfall: `tok` blieb 2026-07-02..-07-17 über 345 Dispatches null, ohne einen einzigen Hinweis).
 
 ### Ledger-Verzeichnis
 Alle Ledger leben **ausschließlich** unter `${METRICS_ROOT}/.claude/metrics/` (Spec [`docs/specs/metrics-repo-anchor.md`](../../docs/specs/metrics-repo-anchor.md) AC2 — `${METRICS_ROOT}` aus §0, kein relativer Pfad, kein erneutes `rev-parse`, kein `${CLAUDE_PLUGIN_ROOT}`-basierter Pfad). Bei Bedarf `${METRICS_ROOT}/.claude/metrics/` anlegen (falls nicht vorhanden). Schreiben **ausschließlich append-only** (`>>` / `jq -c . >> datei`). Historische Zeilen werden nie gelöscht oder umgeschrieben (Ausnahme: späterer `tok`-Patch durch `metrics-token-collect`).
@@ -191,14 +191,14 @@ Fehlender / nicht parsbarer Marker → Feld `null` / `0` / `[]`, **nie raten**. 
 **Aufruf (benannter Touchpoint, V1):**
 ```bash
 # Nach jedem Dispatch — Beispiel coder, Iteration 1:
-METRIC_CRIT=0 METRIC_IMP=0 METRIC_RULE_HITS='[]' \
-bash "${METRICS_ROOT}/scripts/metrics-append-dispatch.sh" \
+METRICS_ROOT="$METRICS_ROOT" METRIC_CRIT=0 METRIC_IMP=0 METRIC_RULE_HITS='[]' \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/metrics-append-dispatch.sh" \
   "$STORY_ID" "coder" "$SEQ" "$ITER" "null" "$(($(date -u +%s) - T0))" "$COST_MODE" >&2 || true
 ```
 Für **reviewer/dba/tester** stattdessen den echten Gate-Wert übergeben (z.B. `"PASS"`, `"CHANGES-REQUIRED"`, `"FAIL"`, `"SKIPPED-*"`) und `METRIC_CRIT`/`METRIC_IMP`/`METRIC_RULE_HITS` aus dem Handoff befüllen.
 Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3).
 
-`STORY_ID` = kanonische Story-ID als String `S-###` (z.B. `"S-014"`, nicht `14`). **Aufruf-Pfad zwingend über `${METRICS_ROOT}/scripts/…`** (Spec `metrics-repo-anchor` AC2) — das Skript leitet seinen eigenen Ledger-Pfad aus seinem Skript-Verzeichnis ab (`$SCRIPT_DIR/..`); nur der Aufruf über `${METRICS_ROOT}/scripts/metrics-append-dispatch.sh` garantiert, dass dieser interne Pfad mit dem Board-Repo übereinstimmt. **Nie** über einen Worktree-Pfad (`.claude/worktrees/<id>/scripts/…`) oder einen `${CLAUDE_PLUGIN_ROOT}`-Pfad aufrufen — beides ist die dokumentierte Drift-Quelle.
+`STORY_ID` = kanonische Story-ID als String `S-###` (z.B. `"S-014"`, nicht `14`). **Werkzeug-Pfad: das Skript liegt im Plugin und wird über `${CLAUDE_PLUGIN_ROOT}/scripts/…` aufgerufen** (Spec `metrics-repo-anchor` AC6). Der **Ledger-Pfad** kommt getrennt davon aus der Env-Variable `METRICS_ROOT` (in §0 ermittelt) — das Skript schreibt ausschließlich nach `${METRICS_ROOT}/.claude/metrics/` und prüft vorher `${METRICS_ROOT}/board/board.yaml` (AC4). Fehlt `METRICS_ROOT`, schreibt es nichts und meldet das sichtbar. So ist die Erfassung unabhängig davon, ob eine Skript-Kopie im Projekt liegt (AC6: Projekte halten keine Kopien) — das war die Ursache, dass 6 von 8 Projekten nie etwas aufzeichneten.
 
 ### Beim Done (Item → `Done`, nach Rollout-Gate: PASS) — eine Zeile nach `items.jsonl`
 
@@ -238,11 +238,11 @@ LOC=$(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+'
 LOC=$(( LOC + $(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo 0) ))
 FILES=$(printf '%s' "$SHORTSTAT" | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo 0)
 
-bash "${METRICS_ROOT}/scripts/metrics-append-item.sh" \
+METRICS_ROOT="$METRICS_ROOT" bash "${CLAUDE_PLUGIN_ROOT}/scripts/metrics-append-item.sh" \
   "$STORY_ID" "${SIZE_EST:-M}" "${EP_EST:-null}" "$LOC" "$FILES" \
   "${BLOCKED:-0}" "${LANG:-md}" "${COST_MODE:-balanced}" "${TOK_EST:-null}" >&2 || true
 ```
-Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3). Auch hier: Aufruf ausschließlich über `${METRICS_ROOT}/scripts/…` (AC2, s.o.) — nie über einen Worktree- oder Plugin-Root-Pfad. `${TOK_EST:-null}` = die in §1a gemerkte `tok_est`-Session-Variable (9. Positionsparameter, optional — Alt-Aufrufe ohne diesen Parameter bleiben gültig, das Skript defaultet auf `null`, AC5).
+Das `|| true` stellt sicher, dass ein Skript-Fehler den Loop nicht abbricht (K3, AC3). Auch hier: **Werkzeug über `${CLAUDE_PLUGIN_ROOT}/scripts/…`, Ledger-Pfad via `METRICS_ROOT`-Env** (AC6, s.o.). `${TOK_EST:-null}` = die in §1a gemerkte `tok_est`-Session-Variable (9. Positionsparameter, optional — Alt-Aufrufe ohne diesen Parameter bleiben gültig, das Skript defaultet auf `null`, AC5).
 
 ### Self-Check beim Done (V4, AC5)
 
@@ -290,7 +290,7 @@ Schlägt ein `board set`-Aufruf fehl → Story-Feld bleibt `null`, kein Abbruch 
 Nach dem Append der `items.jsonl`-Zeile (`tok_total` initial `null`) sofort:
 
 ```bash
-bash "${METRICS_ROOT}/scripts/metrics-collect.sh" "$STORY_ID" >&2 || true
+METRICS_ROOT="$METRICS_ROOT" bash "${CLAUDE_PLUGIN_ROOT}/scripts/metrics-collect.sh" "$STORY_ID" >&2 || true
 ```
 
 Das Script parst die Subagent-Transcript-JSONL, summiert echte Token je Dispatch
@@ -298,10 +298,10 @@ und patcht die `tok`-Felder der betroffenen `dispatches.jsonl`-Zeilen + `tok_tot
 der `items.jsonl`-Zeile (nur `null`-Felder, bestehende Werte bleiben). Matching erfolgt
 über den String `S-###` im `item`-Feld (AC2 von `metrics-token-collect`). Schlägt das Script fehl oder findet es
 keine Transcripts → Felder bleiben `null`, **kein Abbruch**, das Item bleibt `Done`
-(K3/K4, AC3/AC4 von `metrics-token-collect`). Ledger-Pfad: `${METRICS_ROOT}` (Spec
-`metrics-repo-anchor` AC2/AC3) — auch dieser Aufruf ausschließlich über
-`${METRICS_ROOT}/scripts/metrics-collect.sh`, nie über einen Worktree- oder
-Plugin-Root-Pfad.
+(K3/K4, AC3/AC4 von `metrics-token-collect`). **Werkzeug über `${CLAUDE_PLUGIN_ROOT}/scripts/metrics-collect.sh`,
+Ledger-Pfad via `METRICS_ROOT`-Env** (Spec `metrics-repo-anchor` AC6); das Item-Matching in den
+Subagent-Transcripts läuft über `S-<nr>` in der `description`, nie über `#<nr>` (Spec
+`metrics-token-collect` V2).
 
 **Pfad-Auflösung (AC4, V3 von `metrics-token-collect`):** `metrics-collect.sh` liest Subagent-Transcripts aus
 `$CLAUDE_CONFIG_DIR/.claude/projects/<escaped-cwd>/…` (falls `CLAUDE_CONFIG_DIR` gesetzt)

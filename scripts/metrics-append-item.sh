@@ -50,8 +50,18 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Ledger-Pfad (Spec metrics-repo-anchor AC6): kommt EXPLIZIT aus METRICS_ROOT,
+# nie aus dem Skript-Ort. Das Werkzeug lebt im Plugin, die Daten am Board-Repo.
+if [[ -z "${METRICS_ROOT:-}" ]]; then
+  echo "[metrics-append-item] WARN: METRICS_ROOT nicht gesetzt — Ledger-Pfad unbestimmbar, Zeile nicht geschrieben" >&2
+  exit 0
+fi
+REPO_ROOT="$METRICS_ROOT"
+# Plausibilitäts-Gate (AC4): nie in ein Repo ohne dieses Board schreiben
+if [[ ! -f "$REPO_ROOT/board/board.yaml" ]]; then
+  echo "[metrics-append-item] WARN: METRICS_ROOT ($REPO_ROOT) enthält kein board/board.yaml — Zeile nicht geschrieben" >&2
+  exit 0
+fi
 METRICS_DIR="$REPO_ROOT/.claude/metrics"
 DISPATCHES_FILE="$METRICS_DIR/dispatches.jsonl"
 ITEMS_FILE="$METRICS_DIR/items.jsonl"
