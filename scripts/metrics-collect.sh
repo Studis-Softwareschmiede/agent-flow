@@ -329,15 +329,50 @@ patch_items_tok_total() {
 
   # tok_total = Σ (tok.in + tok.out + tok.cache) aller gepatchten Dispatches für dieses Item
   # Matcht item als String ODER als Zahl (Alt-Zeilen-Compat)
-  local tok_total
-  tok_total="$(jq -s \
+  #
+  # Zeilenweise (Spec metrics-recording-reliability V5/AC8): jq -R -s liest die
+  # Datei als EINEN String, split("\n") + fromjson? // empty parst jede Zeile
+  # EINZELN — eine korrupte Zeile lässt (anders als das vormalige atomare
+  # "jq -s") nicht mehr den gesamten Aufruf mit Exit 5 sterben (der vorher
+  # still auf tok_total="null" fiel, ohne jedes Signal). split("\n") erzeugt
+  # bei trailing newline ein leeres letztes Element — per select(length>0)
+  # vor fromjson verworfen, zählt also nicht als "unparsbar".
+  # Bekannte Grenze: zwei fälschlich auf einer Zeile konkatenierte JSON-Objekte
+  # ohne Trenn-Newline (z.B. defektes Append) parsen NICHT als zwei Zeilen —
+  # jq fromjson erwartet genau einen Wert je Zeile und würde eine solche
+  # Zeile als Ganzes verwerfen (korrekt als "unparsbar" gezählt, aber ohne
+  # Teil-Rettung). Für das reale Korruptions-Muster (abgeschnittener Schreib-
+  # vorgang, siehe Befund S-073) ist das nicht relevant; ein Vollparser wäre
+  # hier unverhältnismäßig.
+  local tok_total tok_result skipped_count
+  tok_result="$(jq -R -s \
     --arg item_str "$item_str" \
     --arg item_nr  "$item_nr" \
-    '[.[] | select((.item == $item_str or (.item | type == "number" and tostring == $item_nr))
-                   and .tok != null)
-           | (.tok.in // 0) + (.tok.out // 0) + (.tok.cache // 0)
-     ] | add // null' \
-    "$DISPATCHES_FILE" 2>/dev/null)" || tok_total="null"
+    '
+    (split("\n") | map(select(length>0))) as $lines
+    | ($lines | map(fromjson? // empty) | map(select(type=="object"))) as $rows
+    | {
+        skipped:   (($lines | length) - ($rows | length)),
+        tok_total: ([$rows[] | select((.item == $item_str or (.item | type == "number" and tostring == $item_nr))
+                       and .tok != null)
+               | (.tok.in // 0) + (.tok.out // 0) + (.tok.cache // 0)
+         ] | add // null)
+      }' \
+    "$DISPATCHES_FILE" 2>/dev/null)" || tok_result='{"skipped":0,"tok_total":null}'
+
+  tok_total="$(printf '%s' "$tok_result" | jq -r '.tok_total // "null"' 2>/dev/null)" || tok_total="null"
+
+  # Sichtbare Warnung bei übersprungenen Zeilen (AC8: K3 — nicht blockierend,
+  # aber nicht verschwiegen).
+  skipped_count="$(printf '%s' "$tok_result" | jq -r '.skipped // 0' 2>/dev/null)" || skipped_count=0
+  [[ "$skipped_count" =~ ^[0-9]+$ ]] || skipped_count=0
+  if [[ "$skipped_count" -gt 0 ]]; then
+    # Datei-weite Eigenschaft, kein item-eigenes Ereignis (Review-Fund
+    # Iteration 2): der Zähler läuft über ALLE Zeilen von dispatches.jsonl,
+    # bevor nach $item_str/$item_nr gefiltert wird — eine kaputte Zeile eines
+    # fremden Items triggert dieselbe Warnung. Wording bewusst ohne Item-Bezug.
+    echo "[metrics-collect] WARN: ${skipped_count} unparsbare Zeile(n) im dispatches.jsonl-Ledger übersprungen (datei-weit, nicht zwingend item-eigen)" >&2
+  fi
 
   [[ "$tok_total" != "null" && -n "$tok_total" ]] || return 0
 

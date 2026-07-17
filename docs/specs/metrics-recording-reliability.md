@@ -1,9 +1,9 @@
 ---
 id: metrics-recording-reliability
 title: Zuverlässige Metrik-Erfassung im /flow (Ledger-Lücken, ID-Format, Token)
-status: draft
+status: active
 area: metriken-schaetzung
-version: 1
+version: 2
 ---
 
 # Spec: Zuverlässige Metrik-Erfassung im /flow  (`metrics-recording-reliability`)
@@ -41,6 +41,9 @@ Der **Aufruf** ist damit nicht mehr optionale Prosa, sondern ein benannter, drif
 ### V4 — Sichtbarkeits-Self-Check beim Done
 Nach dem Done prüft `/flow`, ob für das Item eine `items.jsonl`-Zeile existiert (und ob `tok_total` befüllt ist). Fehlt die Zeile bzw. bleibt Token leer → **einmalige, sichtbare Notiz** im Lauf-Output (z.B. „Metrik für `S-165` nicht erfasst — Ledger-Zeile fehlt"). Die Lücke wird damit nicht mehr lautlos. Verändert **kein** Gate (K4).
 
+### V5 — Zeilenweise Parse-Robustheit der Rollups (gegen stille Total-Vergiftung)
+Die Rollup-/Nachtrag-Skripte, die `dispatches.jsonl` lesen (`metrics-append-item.sh`, `metrics-collect.sh`), lesen die Datei **zeilenweise** und überspringen einzelne nicht-parsbare Zeilen, statt am Gesamt-Aggregat zu sterben. Hintergrund (verifiziert, 2026-07-17): ein einzelner `jq -s` über alle Zeilen ist **atomar** — **eine** korrupte Zeile lässt den gesamten Aufruf mit Exit 5 sterben, und der `|| DEFAULT`-Fallback ersetzt das still durch Defaults (`iters=1`, `crit=0`, `imp=0`, `secs_total=0`). Damit werden **alle** Rollups ab der ersten kaputten Zeile lautlos verfälscht — der Loop läuft weiter (K3 erfüllt), aber die Zahlen sind Müll, ohne jedes Signal. Referenz-Implementierung existiert bereits im selben Repo: `scripts/metrics-aggregate.sh` (`read_jsonl()`, Python `try/except JSONDecodeError: pass`). Die Bash-Rollups müssen dasselbe leisten: `jq -R 'fromjson? // empty'` (bzw. `jq -R -s 'split("\n") | map(fromjson? // empty)'`) statt `jq -s`, plus eine **sichtbare `>&2`-Warnung** mit der Zahl übersprungener Zeilen (K3 verlangt „Loop nicht blockieren", **nicht** „Fehler verschweigen").
+
 ## Acceptance-Kriterien
 
 - **AC1** — Nach einem `/flow`-Done existiert für das Item genau eine `items.jsonl`-Zeile und je Dispatch eine `dispatches.jsonl`-Zeile; die Auslösung erfolgt über benannte Skript-Touchpoints (V1). *(V1)*
@@ -50,6 +53,7 @@ Nach dem Done prüft `/flow`, ob für das Item eine `items.jsonl`-Zeile existier
 - **AC5** — Beim Done prüft `/flow` das Vorhandensein der Ledger-Zeile + Token und gibt bei Fehlen eine sichtbare, einmalige Notiz aus, ohne ein Gate zu ändern. *(V4)*
 - **AC6** — Erfassung bleibt reine Datei-Arithmetik ohne zusätzlichen LLM-Aufruf (~0 Token). *(V1)*
 - **AC7** — Keine Rückbefüllung/Umschreibung historischer Zeilen (append-only; int-Alt-Zeilen bleiben). *(Kontext)*
+- **AC8** — Die `dispatches.jsonl`-lesenden Rollup-/Nachtrag-Skripte (`metrics-append-item.sh`, `metrics-collect.sh`) parsen **zeilenweise** und überspringen einzelne unparsbare Zeilen, statt am Gesamt-Aggregat zu sterben; eine korrupte Zeile verfälscht damit **nicht** mehr alle Rollups. Übersprungene Zeilen werden per **sichtbarer `>&2`-Warnung** mit Anzahl gemeldet (K3-konform: nicht blockierend, aber nicht verschwiegen). Die berechneten Aggregate der verbleibenden, validen Zeilen bleiben korrekt. *(V5)*
 
 ## Verträge
 

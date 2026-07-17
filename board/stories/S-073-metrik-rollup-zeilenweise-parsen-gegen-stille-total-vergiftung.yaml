@@ -1,0 +1,53 @@
+id: S-073
+parent: F-025
+title: 'Metrik-Rollup zeilenweise parsen (jq -s → fromjson): eine kaputte dispatches-Zeile
+  vergiftet nicht mehr alle Rollups'
+status: In Review
+priority: P1
+spec: docs/specs/metrics-recording-reliability.md
+implements:
+- AC8
+depends: null
+labels:
+- backend
+- robustness
+size_est: S
+dispo_est: '2'
+dispo_act: null
+dispo_forecast: null
+estimate_note: S — zwei jq-s-Stellen (metrics-append-item.sh Z.117, metrics-collect.sh
+  Z.333) auf jq -R -s split/fromjson umstellen + stderr-Warnung. Referenz-Impl existiert
+  im Repo (metrics-aggregate.sh Python read_jsonl). Owner-Autonomie-Auftrag 2026-07-17.
+confidence: high
+tok_est: null
+branch: feat/S-073-ledger-parse-robust
+pr: null
+blocked_reason: null
+created_at: '2026-07-17T21:40:00Z'
+updated_at: '2026-07-17T21:53:14Z'
+done_at: null
+befund_2026_07_17: 'Verifiziert 2026-07-17 (dev-gui-Ledger, flow/L05 + eigene Analyse):
+  vier korrupte
+
+  Zeilen (Item S-289, 2026-07-03) liessen JEDEN Rollup ab dem 03.07. still auf Defaults
+
+  laufen (iters=1/crit=0/imp=0/secs_total=0). Ursache: `jq -s` über alle Zeilen ist
+
+  atomar — eine unparsbare Zeile → Exit 5 → `|| DEFAULT` greift → alle Aggregate falsch,
+
+  ohne jedes Signal. 14 items.jsonl-Zeilen in dev-gui waren betroffen (lokal repariert).
+
+  Der Defekt sitzt an ZWEI Stellen: metrics-append-item.sh (Rollup) und metrics-collect.sh
+
+  (Token-Nachtrag — deshalb blieb tok_total dauerhaft null). Kur: zeilenweise parsen
+
+  (jq -R -s ''split("\n") | map(fromjson? // empty)'') + sichtbare >&2-Warnung mit
+  Anzahl
+
+  übersprungener Zeilen. Vorbild im selben Repo: scripts/metrics-aggregate.sh read_jsonl()
+
+  (Python try/except JSONDecodeError: pass). dev-gui hält byte-identische Kopien beider
+
+  Skripte — die müssen nachgezogen werden (separater Task).
+
+  '

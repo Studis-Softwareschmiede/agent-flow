@@ -113,17 +113,35 @@ RULE_HITS_JSON='[]'
 SECS_TOTAL=0
 
 if [[ -f "$DISPATCHES_FILE" ]]; then
-  # Aggregat via jq -s (alle Zeilen einlesen)
-  ROLLUP="$(jq -s \
+  # Aggregat zeilenweise (Spec metrics-recording-reliability V5/AC8): jq -R -s
+  # liest die Datei als EINEN String ein, split("\n") + fromjson? // empty
+  # parst jede Zeile EINZELN — eine einzelne korrupte Zeile lässt (anders als
+  # das vormalige atomare "jq -s") nicht mehr das gesamte Aggregat sterben
+  # (das vorher den || DEFAULT-Fallback triggerte und ALLE Rollups lautlos
+  # auf iters=1/crit=0/imp=0/secs_total=0 zurücksetzte). split("\n") erzeugt
+  # bei trailing newline ein leeres letztes Element — das wird vor fromjson
+  # per select(length>0) verworfen, zählt also nicht als "unparsbar".
+  # Bekannte Grenze: zwei fälschlich auf einer Zeile konkatenierte JSON-Objekte
+  # ohne Trenn-Newline (z.B. defektes Append) parsen NICHT als zwei Zeilen —
+  # jq fromjson erwartet genau einen Wert je Zeile und würde eine solche
+  # Zeile als Ganzes verwerfen (korrekt als "unparsbar" gezählt, aber ohne
+  # Teil-Rettung). Für das reale Korruptions-Muster (abgeschnittener Schreib-
+  # vorgang, siehe Befund S-073) ist das nicht relevant; ein Vollparser wäre
+  # hier unverhältnismäßig.
+  ROLLUP="$(jq -R -s \
     --arg item "$STORY_ID" \
-    '{
-      iters:       ([ .[] | select(.item==$item) | .iter   // 0 ] | max // 1),
-      crit:        ([ .[] | select(.item==$item) | .crit   // 0 ] | add // 0),
-      imp:         ([ .[] | select(.item==$item) | .imp    // 0 ] | add // 0),
-      test_fails:  ([ .[] | select(.item==$item and .gate=="FAIL" and .agent=="tester") ] | length),
-      rule_hits:   ([ .[] | select(.item==$item) | .rule_hits // [] | .[] ] | unique),
-      secs_total:  ([ .[] | select(.item==$item) | .secs   // 0 ] | add // 0)
-    }' \
+    '
+    (split("\n") | map(select(length>0))) as $lines
+    | ($lines | map(fromjson? // empty) | map(select(type=="object"))) as $rows
+    | {
+        skipped:     (($lines | length) - ($rows | length)),
+        iters:       ([ $rows[] | select(.item==$item) | .iter   // 0 ] | max // 1),
+        crit:        ([ $rows[] | select(.item==$item) | .crit   // 0 ] | add // 0),
+        imp:         ([ $rows[] | select(.item==$item) | .imp    // 0 ] | add // 0),
+        test_fails:  ([ $rows[] | select(.item==$item and .gate=="FAIL" and .agent=="tester") ] | length),
+        rule_hits:   ([ $rows[] | select(.item==$item) | .rule_hits // [] | .[] ] | unique),
+        secs_total:  ([ $rows[] | select(.item==$item) | .secs   // 0 ] | add // 0)
+      }' \
     "$DISPATCHES_FILE" 2>/dev/null)" || ROLLUP='{}'
 
   ITERS="$(printf '%s' "$ROLLUP" | jq -r '.iters // 1' 2>/dev/null)" || ITERS=1
@@ -132,6 +150,18 @@ if [[ -f "$DISPATCHES_FILE" ]]; then
   TEST_FAILS="$(printf '%s' "$ROLLUP" | jq -r '.test_fails // 0' 2>/dev/null)" || TEST_FAILS=0
   RULE_HITS_JSON="$(printf '%s' "$ROLLUP" | jq -c '.rule_hits // []' 2>/dev/null)" || RULE_HITS_JSON='[]'
   SECS_TOTAL="$(printf '%s' "$ROLLUP" | jq -r '.secs_total // 0' 2>/dev/null)" || SECS_TOTAL=0
+
+  # Sichtbare Warnung bei übersprungenen Zeilen (AC8: K3 — nicht blockierend,
+  # aber nicht verschwiegen).
+  SKIPPED_COUNT="$(printf '%s' "$ROLLUP" | jq -r '.skipped // 0' 2>/dev/null)" || SKIPPED_COUNT=0
+  [[ "$SKIPPED_COUNT" =~ ^[0-9]+$ ]] || SKIPPED_COUNT=0
+  if [[ "$SKIPPED_COUNT" -gt 0 ]]; then
+    # Datei-weite Eigenschaft, kein item-eigenes Ereignis (Review-Fund
+    # Iteration 2): der Zähler läuft über ALLE Zeilen von dispatches.jsonl,
+    # bevor nach $STORY_ID gefiltert wird — eine kaputte Zeile eines fremden
+    # Items triggert dieselbe Warnung. Wording bewusst ohne Item-Bezug.
+    echo "[metrics-append-item] WARN: ${SKIPPED_COUNT} unparsbare Zeile(n) im dispatches.jsonl-Ledger übersprungen (datei-weit, nicht zwingend item-eigen)" >&2
+  fi
 fi
 
 # Numerik-Sicherung nach Aggregat
