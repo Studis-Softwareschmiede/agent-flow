@@ -1,0 +1,33 @@
+id: S-070
+parent: F-025
+title: board-ship.sh worktree-tauglich landen (kein checkout des Ziel-Branches)
+status: In Review
+priority: P1
+spec: docs/specs/board-ship-environment-guards.md
+implements:
+- AC7
+- AC8
+- AC9
+- AC10
+- AC11
+- AC12
+- AC13
+depends: null
+labels:
+- git
+size_est: L
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Heuristik: 7 AC + 2 Komponenten (scripts/board-ship.sh, tests/board-ship/run-test.sh),
+  kein db/security/ui-Label => Score 9 => L. estimator nicht dispatchbar (requirement-Lauf
+  ohne Task-Tool) => dispo_est/tok_est null (Praezedenz estimator > baseline bei L).
+  Anhalt aus baseline md|balanced|L (n=6): ep~5.75.'
+confidence: low
+tok_est: null
+branch: feat/board-ship-worktree-tauglich
+pr: null
+blocked_reason: null
+created_at: '2026-07-17T11:30:48Z'
+updated_at: '2026-07-17T18:46:23Z'
+done_at: null

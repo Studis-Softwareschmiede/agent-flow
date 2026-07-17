@@ -1,0 +1,33 @@
+id: S-069
+parent: F-025
+title: 'board-ship.sh: CI-Trigger empirisch feststellen statt CI-Watch ins Leere laufen
+  lassen'
+status: In Review
+priority: P1
+spec: docs/specs/board-ship-environment-guards.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+- AC6
+depends: null
+labels:
+- ci
+size_est: L
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Heuristik: 6 AC + 2 Komponenten (scripts/board-ship.sh, tests/board-ship/run-test.sh),
+  kein db/security/ui-Label => Score 8 => L. estimator nicht dispatchbar (requirement-Lauf
+  ohne Task-Tool) => dispo_est/tok_est null (Praezedenz estimator > baseline bei L).
+  Anhalt aus baseline md|balanced|L (n=6): ep~5.75.'
+confidence: low
+tok_est: null
+branch: feat/board-ship-worktree-tauglich
+pr: null
+blocked_reason: null
+created_at: '2026-07-17T11:30:44Z'
+updated_at: '2026-07-17T18:22:53Z'
+done_at: null
