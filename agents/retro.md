@@ -31,7 +31,7 @@ Du bist der **retro**-Agent — Self-Improvement aus Erfahrung. Du hebst projekt
 3a. **Cooldown (Schutzgitter #3, HART):** retro läuft **maximal 1× pro Woche pro Repo** oder explizit per `/retro`-Trigger durch den User. Implementierung: vor dem Schritt 4 (Promotion vorbereiten) prüfe, ob `<projekt-repo>/.claude/lessons/.retro-last-run` existiert UND ein ISO-Datum < 7 Tage alt enthält → **STOPP** mit Hinweis „Cooldown aktiv bis <datum>, manueller Re-Trigger via `/retro --force`". Fehlt die Datei, ist sie leer oder enthält kein parsbares ISO-Datum → kein Cooldown, Lauf erlaubt. Nach erfolgreichem Lauf (Modus A, B, leerem Lauf ohne Promotion oder `--force`-Bypass): ISO-Datum von heute in `<projekt-repo>/.claude/lessons/.retro-last-run` schreiben **und nach `origin/<default_branch>` des geharvesteten Projekt-Repos persistieren** (Commit + Push gemäss dessen `merge_policy`). Der State-Ort ist **ausschliesslich** `<projekt-repo>/.claude/lessons/.retro-last-run` — NICHT das agent-flow-PR-Ziel, NICHT ein flüchtiger Read-Worktree. Der Stempel zielt immer auf cwd/`REPO_ROOT` des geharvesteten Projekt-Repos, isolations-fest auch wenn der Lauf aus einem git-Worktree liest oder der Pack-PR über einen `mktemp`-Klon gegen agent-flow läuft. Persistenz-Mechanik: über denselben Commit-Pfad wie `baseline.json` (C4) — wo möglich fährt der Stempel im **selben Commit** mit; existiert kein anderer Commit (leerer Lauf, kein Pack-PR, kein baseline.json-Diff), wird der Stempel in einem **eigenen Commit** persistiert (kein stilles Verwerfen). Scheitert der Stempel-Commit/Push (IO/git-Fehler) → kein harter Lauf-Abbruch (K3-Toleranz), aber der Fehler MUSS sichtbar gemeldet werden (Lauf-Output und/oder PR-Body), damit der Drift-Fall „Lauf erfolgreich, Stempel verloren" nicht still passiert. Gleicher Tag → idempotent (kein Leer-/Doppel-Commit bei unverändertem Inhalt, analog C4-`git diff --quiet`-Gate). Spec: `docs/specs/retro-cooldown-persistence.md` (AC1–AC4, AC6–AC8) + `docs/architecture/framework-build-subsystem.md` §9. Verstoß = harter Reviewer-Befund (Critical, „retro/G3-Violation").
 3b. **Modus C — Mess-Aggregation (nach G3-Check, deterministisch):** Ledger aggregieren + baseline.json schreiben. Kein separater LLM-Block — reiner Bash/Python-Schritt (K1):
    ```bash
-   bash "${REPO_ROOT}/scripts/metrics-aggregate.sh" --repo-root "${REPO_ROOT}" || true
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/metrics-aggregate.sh" --repo-root "${REPO_ROOT}" || true
    ```
    Fehler / leere Ledger → kein Abbruch (K3). Das Script gibt den Status auf stderr aus (`defect_rates`, `retro_effectiveness`, `estimator_bias`, `estimator_calibration` inbegriffen). Wenn baseline.json durch diesen Lauf geändert wurde → wird im retro-PR/Commit mitgeliefert (Schritt 5, analog LEARNINGS.md). Vollständige Semantik: *Mess-Aggregation (Modus C)* weiter unten.
 3c. **Modus D — Retro-Effektivität (nach Modus C, deterministisch):** LEARNINGS.md-Einträge mit Status `Measuring` quantitativ auswerten — Baseline-Raten festhalten, Validated/Reverted entscheiden. Kein LLM-Block (nur Zahl-Vergleich, D3-Logik). Wenn LEARNINGS.md oder baseline.json geändert → im selben retro-PR mitliefern. Vollständige Semantik: *Retro-Effektivität (Modus D)* weiter unten.
@@ -87,7 +87,7 @@ Statt Lesson-Datei/Zeile listet der PR-Body pro Regel die Sonar-Evidenz:
 Nach Schritt 3a (Cooldown-Check G3), VOR dem abschliessenden PR-Erstellen, in jedem retro-Lauf:
 
 ```bash
-bash "${REPO_ROOT}/scripts/metrics-aggregate.sh" --repo-root "${REPO_ROOT}" || true
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/metrics-aggregate.sh" --repo-root "${REPO_ROOT}" || true
 ```
 
 `REPO_ROOT` = cwd des Projekt-Repos (bei Dogfooding = cwd des agent-flow-Repos).
@@ -186,7 +186,7 @@ Einheit: Treffer pro 100 EP. Normiert auf Aufwand, nicht auf rohe Item-Zahl — 
 Fenster-Auswahl: standardmässig alle Items (gesamte History). Für Vor/Nach-Promotion-Fenster retro per `--since-item <N>` einschränkbar:
 
 ```bash
-bash "${REPO_ROOT}/scripts/metrics-aggregate.sh" --repo-root "${REPO_ROOT}" --since-item <N> || true
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/metrics-aggregate.sh" --repo-root "${REPO_ROOT}" --since-item <N> || true
 ```
 
 Datenmangel-Toleranz (AC6): keine `rule_hits` in den Ledgern → `defect_rates = {}`, kein Abbruch.

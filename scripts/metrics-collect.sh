@@ -80,7 +80,10 @@ else
   exit 0
 fi
 
-# ITEM bleibt ITEM_NR für das Subagent-Matching (grep -E auf "#<nr>")
+# ITEM_NR = numerischer Anteil; das Subagent-Matching läuft über "S-<nr>" in der
+# meta.json-description (Spec metrics-token-collect V2, Story S-070). NICHT "#<nr>":
+# das traf nie (real "coder: S-335 implementieren") und kollidierte bei Gleichheit
+# mit PR-Nummern (#335 statt S-335 → fremde Token verbucht).
 ITEM="$ITEM_NR"
 
 # Prüfen ob jq vorhanden
@@ -95,8 +98,17 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 0
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Ledger-Pfad (Spec metrics-repo-anchor AC6): kommt EXPLIZIT aus METRICS_ROOT,
+# nie aus dem Skript-Ort. Das Werkzeug lebt im Plugin, die Daten am Board-Repo.
+if [[ -z "${METRICS_ROOT:-}" ]]; then
+  echo "[metrics-collect] WARN: METRICS_ROOT nicht gesetzt — Ledger-Pfad unbestimmbar, tok bleibt null" >&2
+  exit 0
+fi
+REPO_ROOT="$METRICS_ROOT"
+if [[ ! -f "$REPO_ROOT/board/board.yaml" ]]; then
+  echo "[metrics-collect] WARN: METRICS_ROOT ($REPO_ROOT) enthält kein board/board.yaml — tok bleibt null" >&2
+  exit 0
+fi
 DISPATCHES_FILE="$REPO_ROOT/.claude/metrics/dispatches.jsonl"
 ITEMS_FILE="$REPO_ROOT/.claude/metrics/items.jsonl"
 
@@ -209,9 +221,11 @@ PYEOF
     local description="${meta_lines[0]}"
     local agent_type_raw="${meta_lines[1]}"
 
-    # Prüfen ob description "#<item>" enthält
-    # Pattern: "#108" oder "#108 " etc.; kein Prefix wie "#1080"
-    if ! printf '%s' "$description" | grep -qE "#[[:space:]]*${item}([^0-9]|$)"; then
+    # Prüfen ob description "S-<item>" enthält (reale /flow-Dispatch-Konvention,
+    # z.B. "coder: S-335 implementieren", "S-360 Test-Gate"). Grenzen beidseitig:
+    # links Zeilenanfang oder Nicht-Alnum, rechts Nicht-Ziffer/Zeilenende — so
+    # matcht S-335 nicht S-3350 und ein "#335" (PR-Nummer) wird ignoriert.
+    if ! printf '%s' "$description" | grep -qE "(^|[^A-Za-z0-9])S-0*${item}([^0-9]|$)"; then
       continue
     fi
 
@@ -376,7 +390,9 @@ main() {
   [[ -n "$subagent_list" ]] && subagent_count="$(printf '%s\n' "$subagent_list" | wc -l | tr -d ' ')" || true
 
   if [[ "$subagent_count" -eq 0 ]]; then
-    echo "[metrics-collect] INFO: Keine Subagent-Transcripts für ${ITEM_STR} (#${ITEM_NR}) gefunden — tok bleibt null" >&2
+    # Sichtbarer Hinweis mit Ursache (Spec metrics-token-collect AC5): kein stilles
+    # Verschlucken. tok blieb 2026-07-02..-07-17 durchgängig null, ohne einen Hinweis.
+    echo "[metrics-collect] WARN: keine Subagent-Transcripts für ${ITEM_STR} (Match 'S-${ITEM_NR}' in ${CLAUDE_PROJECTS_DIR}/*/*/subagents/*.meta.json) — tok/tok_total bleiben null" >&2
     return 0
   fi
 
@@ -386,7 +402,7 @@ main() {
   # items.jsonl tok_total patchen (AC3)
   patch_items_tok_total "$ITEM_STR" "$ITEM_NR" || true
 
-  echo "[metrics-collect] OK: ${ITEM_STR} (#${ITEM_NR}) — ${subagent_count} Subagent(s) verarbeitet" >&2
+  echo "[metrics-collect] OK: ${ITEM_STR} — ${subagent_count} Subagent(s) verarbeitet" >&2
 }
 
 # Alle Fehler → exit 0 + Hinweis (AC5, K3) — Messung blockiert nie den Loop

@@ -77,9 +77,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Ledger-Pfad (Spec metrics-repo-anchor AC6): explizites --repo-root gewinnt,
+# sonst METRICS_ROOT; nie aus dem Skript-Ort ableiten (Werkzeug lebt im Plugin).
 if [[ -z "$REPO_ROOT" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+  REPO_ROOT="${METRICS_ROOT:-}"
+fi
+if [[ -z "$REPO_ROOT" ]]; then
+  echo "[metrics-aggregate] WARN: weder --repo-root noch METRICS_ROOT gesetzt — Aggregation übersprungen" >&2
+  exit 0
 fi
 
 DISPATCHES_FILE="$REPO_ROOT/.claude/metrics/dispatches.jsonl"
