@@ -14,10 +14,36 @@
 #     korrektem branch-Feld (Test 3).
 #   CI-Gate — CI-Fehlschlag verhindert Board-Flip, Story bleibt NICHT Done
 #     (Test 4).
+#   Covers (board-ship-environment-guards): AC1 Skip auf Nicht-default_branch
+#     ohne eigenen Run (Test 9a); AC2 default_branch bleibt IMMER scharf, mit
+#     eigenem Run (Test 9b) und ohne jeden Run (Test 9c); AC3 Fail-safe bei
+#     fremder headSha auf main (Test 9d) UND — Review-Fund Iteration 4 — auf
+#     einem Nicht-default_branch mit persistierender fremder headSha über
+#     mehrere Grace-Fenster-Iterationen, ohne das Fenster vorzeitig zu beenden
+#     (Test 9e); Fail-safe bei einer echten gh-Abfrage-Störung im
+#     Beobachtungsfenster (MOCK_GH_RUN_LIST_FAIL, coder/L03) — eskaliert
+#     scharf statt zu skippen (Test 9f); AC5 BOARD_SHIP_CI_GRACE_SECS steuert
+#     nur die Dauer (Test 9a via kleinem Grace-Wert, Test 9e via größerem
+#     Grace-Wert für mehrere Iterationen, kein Effekt auf AC2-Pfade). AC4
+#     (Repo ganz ohne Workflows) bleibt wie in v1 ungemockt/unverändert
+#     (gh-api-Fallback der Test-Mocks liefert nie total_count==0) — kein
+#     dedizierter Test, deckt sich mit AC6-Vorgabe (nur a-d gefordert).
+#   Covers (board-ship-environment-guards, S-070): AC7 kein Checkout des
+#     Ziel-Branches — belegt über einen ECHTEN zweiten Worktree, der 'main'
+#     hält (Test 11a); AC8 FF-Push-Landung + Non-FF-Klartext-Abbruch ohne
+#     Force/Reset (Test 11a happy path, Test 11b Non-FF); AC9 Board-Flip im
+#     temporären detached Worktree, zuverlässiger Cleanup ohne Rest in 'git
+#     worktree list' (Test 11a-6); AC11 L6-Guard unverändert (implizit über
+#     alle Tests, die weiterhin scharf auf dirty Working-Tree reagieren,
+#     Test 1); AC12 kein Force-Push/kein reset --hard auf ausgecheckten
+#     Branch (Test 11b belegt sichtbaren statt stillen Non-FF-Abbruch). AC10
+#     (Modus C worktree-tauglich) deckt Test 7 weiterhin ab (--merge-feature
+#     landet unverändert korrekt, jetzt über denselben detached-Worktree-
+#     Mechanismus wie AC9 statt über einen Checkout im aufrufenden Worktree).
 #
 # Verwendet lokale /tmp-Git-Fixtures (bare "origin" + Arbeits-Klon) und einen
-# gemockten `gh` in PATH — berührt NIEMALS echtes GitHub oder das echte
-# board/ des Repos.
+# gemockten `gh` (+ No-Op `sleep`) in PATH — berührt NIEMALS echtes GitHub
+# oder das echte board/ des Repos.
 #
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 
@@ -41,31 +67,56 @@ export GIT_AUTHOR_NAME="test" GIT_AUTHOR_EMAIL="test@test.local"
 export GIT_COMMITTER_NAME="test" GIT_COMMITTER_EMAIL="test@test.local"
 
 # --- Gemockter `gh` — antwortet aus Env-Variablen, berührt nie echtes GitHub ---
+# MOCK_HEAD_SHA unset/leer simuliert "gh hat sauber geantwortet, aber (noch)
+# kein Run vorhanden" (board-ship.sh v2 fragt dafür '.[0].headSha // "NOSHA"'
+# ab — der Mock spiegelt das: NOSHA-Query -> "NOSHA", klassische Query (ohne
+# Fallback) -> leere Zeile, wie es echtes `gh`+jq bei leerem Array/Fehler tut).
+# MOCK_GH_RUN_LIST_FAIL=1 simuliert eine echte gh-Abfrage-Störung (Netz/Auth/
+# Rate-Limit): 'gh run list' liefert nichts und beendet sich mit Exit 1.
 MOCK_BIN_DIR="${TEST_WORK_DIR}/mockbin"
 mkdir -p "$MOCK_BIN_DIR"
 cat > "${MOCK_BIN_DIR}/gh" <<'MOCKEOF'
 #!/usr/bin/env bash
 if [[ "$1" == "run" && "$2" == "list" ]]; then
-  branch=""
+  if [[ "${MOCK_GH_RUN_LIST_FAIL:-0}" == "1" ]]; then
+    echo "mock: gh run list fehlgeschlagen (simulierte Netz-/Auth-Störung)" >&2
+    exit 1
+  fi
+  # --branch- UND --jq-Wert gezielt extrahieren (NICHT blind über alle
+  # Argumente scannen: '--json headSha' enthält selbst die Teilzeichenkette
+  # "headSha" und würde einen naiven Scan bereits VOR dem eigentlichen
+  # --jq-Ausdruck fälschlich matchen lassen).
+  branch="" jq_expr=""
   for ((i=1; i<=$#; i++)); do
-    [[ "${!i}" == "--branch" ]] && { j=$((i+1)); branch="${!j}"; break; }
+    if [[ "${!i}" == "--branch" ]]; then j=$((i+1)); branch="${!j}"; fi
+    if [[ "${!i}" == "--jq" ]]; then j=$((i+1)); jq_expr="${!j}"; fi
   done
-  for a in "$@"; do
-    case "$a" in
-      *headSha*)
-        # MOCK_HEAD_SHA=AUTO -> dynamisch aus dem echten origin/<branch> auflösen
-        # (nötig für --merge-feature, wo git merge --no-ff eine neue, im Voraus
-        # unbekannte SHA erzeugt statt eines Fast-Forward auf eine bekannte SHA).
-        if [[ "${MOCK_HEAD_SHA:-}" == "AUTO" ]]; then
-          echo "$(git rev-parse "origin/${branch}" 2>/dev/null)"
-        else
-          echo "${MOCK_HEAD_SHA:-}"
-        fi
-        exit 0 ;;
-      *'.status'*) echo "${MOCK_CI_STATUS:-completed}"; exit 0 ;;
-      *conclusion*) echo "${MOCK_CI_CONCLUSION:-success}"; exit 0 ;;
-    esac
-  done
+  case "$jq_expr" in
+    *'NOSHA'*)
+      # '.[0].headSha // "NOSHA"' — v2-Beobachtungsfenster-Query (AC1/AC3):
+      # kein MOCK_HEAD_SHA gesetzt -> "gh sauber, aber kein Run" -> "NOSHA".
+      if [[ "${MOCK_HEAD_SHA:-}" == "AUTO" ]]; then
+        echo "$(git rev-parse "origin/${branch}" 2>/dev/null)"
+      elif [[ -n "${MOCK_HEAD_SHA:-}" ]]; then
+        echo "${MOCK_HEAD_SHA}"
+      else
+        echo "NOSHA"
+      fi
+      exit 0 ;;
+    *headSha*)
+      # Klassische Query (ohne Fallback, unverändert seit v1) — nötig für
+      # --merge-feature (MOCK_HEAD_SHA=AUTO -> dynamisch aus origin/<branch>
+      # auflösen, da 'git merge --no-ff' eine im Voraus unbekannte SHA
+      # erzeugt statt eines Fast-Forward auf eine bekannte SHA).
+      if [[ "${MOCK_HEAD_SHA:-}" == "AUTO" ]]; then
+        echo "$(git rev-parse "origin/${branch}" 2>/dev/null)"
+      else
+        echo "${MOCK_HEAD_SHA:-}"
+      fi
+      exit 0 ;;
+    *'.status'*) echo "${MOCK_CI_STATUS:-completed}"; exit 0 ;;
+    *conclusion*) echo "${MOCK_CI_CONCLUSION:-success}"; exit 0 ;;
+  esac
   echo ""
   exit 0
 fi
@@ -79,6 +130,18 @@ fi
 exit 0
 MOCKEOF
 chmod +x "${MOCK_BIN_DIR}/gh"
+
+# --- Gemockter `sleep` — No-Op, damit der klassische 40x15s-Scharf-Watch und
+# das Beobachtungsfenster in Tests nicht real warten (Suite bleibt schnell,
+# ohne am Skript selbst irgendeine neue Zeitsteuerung/einen neuen
+# Env-Schalter einzuführen — reine Testinfrastruktur, board-ship.sh bleibt
+# unverändert bei den zwei dokumentierten Env-Variablen).
+cat > "${MOCK_BIN_DIR}/sleep" <<'MOCKEOF'
+#!/usr/bin/env bash
+exit 0
+MOCKEOF
+chmod +x "${MOCK_BIN_DIR}/sleep"
+
 export PATH="${MOCK_BIN_DIR}:${PATH}"
 
 # --- Fixture-Aufbau: bare "origin" + Arbeits-Klon mit Board + Profil ---
@@ -94,6 +157,11 @@ setup_fixture() {
     cd "$work"
     git remote add origin "$origin"
     mkdir -p board/features board/stories docs/specs .claude
+    # HINWEIS (v2): board-ship.sh liest/parst .github/workflows/* in KEINER
+    # Form mehr (Owner-Entscheid 2026-07-17) — die Trigger-Frage wird
+    # ausschließlich empirisch über gemockte 'gh run list'-Antworten
+    # beantwortet (MOCK_HEAD_SHA/MOCK_CI_STATUS/MOCK_CI_CONCLUSION). Die
+    # Fixture braucht deshalb keine echten Workflow-Dateien mehr.
     cat > board/board.yaml <<'YAML'
 schema_version: 1
 project_slug: test-proj
@@ -209,9 +277,12 @@ else
   fail "Test 2a: 'bereits gemergt' nicht erkannt (exit=$T2_EXIT)"
   echo "  Output: $T2_OUTPUT"
 fi
-T2_STATUS="$(grep '^status:' "$T2_WORK/board/stories/S-900-test.yaml" | head -1)"
+# AC9 (S-070): der Board-Flip landet seit dem worktree-tauglichen Landen in
+# einem temporären, detached Worktree und pusht nach origin — NICHT mehr in
+# der lokalen Arbeitskopie von $T2_WORK. Assertion daher gegen origin/main.
+T2_STATUS="$(git -C "$T2_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^status:' || true)"
 if [[ "$T2_STATUS" == "status: Done" ]]; then
-  pass "Test 2b: Board trotzdem korrekt auf Done geflippt (CI-Check + Board-Flip laufen weiter)"
+  pass "Test 2b: Board trotzdem korrekt auf Done geflippt (CI-Check + Board-Flip laufen weiter, im origin/main-Stand)"
 else
   fail "Test 2b: Board nicht auf Done (${T2_STATUS})"
 fi
@@ -239,23 +310,40 @@ else
   fail "Test 3a: exit=${T3_EXIT}"
   echo "  Output: $T3_OUTPUT"
 fi
-T3_STATUS="$(grep '^status:' "$T3_WORK/board/stories/S-900-test.yaml" | head -1)"
-T3_BRANCH="$(grep '^branch:' "$T3_WORK/board/stories/S-900-test.yaml" | head -1)"
+# AC9 (S-070): Board-Flip landet im temporären, detached Worktree + Push
+# nach origin — NICHT mehr lokal in $T3_WORK. Assertion daher gegen
+# origin/main (statt der lokalen Datei).
+T3_STATUS="$(git -C "$T3_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^status:' || true)"
+T3_BRANCH="$(git -C "$T3_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^branch:' || true)"
 if [[ "$T3_STATUS" == "status: Done" ]]; then
-  pass "Test 3b: Board auf Done geflippt"
+  pass "Test 3b: Board auf Done geflippt (im origin/main-Stand)"
 else
-  fail "Test 3b: Board-Status ist '${T3_STATUS}', erwartet 'status: Done'"
+  fail "Test 3b: Board-Status in origin/main ist '${T3_STATUS}', erwartet 'status: Done'"
 fi
 if [[ "$T3_BRANCH" == "branch: feat/S-900-test" ]]; then
-  pass "Test 3c: branch-Feld korrekt gesetzt"
+  pass "Test 3c: branch-Feld korrekt gesetzt (im origin/main-Stand)"
 else
-  fail "Test 3c: branch-Feld ist '${T3_BRANCH}'"
+  fail "Test 3c: branch-Feld in origin/main ist '${T3_BRANCH}'"
 fi
 T3_ORIGIN_LOG="$(git -C "$T3_WORK" log origin/main --oneline | grep -c "feature work" || true)"
 if [[ "$T3_ORIGIN_LOG" -ge 1 ]]; then
   pass "Test 3d: Story-Commit ist tatsächlich auf origin/main gelandet"
 else
   fail "Test 3d: Story-Commit fehlt auf origin/main"
+fi
+# AC7 (S-070): der aufrufende Worktree bleibt unverändert auf dem
+# Story-Branch — kein Checkout des Ziel-Branches, kein lokaler Board-Flip.
+T3_LOCAL_BRANCH_AFTER="$(git -C "$T3_WORK" rev-parse --abbrev-ref HEAD)"
+if [[ "$T3_LOCAL_BRANCH_AFTER" == "feat/S-900-test" ]]; then
+  pass "Test 3e: aufrufender Worktree steht nach dem Lauf unverändert auf dem Story-Branch (AC7)"
+else
+  fail "Test 3e: aufrufender Worktree steht auf '${T3_LOCAL_BRANCH_AFTER}', erwartet unverändert 'feat/S-900-test'"
+fi
+T3_LOCAL_STATUS_FILE="$(grep '^status:' "$T3_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T3_LOCAL_STATUS_FILE" == "status: In Review" ]]; then
+  pass "Test 3f: lokale Board-Datei im Story-Worktree unverändert — Flip geschah im detached Worktree, nicht lokal (AC9)"
+else
+  fail "Test 3f: lokale Board-Datei im Story-Worktree wurde verändert ('${T3_LOCAL_STATUS_FILE}') — Flip hätte nicht lokal stattfinden dürfen"
 fi
 
 # ===========================================================================
@@ -296,7 +384,7 @@ fi
 echo ""
 echo "--- Test 5: zweiter Ship-Aufruf nach erfolgreichem Ship ist idempotent ---"
 export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
-git -C "$T3_WORK" checkout -q feat/S-900-test   # zurück auf den Story-Branch (Test 3 endete auf main)
+git -C "$T3_WORK" checkout -q feat/S-900-test   # No-Op seit AC7 (S-070): Test 3 endet bereits auf dem Story-Branch, kein Checkout des Ziel-Branches mehr
 set +e
 T5_OUTPUT="$(cd "$T3_WORK" && MOCK_HEAD_SHA="$(git rev-parse origin/main)" bash "$SHIP_SCRIPT" S-900 2>&1)"
 T5_EXIT=$?
@@ -425,6 +513,371 @@ if [[ $T8_EXIT -eq 0 ]]; then
 else
   fail "Test 8: Skript brach ab (exit=${T8_EXIT}) statt auf 'main' zurückzufallen"
   echo "  Output: $T8_OUTPUT"
+fi
+
+# ===========================================================================
+# Test 9 — AC1-AC6 v2 (board-ship-environment-guards, Ansatzwechsel
+# 2026-07-17): CI-Trigger-Feststellung EMPIRISCH (nachsehen, ob ein Run mit
+# der eigenen SHA erscheint) statt aus .github/workflows/* hergeleitet. Die
+# YAML-Anker-/Alias-Regressionsfixtures des verworfenen Parser-Ansatzes
+# (vormals Test 10) entfallen ersatzlos — sie sicherten eine Lösung ab, die
+# es nicht mehr gibt (v2-Spec, AC6-Traceability-Hinweis).
+#   (a) Skip auf Feature-Branch: kein Run mit eigener SHA -> Exit 0, Skip-
+#       Logzeile, Board im Feature-Branch auf Done (AC1, AC6a).
+#   (b) main bleibt scharf bei rotem CI: Run mit eigener SHA, conclusion=
+#       failure -> die, kein Flip (AC2, AC6b).
+#   (c) main bleibt scharf OHNE Run: kein Run mit eigener SHA -> KEIN Skip
+#       (default_branch), Timeout-die, kein Flip (AC2/E2, AC6c).
+#   (d) Race-Schutz: Run mit FREMDER headSha + conclusion=failure -> weder
+#       als eigener Run ausgewertet noch als "kein Run" verbucht, auf main
+#       folgt der Timeout-die, kein Flip (AC3, AC6d).
+# BOARD_SHIP_CI_GRACE_SECS wird klein gesetzt (Spec-Vorgabe AC6-Präambel);
+# `sleep` ist zusätzlich global gemockt (No-Op) — betrifft nur die Test-
+# Laufzeit, board-ship.sh bleibt bei den zwei dokumentierten Env-Variablen.
+# ===========================================================================
+echo ""
+echo "--- Test 9: AC1-AC6 v2 — empirische CI-Trigger-Feststellung (Beobachtungsfenster) ---"
+
+export BOARD_SHIP_CI_GRACE_SECS=3
+unset MOCK_HEAD_SHA
+
+# --- (a) Skip auf Feature-Branch: kein Run mit eigener SHA ---
+T9A_WORK="$(setup_fixture "${TEST_WORK_DIR}/test9a")"
+(
+  cd "$T9A_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+T9A_START=$(date +%s)
+T9A_OUTPUT="$(cd "$T9A_WORK" && MOCK_HEAD_SHA="" bash "$SHIP_SCRIPT" S-900 --target-branch "feature/F-900" 2>&1)"
+T9A_EXIT=$?
+T9A_END=$(date +%s)
+T9A_DURATION=$((T9A_END - T9A_START))
+
+if [[ $T9A_EXIT -eq 0 ]]; then
+  pass "Test 9a-1: Ship auf Feature-Branch ohne eigenen Run läuft durch (exit 0)"
+else
+  fail "Test 9a-1: exit=${T9A_EXIT}"
+  echo "  Output: $T9A_OUTPUT"
+fi
+if echo "$T9A_OUTPUT" | grep -q "kein CI-Run für .* innerhalb .*s erschienen"; then
+  pass "Test 9a-2: Skip-Logzeile vorhanden (Beobachtungsfenster abgelaufen, kein Treffer)"
+else
+  fail "Test 9a-2: Skip-Logzeile fehlt"
+  echo "  Output: $T9A_OUTPUT"
+fi
+if [[ "$T9A_DURATION" -lt 30 ]]; then
+  pass "Test 9a-3: kein 40x15s-Timeout — Laufzeit ${T9A_DURATION}s (<30s)"
+else
+  fail "Test 9a-3: Laufzeit ${T9A_DURATION}s — Warteschleife wurde offenbar nicht übersprungen"
+fi
+T9A_STATUS="$(git -C "$T9A_WORK" show "origin/feature/F-900:board/stories/S-900-test.yaml" 2>/dev/null | grep '^status:' || true)"
+if [[ "$T9A_STATUS" == "status: Done" ]]; then
+  pass "Test 9a-4: Board im Feature-Branch auf Done (Skip blockiert Board-Flip nicht)"
+else
+  fail "Test 9a-4: Board-Status im Feature-Branch ist '${T9A_STATUS}'"
+fi
+
+# --- (b) main bleibt scharf bei rotem CI (eigener Run vorhanden) ---
+T9B_WORK="$(setup_fixture "${TEST_WORK_DIR}/test9b")"
+(
+  cd "$T9B_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="failure"
+set +e
+T9B_OUTPUT="$(cd "$T9B_WORK" && MOCK_HEAD_SHA="$(git rev-parse HEAD)" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T9B_EXIT=$?
+set -e
+if [[ $T9B_EXIT -ne 0 ]] && echo "$T9B_OUTPUT" | grep -q "CI nicht erfolgreich"; then
+  pass "Test 9b: main bleibt scharf — roter CI (eigener Run) wird erkannt, Skript stirbt (AC2)"
+else
+  fail "Test 9b: main-CI-Fehlschlag nicht erkannt (exit=${T9B_EXIT})"
+  echo "  Output: $T9B_OUTPUT"
+fi
+T9B_STATUS="$(grep '^status:' "$T9B_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T9B_STATUS" == "status: In Review" ]]; then
+  pass "Test 9b-2: Board-Status unverändert bei rotem CI auf main (kein Flip)"
+else
+  fail "Test 9b-2: Board-Status ist '${T9B_STATUS}', erwartet unverändert 'status: In Review'"
+fi
+
+# --- (c) main bleibt scharf OHNE Run — KEIN Skip, Timeout-die (AC2/E2) ---
+T9C_WORK="$(setup_fixture "${TEST_WORK_DIR}/test9c")"
+(
+  cd "$T9C_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+set +e
+T9C_OUTPUT="$(cd "$T9C_WORK" && MOCK_HEAD_SHA="" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T9C_EXIT=$?
+set -e
+if [[ $T9C_EXIT -ne 0 ]] && echo "$T9C_OUTPUT" | grep -q "CI nicht erfolgreich" && echo "$T9C_OUTPUT" | grep -q "timeout/unbekannt"; then
+  pass "Test 9c: main bleibt scharf OHNE Run — kein Skip, Timeout-die (AC2/E2)"
+else
+  fail "Test 9c: main wurde trotz fehlendem Run übersprungen oder falsch behandelt (exit=${T9C_EXIT})"
+  echo "  Output: $T9C_OUTPUT"
+fi
+if echo "$T9C_OUTPUT" | grep -q "kein CI-Run für .* innerhalb .*s erschienen"; then
+  fail "Test 9c-2: main hat fälschlich die Skip-Logzeile des Beobachtungsfensters ausgegeben — default_branch darf NIE überspringen"
+else
+  pass "Test 9c-2: keine Skip-Logzeile auf main — Beobachtungsfenster wird auf default_branch nicht angewendet"
+fi
+T9C_STATUS="$(grep '^status:' "$T9C_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T9C_STATUS" == "status: In Review" ]]; then
+  pass "Test 9c-3: Board-Status unverändert (kein Flip trotz fehlendem Run auf main)"
+else
+  fail "Test 9c-3: Board-Status ist '${T9C_STATUS}', erwartet unverändert 'status: In Review'"
+fi
+
+# --- (d) Race-Schutz: fremde headSha + conclusion=failure -> weder eigener
+#         Run noch "kein Run", auf main folgt Timeout-die (AC3) ---
+T9D_WORK="$(setup_fixture "${TEST_WORK_DIR}/test9d")"
+(
+  cd "$T9D_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="failure"
+set +e
+T9D_OUTPUT="$(cd "$T9D_WORK" && MOCK_HEAD_SHA="0000000000000000000000000000000000dead" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T9D_EXIT=$?
+set -e
+if [[ $T9D_EXIT -ne 0 ]] && echo "$T9D_OUTPUT" | grep -q "CI nicht erfolgreich" && echo "$T9D_OUTPUT" | grep -q "timeout/unbekannt"; then
+  pass "Test 9d: fremde headSha wird weder als eigener Run noch als 'kein Run' verbucht — Timeout-die auf main (AC3)"
+else
+  fail "Test 9d: fremde headSha wurde falsch behandelt (exit=${T9D_EXIT})"
+  echo "  Output: $T9D_OUTPUT"
+fi
+T9D_STATUS="$(grep '^status:' "$T9D_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T9D_STATUS" == "status: In Review" ]]; then
+  pass "Test 9d-2: Board-Status unverändert (kein Flip)"
+else
+  fail "Test 9d-2: Board-Status ist '${T9D_STATUS}', erwartet unverändert 'status: In Review'"
+fi
+
+# --- (e) Grace-Window-Race auf einem NICHT-default_branch (Review-Fund
+#         Iteration 4): Test 9d lief nur auf 'main' und traf damit den alten
+#         Scharf-Loop, nicht die neue Grace-Schleife. Hier: persistierende
+#         FREMDE headSha über mehrere Fenster-Iterationen (Grace=12s,
+#         Poll=5s -> 3 Abfragen) auf feature/F-900 — die eigene SHA erscheint
+#         nie. Belegt: eine fremde headSha wird weder als eigener Run
+#         gewertet noch beendet das Fenster vorzeitig; nach vollständigem
+#         Ablauf wird korrekt geskippt (Board Done) (AC1/AC3). ---
+T9E_WORK="$(setup_fixture "${TEST_WORK_DIR}/test9e")"
+(
+  cd "$T9E_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+T9E_OUTPUT="$(cd "$T9E_WORK" && BOARD_SHIP_CI_GRACE_SECS=12 MOCK_HEAD_SHA="0000000000000000000000000000000000dead" bash "$SHIP_SCRIPT" S-900 --target-branch "feature/F-900" 2>&1)"
+T9E_EXIT=$?
+if [[ $T9E_EXIT -eq 0 ]]; then
+  pass "Test 9e-1: Grace-Window mit persistierender fremder headSha läuft vollständig durch, dann Skip (exit 0)"
+else
+  fail "Test 9e-1: exit=${T9E_EXIT}"
+  echo "  Output: $T9E_OUTPUT"
+fi
+if echo "$T9E_OUTPUT" | grep -q "kein CI-Run für .* innerhalb .*s erschienen"; then
+  pass "Test 9e-2: Skip-Logzeile nach vollständig durchlaufenem Fenster vorhanden"
+else
+  fail "Test 9e-2: Skip-Logzeile fehlt"
+  echo "  Output: $T9E_OUTPUT"
+fi
+if echo "$T9E_OUTPUT" | grep -q "nicht durchgehend fehlerfrei"; then
+  fail "Test 9e-3: fremde headSha wurde fälschlich als Query-Fehler gewertet (had_query_failure) statt nur ignoriert"
+else
+  pass "Test 9e-3: fremde headSha wurde NICHT als Query-Fehler gewertet — Fenster lief regulär zu Ende"
+fi
+T9E_STATUS="$(git -C "$T9E_WORK" show "origin/feature/F-900:board/stories/S-900-test.yaml" 2>/dev/null | grep '^status:' || true)"
+if [[ "$T9E_STATUS" == "status: Done" ]]; then
+  pass "Test 9e-4: Board im Feature-Branch auf Done (fremde headSha blockiert Skip/Board-Flip nicht)"
+else
+  fail "Test 9e-4: Board-Status im Feature-Branch ist '${T9E_STATUS}'"
+fi
+
+# --- (f) gh-Störung im Beobachtungsfenster eskaliert scharf statt zu
+#         skippen (Review-Fund Iteration 4, coder/L03: MOCK_GH_RUN_LIST_FAIL
+#         existierte als Seam, wurde aber von keinem Test aktiviert).
+#         Nicht-default_branch, MOCK_GH_RUN_LIST_FAIL=1 -> jede
+#         gh-Abfrage im Fenster schlägt fehl -> NIE als "kein Run"/Skip
+#         werten (AC3, K1) -> klassischer Scharf-Watch übernimmt, der
+#         (mit ebenfalls fehlschlagenden Abfragen) regulär in den
+#         Timeout-die läuft, kein Flip. ---
+T9F_WORK="$(setup_fixture "${TEST_WORK_DIR}/test9f")"
+(
+  cd "$T9F_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+set +e
+T9F_OUTPUT="$(cd "$T9F_WORK" && MOCK_GH_RUN_LIST_FAIL=1 bash "$SHIP_SCRIPT" S-900 --target-branch "feature/F-900" 2>&1)"
+T9F_EXIT=$?
+set -e
+if [[ $T9F_EXIT -ne 0 ]] && echo "$T9F_OUTPUT" | grep -q "nicht durchgehend fehlerfrei" && echo "$T9F_OUTPUT" | grep -q "CI nicht erfolgreich" && echo "$T9F_OUTPUT" | grep -q "timeout/unbekannt"; then
+  pass "Test 9f: gh-Störung im Fenster eskaliert scharf statt zu skippen — Exit 1, kein Board-Flip (AC3, K1, coder/L03)"
+else
+  fail "Test 9f: gh-Störung wurde nicht korrekt eskaliert (exit=${T9F_EXIT})"
+  echo "  Output: $T9F_OUTPUT"
+fi
+if echo "$T9F_OUTPUT" | grep -q "kein CI-Run für .* innerhalb .*s erschienen"; then
+  fail "Test 9f-2: trotz gh-Störung wurde fälschlich die Skip-Logzeile ausgegeben"
+else
+  pass "Test 9f-2: keine Skip-Logzeile trotz gh-Störung — Eskalation griff wie vorgesehen"
+fi
+T9F_STATUS="$(grep '^status:' "$T9F_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T9F_STATUS" == "status: In Review" ]]; then
+  pass "Test 9f-3: Board-Status unverändert (kein Flip trotz Beobachtungsfenster)"
+else
+  fail "Test 9f-3: Board-Status ist '${T9F_STATUS}', erwartet unverändert 'status: In Review'"
+fi
+
+unset BOARD_SHIP_CI_GRACE_SECS
+unset MOCK_HEAD_SHA
+
+# ===========================================================================
+# Test 11 — AC7-AC13 (board-ship-environment-guards, S-070): worktree-
+# taugliches Landen. flow/L07 (dev-gui S-358): board-ship.sh Modus A machte
+# 'git checkout <ship-branch>' im aufrufenden Worktree — hielt ein ZWEITER
+# Worktree denselben Branch (der Normalfall bei CLAUDE.md-Worktree-Pflicht),
+# starb das Skript an 'fatal: a branch named ... already exists', obwohl der
+# Story-Commit längst gepusht war. Board blieb 'In Progress'.
+#   (a) Zweiter Worktree hält 'main' — Ship aus dem Story-Worktree (Modus A,
+#       merge_policy: direct) landet trotzdem: Exit 0, Story-Commit +
+#       Board-Flip auf origin/main, zweiter Worktree unverändert (HEAD +
+#       Working-Tree unberührt), kein Rest in 'git worktree list' (AC7-AC9,
+#       AC13a).
+#   (b) Non-FF-Fall: origin/main hat einen fremden Commit, der nicht im
+#       Story-Branch enthalten ist -> Exit 1, Klartext-Diagnose, kein Push,
+#       kein Force, origin/main unverändert, Board NICHT Done (AC8/E1,
+#       AC13b).
+# ===========================================================================
+echo ""
+echo "--- Test 11: AC7-AC13 — worktree-taugliches Landen (kein checkout des Ziel-Branches) ---"
+
+# --- (a) Zweiter Worktree hält main; Ship aus Story-Worktree landet ---
+T11A_WORK="$(setup_fixture "${TEST_WORK_DIR}/test11a")"
+T11A_SECOND_WORKTREE="${TEST_WORK_DIR}/test11a/second-worktree"
+(
+  cd "$T11A_WORK"
+  git checkout -q -b feat/S-900-test        # 'main' in $T11A_WORK freigeben
+  git worktree add -q "$T11A_SECOND_WORKTREE" main
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+T11A_SECOND_HEAD_BEFORE="$(git -C "$T11A_SECOND_WORKTREE" rev-parse HEAD)"
+T11A_SECOND_STATUS_BEFORE="$(git -C "$T11A_SECOND_WORKTREE" status --porcelain)"
+
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+T11A_OUTPUT="$(cd "$T11A_WORK" && MOCK_HEAD_SHA="$(git rev-parse HEAD)" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T11A_EXIT=$?
+
+if [[ $T11A_EXIT -eq 0 ]]; then
+  pass "Test 11a-1: Ship aus Story-Worktree landet trotz zweitem Worktree auf 'main' (exit 0, kein 'already exists')"
+else
+  fail "Test 11a-1: exit=${T11A_EXIT} — vermutlich 'fatal: a branch named ... already exists' (flow/L07-Regression)"
+  echo "  Output: $T11A_OUTPUT"
+fi
+if echo "$T11A_OUTPUT" | grep -qi "already exists"; then
+  fail "Test 11a-1b: Ausgabe enthält 'already exists' — Checkout-Konflikt trotzdem aufgetreten"
+else
+  pass "Test 11a-1b: keine 'already exists'-Fehlermeldung"
+fi
+T11A_ORIGIN_LOG="$(git -C "$T11A_WORK" log origin/main --oneline 2>/dev/null | grep -c "feature work" || true)"
+if [[ "$T11A_ORIGIN_LOG" -ge 1 ]]; then
+  pass "Test 11a-2: Story-Commit ist tatsächlich auf origin/main gelandet"
+else
+  fail "Test 11a-2: Story-Commit fehlt auf origin/main"
+fi
+T11A_STATUS="$(git -C "$T11A_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^status:' || true)"
+if [[ "$T11A_STATUS" == "status: Done" ]]; then
+  pass "Test 11a-3: Board-Flip auf Done ist im origin/main-Stand enthalten"
+else
+  fail "Test 11a-3: Board-Status in origin/main ist '${T11A_STATUS}'"
+fi
+T11A_SECOND_HEAD_AFTER="$(git -C "$T11A_SECOND_WORKTREE" rev-parse HEAD)"
+T11A_SECOND_STATUS_AFTER="$(git -C "$T11A_SECOND_WORKTREE" status --porcelain)"
+if [[ "$T11A_SECOND_HEAD_AFTER" == "$T11A_SECOND_HEAD_BEFORE" ]]; then
+  pass "Test 11a-4: zweiter Worktree (main) unverändert — HEAD identisch"
+else
+  fail "Test 11a-4: zweiter Worktree HEAD hat sich verändert (${T11A_SECOND_HEAD_BEFORE} -> ${T11A_SECOND_HEAD_AFTER})"
+fi
+if [[ "$T11A_SECOND_STATUS_AFTER" == "$T11A_SECOND_STATUS_BEFORE" ]]; then
+  pass "Test 11a-5: zweiter Worktree Working-Tree unverändert (kein Datei-Diff)"
+else
+  fail "Test 11a-5: zweiter Worktree Working-Tree hat sich verändert"
+fi
+T11A_WORKTREE_LIST_LEAK="$(git -C "$T11A_WORK" worktree list | grep -c "board-ship-land" || true)"
+if [[ "$T11A_WORKTREE_LIST_LEAK" -eq 0 ]]; then
+  pass "Test 11a-6: kein verwaister temporärer Landing-Worktree in 'git worktree list' (AC9-Cleanup)"
+else
+  fail "Test 11a-6: verwaister temporärer Worktree gefunden"
+  git -C "$T11A_WORK" worktree list
+fi
+
+# --- (b) Non-FF-Fall: origin/main hat einen fremden Commit -> Exit 1, kein Push, kein Flip ---
+T11B_WORK="$(setup_fixture "${TEST_WORK_DIR}/test11b")"
+(
+  cd "$T11B_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+# Fremder Commit landet auf origin/main, NACHDEM der Story-Branch abgezweigt
+# wurde. Der bare "origin.git" hat kein aktualisiertes HEAD-Symref (git init
+# --bare zeigt per Default auf 'master') — explizit auf 'main' auschecken
+# statt uns auf den Default-Checkout beim Klonen zu verlassen.
+T11B_FOREIGN_CLONE="${TEST_WORK_DIR}/test11b/foreign-clone"
+git clone -q "${TEST_WORK_DIR}/test11b/origin.git" "$T11B_FOREIGN_CLONE" 2>/dev/null
+(
+  cd "$T11B_FOREIGN_CLONE"
+  git checkout -q main
+  echo "foreign" > foreign.txt
+  git add -A
+  git commit -q -m "fremder Commit — jemand anders war schneller"
+  git push -q origin main
+)
+T11B_ORIGIN_MAIN_BEFORE="$(git -C "$T11B_WORK" ls-remote origin main | cut -f1)"
+
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+set +e
+T11B_OUTPUT="$(cd "$T11B_WORK" && MOCK_HEAD_SHA="$(git rev-parse HEAD)" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T11B_EXIT=$?
+set -e
+if [[ $T11B_EXIT -ne 0 ]] && echo "$T11B_OUTPUT" | grep -qi "kein Fast-Forward"; then
+  pass "Test 11b-1: Non-FF-Fall korrekt erkannt — sichtbarer Abbruch (Exit 1), Klartext-Diagnose (E1)"
+else
+  fail "Test 11b-1: Non-FF-Fall nicht korrekt behandelt (exit=${T11B_EXIT})"
+  echo "  Output: $T11B_OUTPUT"
+fi
+T11B_ORIGIN_MAIN_AFTER="$(git -C "$T11B_WORK" ls-remote origin main | cut -f1)"
+if [[ "$T11B_ORIGIN_MAIN_AFTER" == "$T11B_ORIGIN_MAIN_BEFORE" ]]; then
+  pass "Test 11b-2: origin/main unverändert (kein Push, kein Force)"
+else
+  fail "Test 11b-2: origin/main hat sich verändert trotz Non-FF-Abbruch"
+fi
+T11B_STATUS="$(grep '^status:' "$T11B_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T11B_STATUS" == "status: In Review" ]]; then
+  pass "Test 11b-3: Board-Status unverändert (kein Flip)"
+else
+  fail "Test 11b-3: Board-Status ist '${T11B_STATUS}', erwartet unverändert 'status: In Review'"
 fi
 
 # ===========================================================================

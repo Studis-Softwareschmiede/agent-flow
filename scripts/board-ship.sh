@@ -100,20 +100,27 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 # Gemeinsame Bausteine (von Modus ship UND merge-feature genutzt)
 # ============================================================================
 
-# CI beobachten (cicd/F06: headSha-Race-Schutz) — bricht bei Fehlschlag ab.
-# Repos ohne jegliche Actions-Workflows (z.B. dieses Projekt selbst, language:
-# md, kein .github/workflows/) haben strukturell keine CI zum Beobachten —
-# das wird von "CI noch nicht gestartet" unterschieden, statt 10 Minuten auf
-# etwas zu warten, das nie erscheint.
-watch_ci_or_die() {
+# ---------------------------------------------------------------------------
+# CI-Trigger-Feststellung: EMPIRISCH (nachsehen, ob ein Run erscheint) statt
+# hergeleitet (board-ship-environment-guards v2, Owner-Entscheid 2026-07-17).
+# v1 versuchte herzuleiten, ob ein Push nach <branch> triggert, indem es
+# .github/workflows/* mit einem Eigenbau-Bash-Parser las. Zwei Review-
+# Iterationen fanden je einen kritischen Fail-open-Fall (Anker auf
+# 'branches:', dann auf 'on:' selbst — coder/L01, coder/L02): "Bash kann
+# YAML nicht", jeder Flicken deckte nur den gemeldeten Fall, die Fehlerklasse
+# blieb offen. v2 liest/parst .github/workflows/* in KEINER Form (kein
+# grep/sed/awk, kein YAML-Parser) — die Trigger-Frage wird ausschließlich aus
+# beobachteten `gh run list`-Ergebnissen beantwortet.
+# ---------------------------------------------------------------------------
+
+# Der unveränderte, klassische Scharf-Watch (v1-Verhalten, unverändert):
+# wartet bis zu 40x15s auf 'completed' für die eigene SHA, dann 'die' bei
+# conclusion != success. Wird für default_branch IMMER verwendet (AC2) sowie
+# für Nicht-default_branch, sobald im Beobachtungsfenster ein eigener Run
+# erschien oder die Fensterbeobachtung selbst unsicher war (AC3, K1).
+watch_ci_scharf_loop() {
   local branch="$1" expect_sha="$2"
   local run_conclusion="" run_sha="" run_status=""
-  local workflow_count
-  workflow_count="$(gh api "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)/actions/workflows" --jq '.total_count' 2>/dev/null || echo "")"
-  if [[ "$workflow_count" == "0" ]]; then
-    log "keine Actions-Workflows im Repo konfiguriert — CI-Watch entfällt strukturell für '${branch}'."
-    return 0
-  fi
   for _ in $(seq 1 40); do
     run_sha="$(gh run list --branch "$branch" --limit 1 --json headSha --jq '.[0].headSha' 2>/dev/null || echo "")"
     run_status="$(gh run list --branch "$branch" --limit 1 --json status --jq '.[0].status' 2>/dev/null || echo "")"
@@ -131,6 +138,82 @@ watch_ci_or_die() {
     die "CI nicht erfolgreich für ${expect_sha} auf '${branch}' (conclusion='${run_conclusion:-timeout/unbekannt}') — KEIN Rollout. Manuell prüfen: gh run list --branch ${branch}"
   fi
   log "CI grün für ${expect_sha} auf '${branch}'."
+}
+
+# CI beobachten (cicd/F06: headSha-Race-Schutz) — bricht bei Fehlschlag ab.
+# AC4: Repos ganz ohne Workflows -> sofortiger Skip, auch auf default_branch,
+# ohne Wartezeit (API-Tatsache über das Repo, keine Herleitung aus
+# Definitionen). AC2: auf default_branch NIE überspringen — dort immer der
+# klassische Scharf-Watch, unabhängig vom Beobachtungsfenster. Auf jedem
+# anderen Branch: bis zu <grace> Sekunden (AC5, BOARD_SHIP_CI_GRACE_SECS,
+# Default 90) empirisch beobachten, ob ein Run für die EIGENE SHA erscheint
+# (AC1, Zuordnung ausschließlich über headSha-Vergleich). Erscheint einer ->
+# klassischer Scharf-Watch. Bleibt das Fenster fehlerfrei ohne Treffer ->
+# Skip (deckt A1). Trat im Fenster irgendeine fehlgeschlagene/leere
+# gh-Abfrage auf -> NIE als "kein Trigger" werten (AC3, K1) -> ebenfalls
+# klassischer Scharf-Watch.
+watch_ci_or_die() {
+  local branch="$1" expect_sha="$2"
+
+  local workflow_count
+  workflow_count="$(gh api "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)/actions/workflows" --jq '.total_count' 2>/dev/null || echo "")"
+  if [[ "$workflow_count" == "0" ]]; then
+    log "keine Actions-Workflows im Repo konfiguriert — CI-Watch entfällt strukturell für '${branch}'."
+    return 0
+  fi
+
+  if [[ "$branch" == "$DEFAULT_BRANCH" ]]; then
+    watch_ci_scharf_loop "$branch" "$expect_sha"
+    return 0
+  fi
+
+  # Beobachtungsfenster nur auf Nicht-default_branch (AC1/AC2/AC3/AC5).
+  local grace_secs="${BOARD_SHIP_CI_GRACE_SECS:-}"
+  if ! [[ "$grace_secs" =~ ^[1-9][0-9]*$ ]]; then
+    grace_secs=90   # fehlend/nicht-numerisch/negativ/0 -> Default (AC5: Fehlkonfiguration darf nie sofort skippen)
+  fi
+  local poll_interval=5
+  [[ "$poll_interval" -gt "$grace_secs" ]] && poll_interval="$grace_secs"
+
+  local elapsed=0 own_run_found=0 had_query_failure=0 run_sha=""
+  while [[ "$elapsed" -lt "$grace_secs" ]]; do
+    # '// "NOSHA"' macht "gh hat sauber geantwortet, aber (noch) kein Run
+    # vorhanden" (leeres Array, jq: .[0] -> null -> Fallback "NOSHA") explizit
+    # von einer echten Abfrage-Störung unterscheidbar: eine fehlgeschlagene/
+    # abgebrochene gh-Abfrage (Netz/Auth/Rate-Limit) liefert eine LEERE
+    # Zeichenkette, niemals "NOSHA" — genau das trennt AC1 ("kein Run") von
+    # AC3 ("Abfrage war nicht fehlerfrei, also NIE als 'kein Trigger' werten").
+    run_sha="$(gh run list --branch "$branch" --limit 1 --json headSha --jq '.[0].headSha // "NOSHA"' 2>/dev/null || echo "")"
+    if [[ -z "$run_sha" ]]; then
+      had_query_failure=1
+      ensure_gh_auth
+    elif [[ "$run_sha" == "$expect_sha" ]]; then
+      own_run_found=1
+      break
+    else
+      # "NOSHA" (noch kein Run) oder ein fremder Run (anderer Commit) — beides
+      # ist kein Treffer, aber auch kein Fehlersignal; das Fenster läuft
+      # unverändert weiter (AC1/AC3).
+      ensure_gh_auth
+    fi
+    sleep "$poll_interval"
+    elapsed=$((elapsed + poll_interval))
+  done
+
+  if [[ "$own_run_found" -eq 1 ]]; then
+    log "CI-Run für ${expect_sha} auf '${branch}' erschienen — beobachte scharf bis zur Conclusion."
+    watch_ci_scharf_loop "$branch" "$expect_sha"
+    return 0
+  fi
+
+  if [[ "$had_query_failure" -eq 1 ]]; then
+    log "Trigger-Beobachtung für '${branch}' im Fenster nicht durchgehend fehlerfrei (gh-Abfrage leer/fehlgeschlagen) — CI-Watch läuft sicherheitshalber scharf (K1)."
+    watch_ci_scharf_loop "$branch" "$expect_sha"
+    return 0
+  fi
+
+  log "kein CI-Run für ${expect_sha} auf '${branch}' innerhalb ${grace_secs}s erschienen — kein Trigger, CI-Watch entfällt."
+  return 0
 }
 
 # Lokaler Docker-Rollout mit Rollout-Verifikation gegen die tatsächlich
@@ -178,6 +261,46 @@ do_rollout_or_die() {
   docker image prune -f >/dev/null 2>&1 || true
 }
 
+# ---------------------------------------------------------------------------
+# Temporärer, detached Worktree für git-Operationen auf einem Branch, der im
+# aufrufenden Worktree bereits ausgecheckt sein könnte (AC7/AC9/AC10,
+# flow/L07 — dev-gui S-358). Git verbietet denselben Branch gleichzeitig in
+# zwei Worktrees; statt den Ziel-Branch im aufrufenden Worktree auszuchecken
+# (der S-358-Defekt), arbeitet dieses Skript auf einem eigenen, kurzlebigen,
+# DETACHED Worktree auf origin/<branch> und landet per
+# 'git push origin HEAD:<branch>'. Der temporäre Worktree wird auf JEDEM
+# Ausgang entfernt (Erfolg, Fehler, Abbruch) — EXIT-Trap als Sicherheitsnetz
+# PLUS expliziter Aufruf direkt nach Gebrauch; kein Fallback auf 'checkout'
+# bei Fehlschlag (E7 — das wäre genau der Defekt, den diese Spec beseitigt).
+# ---------------------------------------------------------------------------
+TEMP_LAND_WORKTREE=""
+
+cleanup_temp_land_worktree() {
+  if [[ -n "$TEMP_LAND_WORKTREE" ]]; then
+    git worktree remove --force "$TEMP_LAND_WORKTREE" >/dev/null 2>&1 \
+      || rm -rf "$TEMP_LAND_WORKTREE" 2>/dev/null || true
+    git worktree prune >/dev/null 2>&1 || true
+    TEMP_LAND_WORKTREE=""
+  fi
+}
+trap cleanup_temp_land_worktree EXIT
+
+# Legt einen temporären, detached Worktree auf origin/<branch> an und gibt
+# dessen Pfad auf stdout aus. WICHTIG: läuft der Aufrufer über Kommando-
+# substitution ("$(create_temp_land_worktree ...)"), MUSS er danach selbst
+# TEMP_LAND_WORKTREE="<Rückgabewert>" setzen — diese Funktion selbst läuft
+# dabei in einer Subshell, eigene Zuweisungen an TEMP_LAND_WORKTREE gingen
+# beim Verlassen der Subshell verloren (Bash-Semantik).
+create_temp_land_worktree() {
+  local branch="$1"
+  git worktree prune >/dev/null 2>&1 || true   # nicht-destruktiv, entfernt nur verwaiste Metadaten (E7)
+  local path
+  path="$(mktemp -u -d "${TMPDIR:-/tmp}/board-ship-land.XXXXXX")"
+  git worktree add --detach --quiet "$path" "origin/${branch}" \
+    || die "temporärer Worktree für '${branch}' konnte nicht angelegt werden (Pfad belegt? Rest eines abgebrochenen Laufs? 'git worktree prune' half nicht) — kein Fallback auf 'checkout'."
+  echo "$path"
+}
+
 # ============================================================================
 # Modus C — kompletten Feature-Branch nach profile.default_branch mergen
 # ============================================================================
@@ -191,12 +314,19 @@ if [[ "$MODE" == "merge-feature" ]]; then
   if git merge-base --is-ancestor "origin/${MERGE_FEATURE_BRANCH}" "origin/${DEFAULT_BRANCH}" 2>/dev/null; then
     log "Feature-Branch '${MERGE_FEATURE_BRANCH}' ist bereits vollständig in '${DEFAULT_BRANCH}' enthalten — nichts zu mergen."
   else
-    git checkout "$DEFAULT_BRANCH" --quiet 2>/dev/null || git checkout -b "$DEFAULT_BRANCH" "origin/${DEFAULT_BRANCH}" --quiet
+    # AC10: finaler Feature-Merge OHNE checkout/reset --hard des default_branch
+    # im aufrufenden Worktree — der Merge-Commit entsteht in einem temporären,
+    # detached Worktree auf origin/<default_branch> (AC9-Mechanismus).
     guard_clean_or_die
-    git reset --hard "origin/${DEFAULT_BRANCH}" --quiet
-    git merge --no-ff "origin/${MERGE_FEATURE_BRANCH}" -q -m "merge: ${MERGE_FEATURE_BRANCH} (Feature-Batch, alle Storys einzeln geprüft/gelandet)" \
+    MERGE_LAND_WORKTREE="$(create_temp_land_worktree "$DEFAULT_BRANCH")"
+    TEMP_LAND_WORKTREE="$MERGE_LAND_WORKTREE"
+
+    git -C "$MERGE_LAND_WORKTREE" merge --no-ff "origin/${MERGE_FEATURE_BRANCH}" -q -m "merge: ${MERGE_FEATURE_BRANCH} (Feature-Batch, alle Storys einzeln geprüft/gelandet)" \
       || die "Merge von '${MERGE_FEATURE_BRANCH}' nach '${DEFAULT_BRANCH}' fehlgeschlagen — Konflikt, manuell auflösen (sollte bei sequenziellem Story-Landing nicht vorkommen)."
-    git push origin "$DEFAULT_BRANCH" --quiet
+    git -C "$MERGE_LAND_WORKTREE" push origin "HEAD:${DEFAULT_BRANCH}" --quiet \
+      || die "Push des Feature-Merges nach '${DEFAULT_BRANCH}' fehlgeschlagen (Non-Fast-Forward?) — origin/${DEFAULT_BRANCH} unverändert, kein Force, manuell prüfen."
+
+    cleanup_temp_land_worktree
   fi
 
   REMOTE_HEAD="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
@@ -251,11 +381,16 @@ if [[ "$ALREADY_MERGED" -eq 0 ]]; then
   MERGE_POLICY="${MERGE_POLICY:-pr}"
 
   if [[ "$MERGE_POLICY" == "direct" ]]; then
+    # AC8: Landen per FF-Push, OHNE Checkout des Ziel-Branches im aufrufenden
+    # Worktree (AC7) — mechanische FF-Prüfung statt 'checkout + pull + merge
+    # --ff-only'. HEAD ist hier weiterhin der Story-Branch '$BRANCH'.
     guard_clean_or_die
-    git checkout "$SHIP_BRANCH" --quiet 2>/dev/null || git checkout -b "$SHIP_BRANCH" "origin/${SHIP_BRANCH}" --quiet
-    git pull --ff-only origin "$SHIP_BRANCH" --quiet || die "lokaler ${SHIP_BRANCH} divergiert von origin — manueller Rebase nötig, kein automatischer reset"
-    git merge --ff-only "$BRANCH" --quiet || die "kein Fast-Forward möglich — '${BRANCH}' ist nicht aktuell gegenüber ${SHIP_BRANCH}, manuell rebasen"
-    git push origin "$SHIP_BRANCH" --quiet
+    git fetch origin "$SHIP_BRANCH" --quiet || die "Fetch von '${SHIP_BRANCH}' fehlgeschlagen."
+    BEHIND_COUNT="$(git rev-list --count "HEAD..origin/${SHIP_BRANCH}" 2>/dev/null || echo "")"
+    [[ "$BEHIND_COUNT" =~ ^[0-9]+$ ]] || die "Fast-Forward-Prüfung gegen 'origin/${SHIP_BRANCH}' mechanisch nicht auswertbar — Abbruch, kein Push."
+    [[ "$BEHIND_COUNT" == "0" ]] || die "kein Fast-Forward möglich — ${BEHIND_COUNT} Commit(s) Rückstand gegenüber origin/${SHIP_BRANCH} — manuell rebasen. origin/${SHIP_BRANCH} unverändert, Board unverändert."
+    git push origin "HEAD:${SHIP_BRANCH}" --quiet \
+      || die "Push nach '${SHIP_BRANCH}' fehlgeschlagen (Non-Fast-Forward?) — origin/${SHIP_BRANCH} unverändert, kein Force, manuell prüfen."
   else
     COMMIT_TITLE="$(git log -1 --format=%s)"
     PR_OUT="$(gh pr create --base "$SHIP_BRANCH" --head "$BRANCH" --title "${STORY_ID}: ${COMMIT_TITLE}" --body "Automatisch gelandet via board-ship.sh (L3 — deterministischer SHIP-Pfad)." 2>&1)" \
@@ -266,11 +401,11 @@ if [[ "$ALREADY_MERGED" -eq 0 ]]; then
   fi
 fi
 
-# --- Schritt 3: Ziel-Branch aktualisieren + CI beobachten ---
-git checkout "$SHIP_BRANCH" --quiet 2>/dev/null || git checkout -b "$SHIP_BRANCH" "origin/${SHIP_BRANCH}" --quiet
+# --- Schritt 3: Ziel-Branch-SHA ermitteln + CI beobachten (AC7: kein
+# Checkout des Ziel-Branches — 'origin/<ship-branch>' wird rein lesend
+# abgefragt, der aufrufende Worktree bleibt auf dem Story-Branch) ---
 guard_clean_or_die
-git fetch origin "$SHIP_BRANCH" --quiet
-git reset --hard "origin/${SHIP_BRANCH}" --quiet   # Ziel-Branch selbst, kein Story-Worktree — keine eigene Arbeit hier gefährdet
+git fetch origin "$SHIP_BRANCH" --quiet || die "Fetch von '${SHIP_BRANCH}' fehlgeschlagen."
 
 REMOTE_HEAD="$(git rev-parse "origin/${SHIP_BRANCH}")"
 watch_ci_or_die "$SHIP_BRANCH" "$REMOTE_HEAD"
@@ -282,19 +417,32 @@ else
   log "Ziel ist Feature-Branch '${SHIP_BRANCH}' — kein Rollout (folgt gebündelt beim finalen Feature-Merge)."
 fi
 
-# --- Schritt 5: Board-Flip (wiederverwendet 'board set' — kein eigenes YAML-Gefrickel) ---
-guard_clean_or_die   # Ziel-Branch muss VOR dem Board-Flip sauber sein (echte Prüfung, kein Vertrauen)
-export BOARD_WRITER=flow
-"$BOARD_SCRIPT" set "$STORY_ID" status Done
-[[ -n "$PR_URL" ]] && "$BOARD_SCRIPT" set "$STORY_ID" pr "$PR_URL"
-"$BOARD_SCRIPT" set "$STORY_ID" branch "$BRANCH"
+# --- Schritt 5/6: Board-Flip im temporären, detached Worktree auf
+# origin/<ship-branch> (AC9) — betrifft AUCH merge_policy: pr (agent-flow
+# selbst): der aufrufende Worktree bleibt unverändert auf dem Story-Branch,
+# der Ziel-Branch wird hier NIE ausgecheckt. 'board set' operiert über die
+# BOARD_DIR-Env-Var direkt auf dem temporären Worktree — kein 'cd' im
+# laufenden Skript nötig (vermeidet Subshell-/Trap-Verwicklungen). ---
+guard_clean_or_die   # aufrufender Worktree muss VOR dem Worktree-Anlegen sauber sein (echte Prüfung, kein Vertrauen)
+git fetch origin "$SHIP_BRANCH" --quiet || die "Fetch von '${SHIP_BRANCH}' vor dem Board-Flip fehlgeschlagen."
 
-# --- Schritt 6: Board-Flip committen + pushen (sonst nur lokal, nicht geteilt) ---
-if [[ -n "$(git status --porcelain)" ]]; then
-  git add board/
-  git commit -q -m "chore(board): ${STORY_ID} Done"
-  git push origin "$SHIP_BRANCH" --quiet
+LAND_WORKTREE="$(create_temp_land_worktree "$SHIP_BRANCH")"
+TEMP_LAND_WORKTREE="$LAND_WORKTREE"
+
+BOARD_DIR="${LAND_WORKTREE}/board" BOARD_WRITER=flow "$BOARD_SCRIPT" set "$STORY_ID" status Done
+if [[ -n "$PR_URL" ]]; then
+  BOARD_DIR="${LAND_WORKTREE}/board" BOARD_WRITER=flow "$BOARD_SCRIPT" set "$STORY_ID" pr "$PR_URL"
 fi
+BOARD_DIR="${LAND_WORKTREE}/board" BOARD_WRITER=flow "$BOARD_SCRIPT" set "$STORY_ID" branch "$BRANCH"
+
+if [[ -n "$(git -C "$LAND_WORKTREE" status --porcelain)" ]]; then
+  git -C "$LAND_WORKTREE" add board/
+  git -C "$LAND_WORKTREE" commit -q -m "chore(board): ${STORY_ID} Done"
+  git -C "$LAND_WORKTREE" push origin "HEAD:${SHIP_BRANCH}" --quiet \
+    || die "Push des Board-Flips nach '${SHIP_BRANCH}' fehlgeschlagen — origin/${SHIP_BRANCH} inzwischen weitergelaufen? Story-Commit ist gelandet, Flip nicht — erneuter, idempotenter Aufruf holt ihn nach."
+fi
+
+cleanup_temp_land_worktree
 
 log "${STORY_ID} erfolgreich gelandet (${SHIP_BRANCH}=$(git rev-parse "origin/${SHIP_BRANCH}"))."
 exit 0
