@@ -3,7 +3,7 @@ id: metrics-token-collect
 title: Token/Zeit out-of-band erfassen (best-effort, Eich-Datenquelle)
 status: active
 area: metriken-schaetzung
-version: 1
+version: 2
 ---
 
 # Spec: Token-Erfassung out-of-band  (`metrics-token-collect`)
@@ -31,7 +31,9 @@ Vor produktivem Einsatz wird der **tatsächliche** Transcript-Pfad + das `usage`
 
 **Phase-0-Ergebnis (verifiziert 2026-06-12, Item #109):**
 
-Transcript-Dateien wurden unter `~/.claude/projects/<escaped-cwd>/<session-uuid>/subagents/` gefunden. Escaping: cwd-Pfad mit `/` → `-` (z.B. `/Users/alex/Git/Studis-Softwareschmiede` → `-Users-alex-Git-Studis-Softwareschmiede`). Jede Subagent-Dispatch hat zwei Dateien: `agent-<id>.jsonl` (Conversation-Log) und `agent-<id>.meta.json` (Metadaten mit `agentType` und `description`). Die `description` im meta.json enthält beim Dispatch durch `/flow` zuverlässig `#<item>` (z.B. `"coder #108 Ledger-Schema"`), was die Item-Zuordnung ermöglicht.
+Transcript-Dateien wurden unter `~/.claude/projects/<escaped-cwd>/<session-uuid>/subagents/` gefunden. Escaping: cwd-Pfad mit `/` → `-` (z.B. `/Users/alex/Git/Studis-Softwareschmiede` → `-Users-alex-Git-Studis-Softwareschmiede`). Jede Subagent-Dispatch hat zwei Dateien: `agent-<id>.jsonl` (Conversation-Log) und `agent-<id>.meta.json` (Metadaten mit `agentType` und `description`). Die `description` im meta.json trägt die Item-Zuordnung.
+
+> **Korrektur V2 (2026-07-17, Story S-070).** Die ursprüngliche Annahme „die `description` enthält zuverlässig `#<item>` (z.B. `coder #108 Ledger-Schema`)" war **falsch** und hat die Token-Erfassung von Anfang an wirkungslos gemacht. Die reale Dispatch-Konvention von `/flow` lautet `S-<nr>` — z.B. `coder: S-335 implementieren`, `reviewer: S-335 Diff prüfen`, `S-360 Test-Gate`. Empirisch über 1906 Subagent-Metas: **1536** enthalten `S-<nr>`, nur **75** enthalten `#<nr>` — und diese 75 sind überwiegend PR-Nummern (`review train-PR #170 mysql`), also Falschtreffer. **Verbindlich ist `S-<nr>`.** Das `#<nr>`-Muster darf nicht verwendet werden: es findet die richtigen Transcripts nie und trifft bei Nummerngleichheit fremde (PR #335 statt Story S-335), was fremde Token als Story-Token verbuchen würde.
 
 Format der `usage`-Felder in assistant-Zeilen des JSONL (alle Keys konsistent über alle geprüften Subagents):
 ```json
@@ -50,7 +52,7 @@ Format der `usage`-Felder in assistant-Zeilen des JSONL (alle Keys konsistent ü
 ```
 Summierung je Subagent: `in = Σ input_tokens`, `out = Σ output_tokens`, `cache = Σ (cache_creation_input_tokens + cache_read_input_tokens)` über alle assistant-Zeilen.
 
-**Einschränkung:** Der Transcript-Pfad hängt vom cwd der Eltern-Session ab, nicht vom cwd des Subagents. Das Script durchsucht deshalb alle Projekt-Verzeichnisse nach `#<item>` in der `description`. Für Items, die nicht von `/flow` dispatcht wurden (fehlende `#N`-Konvention in der description), findet das Script keine Transcripts und fällt auf `null` zurück — das ist korrekt und erwartet.
+**Einschränkung:** Der Transcript-Pfad hängt vom cwd der Eltern-Session ab, nicht vom cwd des Subagents. Das Script durchsucht deshalb alle Projekt-Verzeichnisse nach `S-<nr>` in der `description`. Für Items, die nicht von `/flow` dispatcht wurden (fehlende `S-<nr>`-Konvention in der description), findet das Script keine Transcripts und fällt auf `null` zurück — das ist korrekt und erwartet.
 
 ### V2 — Script `scripts/metrics-collect.sh`
 Ein committetes Bash/jq-Script `scripts/metrics-collect.sh <item>`: parst die Subagent-Transcript-JSONL des Items, summiert `input`/`output`/`cache`-Token je Dispatch, und ordnet sie den Dispatch-Zeilen des Items zu (über die Dispatch-/Zeit-Korrelation, die `/flow` kennt).
@@ -70,10 +72,10 @@ Weder `/flow` noch das Script fragen einen Agenten nach seinem Token-Verbrauch. 
 ## Acceptance-Kriterien
 
 - **AC1** — Eine Phase-0-Verifikation belegt den tatsächlichen Transcript-Pfad + das `usage`-Feldformat (oder dokumentiert „nicht parsebar → Fallback"); das Ergebnis ist im Script-Header/der Spec festgehalten. *(V1)*
-- **AC2** — `scripts/metrics-collect.sh <item>` existiert als committetes Bash/jq-Script und summiert Token (`in`/`out`/`cache`) je Dispatch aus den Subagent-Transcripts. *(V2)*
+- **AC2** — `metrics-collect.sh <item>` existiert als committetes Bash/jq-Script und summiert Token (`in`/`out`/`cache`) je Dispatch aus den Subagent-Transcripts. Die Item-Zuordnung erfolgt über `S-<nr>` in der `description` des `agent-<id>.meta.json` (**nie** über `#<nr>` — siehe Korrektur V2). Ein Testfall belegt gegen eine **echte** Transcript-Meta (`coder: S-<nr> implementieren`), dass die Zuordnung greift; ein zweiter belegt, dass eine gleichnumerige PR-Beschreibung (`review train-PR #<nr>`) **nicht** matcht. *(V2)*
 - **AC3** — Das Script patcht ausschliesslich `null`-`tok`-Felder der betroffenen `dispatches.jsonl`-Zeilen + `tok_total` der `items.jsonl`-Zeile; bestehende Werte bleiben unverändert; keine neuen Zeilen. *(V3, K5)*
 - **AC4** — `/flow` ruft das Script nach Item-Done auf; ein Fehlschlag lässt `tok`/`tok_total` auf `null`, ohne Abbruch und ohne das Item aus `Done` zu nehmen. *(V4)*
-- **AC5** — Jeder Token-Pfad-Fehler resultiert in `null` (nie Loop-Stopp, nie Gate-Änderung); ein einzeiliger Hinweis wird ausgegeben. *(V5, K3/K4)*
+- **AC5** — Jeder Token-Pfad-Fehler resultiert in `null` (nie Loop-Stopp, nie Gate-Änderung); ein einzeiliger Hinweis wird ausgegeben. Der Hinweis ist **sichtbar und benennt die Ursache** (kein Transcript gefunden / kein `usage` parsebar / Ledger-Zeile fehlt) — stilles Verschlucken ist ein AC-Verstoß. Rationale: `tok` war vom 2026-07-02 bis 2026-07-17 über 345 Dispatches hinweg durchgängig `null`, ohne dass ein einziger Hinweis erschien; K3 („Messen blockiert nie den Loop") rechtfertigt **Nicht-Blockieren**, nicht **Unsichtbarkeit**. *(V5, K3/K4)*
 - **AC6** — Token werden niemals beim Agenten erfragt; kein Dispatch/LLM-Lauf entsteht für die Token-Erfassung (0 LLM-Token). *(V6)*
 
 ## Nicht-Ziele
