@@ -2,7 +2,7 @@ id: S-073
 parent: F-025
 title: 'Metrik-Rollup zeilenweise parsen (jq -s → fromjson): eine kaputte dispatches-Zeile
   vergiftet nicht mehr alle Rollups'
-status: In Review
+status: Done
 priority: P1
 spec: docs/specs/metrics-recording-reliability.md
 implements:
@@ -24,8 +24,8 @@ branch: feat/S-073-ledger-parse-robust
 pr: null
 blocked_reason: null
 created_at: '2026-07-17T21:40:00Z'
-updated_at: '2026-07-17T21:53:14Z'
-done_at: null
+updated_at: '2026-07-17T21:54:06Z'
+done_at: '2026-07-17T21:54:06Z'
 befund_2026_07_17: 'Verifiziert 2026-07-17 (dev-gui-Ledger, flow/L05 + eigene Analyse):
   vier korrupte
 
