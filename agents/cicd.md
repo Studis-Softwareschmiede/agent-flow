@@ -157,12 +157,17 @@ Erzeugt das Landen (Rebase auf den aktuellen `<default_branch>`-Stand oder der P
 
 ### A2. GitHub-Workflow beobachten (CI-Watch)
 
-Nach dem Push auf `$default_branch` (bei `direct`) oder nach dem Merge (bei `pr`):
+Nach dem Push auf `$default_branch` (bei `direct`) oder nach dem Merge (bei `pr`). Den Run **über die eigene Commit-SHA** zuordnen (nicht blind den neuesten Run — `cicd/F08`; Webhook-Verzögerung liefert sonst den Vorgänger-Run):
 
 ```bash
-run_id=$(gh run list --repo "$repo" --branch "$default_branch" --limit 1 \
-  --json databaseId --jq '.[0].databaseId')
-gh run watch "$run_id" --repo "$repo" --exit-status
+expect_sha="$(git rev-parse HEAD)"
+run_sha=$(gh run list --repo "$repo" --branch "$default_branch" --limit 1 \
+  --json headSha --jq '.[0].headSha')
+if [ "$run_sha" = "$expect_sha" ]; then
+  run_id=$(gh run list --repo "$repo" --branch "$default_branch" --limit 1 \
+    --json databaseId --jq '.[0].databaseId')
+  gh run watch "$run_id" --repo "$repo" --exit-status
+fi   # sonst: Fenster weiterbeobachten statt fremden Run watchen (default_branch: nie skippen — cicd/F09)
 ```
 
 - **Grün (exit 0):** weiter mit A3.
