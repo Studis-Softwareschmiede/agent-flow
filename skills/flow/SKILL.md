@@ -34,7 +34,7 @@ Bevor `/flow` mit der Item-Abarbeitung beginnt, liest es alle **bereiten** Stori
 Für jede Story: welche zentralen Dateien berührt sie (aus Spec-Lektüre + `implements`-ACs)? Taucht eine Datei bei ≥ 2 Stories auf → **Hot-Spot**. Hot-Spot-Stories werden **serialisiert** (nicht parallel dispatcht). Typische Hot-Spots: `AppShell`, Router-Registrierung, `server.js`, `index.ts`-Re-Exporte, `viewRegistry`. (Nachhaltige Kur: Auto-Discovery statt manuelles Wiring — s. `flow/P1` in §3.)
 
 ### (b) Konflikt-/„heben-sich-auf"-Check
-Widersprechen sich Stories? (Eine baut um, was die andere voraussetzt; eine legt Felder an, die eine andere löscht.) → Reihenfolge nach `depends` + logischer Schichtung (Backend vor Frontend, Datenschicht vor UI).
+Widersprechen sich Stories? (Eine baut um, was die andere voraussetzt; eine legt Felder an, die eine andere löscht.) → Reihenfolge nach `depends` + feature-weiser Fertigstellung (Stories desselben Features vor Stories des nächsten).
 
 ### (c) depends-Reihenfolge (topologisch)
 `board next` respektiert `depends` bereits; `/flow` visualisiert trotzdem die Reihenfolge explizit, damit Parallelisierungs-Gruppen sichtbar sind. Eine Story startet erst, wenn ihre `depends` **terminal** sind — terminale Menge `{Done, Verworfen}` (eine verworfene Vorbedingung erfüllt das Depends-Gate ebenso wie eine erledigte; Spec `docs/specs/story-status-verworfen.md` AC3).
