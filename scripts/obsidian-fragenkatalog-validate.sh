@@ -11,7 +11,7 @@
 #   Datei per $1) dem bindenden AC9-Vertrag entspricht. Reine Lese-/Report-Operation — schreibt nichts.
 #
 # Vertrag (AC9, bindende Feldmenge je Frage-Objekt):
-#   - stage    (Pflicht) : "a" | "b" | "c" | "sync" | "split"
+#   - stage    (Pflicht) : "a" | "b" | "c" | "sync" | "split" | "design"
 #   - id       (Pflicht) : stabile, KATALOG-EINDEUTIGE Frage-ID (Muster <stage>-<n>, z.B. "a-1")
 #   - frage    (Pflicht) : nicht-leerer Text
 #   - quelle   (Pflicht) : nicht-leere Notiz-/Doku-Fundstelle (Herkunfts-Marker, AC4)
@@ -101,7 +101,7 @@ if len(catalog) == 0:
     print("empty")
     sys.exit(0)
 
-VALID_STAGES = {"a", "b", "c", "sync", "split"}
+VALID_STAGES = {"a", "b", "c", "sync", "split", "design"}
 REQUIRED = ("stage", "id", "frage", "quelle")
 ALLOWED = set(REQUIRED) | {"optionen"}
 ID_PATTERN = re.compile(r"^[a-z]+-[0-9]+$")
@@ -128,7 +128,7 @@ for idx, item in enumerate(catalog):
     # stage-Enum
     stage = item.get("stage")
     if "stage" in item and stage not in VALID_STAGES:
-        errors.append(f"{where}: stage='{stage}' ungueltig (erlaubt: a|b|c|sync|split).")
+        errors.append(f"{where}: stage='{stage}' ungueltig (erlaubt: a|b|c|sync|split|design).")
 
     # id: nicht-leerer String, Muster, katalog-eindeutig
     qid = item.get("id")
