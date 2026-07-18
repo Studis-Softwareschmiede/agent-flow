@@ -135,6 +135,39 @@ docker image prune -f
 
 ---
 
+### cicd/F08 — CI-Run-Zuordnung nur empirisch via `headSha`, nie hergeleitet (KRITISCH)
+**Problem:** Um zu wissen, **ob** bzw. **welcher** CI-Run zum eigenen Commit gehört, wird der Run entweder aus der Workflow-Config **hergeleitet** („triggert auf diesem Branch ein Workflow?") oder blind aus `gh run list --limit 1` übernommen. Beides ist eine **Fail-open-Falle** — der Fehlermodus ist identisch: ein roter oder fremder CI wird als „grün/eigen" durchgewunken.
+
+- **Config-Herleitung ist unmöglich in Bash.** Bash kann YAML/JSON nicht robust parsen. Ein Eigenbau-Parser deckt den gemeldeten Fall, aber die **Fehlerklasse bleibt offen**. Verifiziert (end-to-end, zwei Review-Iterationen): `branches: &anchor` und `on: &anchor` (YAML-Anker auf dem `branches:`- bzw. `on:`-Key) wurden beide als Branch-Pattern fehlgelesen → no-trigger → roter CI auf `main` durchgewunken; quotierte Globs (`"*-hotfix"`) sind nach dem Quote-Stripping nicht mehr von echten Aliassen unterscheidbar. **Jeder Flicken deckt den gemeldeten Fall, die Fehlerklasse bleibt.**
+- **`--limit 1`-Annahme ist race-anfällig.** Unmittelbar nach `git push` liefert `gh run list --limit 1` wegen Webhook-Verzögerung oft noch den **alten**, bereits abgeschlossenen Run des Vorgänger-Commits → Watch/Rollout auf einem fremden Run.
+
+**Kur — „Nachsehen statt raten":** NICHT das Format parsen und NICHT `.github/workflows/*` interpretieren (weder ganz noch mit `grep`/`sed`/`awk`). Stattdessen nach dem Push ein **begrenztes Fenster** beobachten, ob ein Run erscheint, dessen `headSha` **exakt** die eigene Ziel-SHA ist:
+
+```bash
+expect_sha="$(git rev-parse HEAD)"
+run_sha="$(gh run list --branch "$branch" --limit 1 --json headSha --jq '.[0].headSha' 2>/dev/null || echo "")"
+if [ "$run_sha" = "$expect_sha" ]; then
+  gh run watch "$run_id" --exit-status   # eigener Run → scharf beobachten (F09/AC2)
+fi
+# sonst: Fenster weiterlaufen lassen; Skip nur auf Nicht-default_branch (F09)
+```
+
+Die Zuordnung erfolgt **ausschliesslich** über `headSha == eigene SHA`. Ob überhaupt ein Trigger existiert, wird **nur** aus beobachteten Runs beantwortet — nie aus den Workflow-Definitionen.
+
+---
+
+### cicd/F09 — Fail-safe-Richtung bei CI-/Rollout-Gate-Entscheidungen (KRITISCH)
+**Problem:** Jede Unsicherheit im CI-Gate (unparsbare Config, unbekannte Syntax, `gh`-Fehler, fremde SHA, Actions-Störung, Auth/Rate-Limit) MUSS zur **sicheren Seite** führen. Fail-**open** (Unsicherheit → Skip → ungeprüfter Code ausgerollt) ist bei einer sicherheitskritischen Entscheidung nicht verhandelbar.
+
+**Richtung (kanonisch):**
+- Auf dem **`default_branch`**: jede Unsicherheit → **immer** scharfer Watch bzw. `die`, **nie** Skip. „Kein Run" auf `main` ist ein **Symptom** (Actions-Störung/Auth/Rate-Limit), kein Zustand.
+- Ein Run mit **fremder `headSha`** gilt weder als „eigener Run" (seine `conclusion` wird nicht ausgewertet) **noch** als „kein Run" (er beendet die Beobachtung nicht) — er wird ignoriert, das Fenster läuft weiter.
+- Eine **fehlgeschlagene oder leere `gh`-Abfrage** gilt **nie** als „kein Trigger" — Auth erneuern + weiterbeobachten.
+
+**Gegen-Richtung (fail-useless vermeiden):** Ein Überschuss-Fix, der **alles** als unsicher behandelt, erzeugt überall Leerlauf und höhlt den Zweck genauso aus. Die belegte, schmale Grenze: **Skip nur auf Nicht-`default_branch`** (dort ist ein verpasster Trigger folgenlos — kein Rollout), **`default_branch` immer scharf**. Ein optionales Beobachtungsfenster steuert **nur die Dauer**, nie das Ergebnis: kein Wert und kein Schalter darf den Watch auf `main` abschalten oder einen gefundenen Run ungeprüft lassen.
+
+---
+
 ## Patterns / Best-Practices (P-Regeln)
 
 ### cicd/P01 — Rollout-Verifikation via Versions-Endpunkt
@@ -217,15 +250,22 @@ Jede Abweichung von dieser Reihenfolge ist ein Fehler:
 
 ---
 
-### cicd/P07 — CI-Watch-Befehl (Standard)
+### cicd/P07 — CI-Watch-Befehl (Standard, mit `headSha`-Zuordnung)
+
+Den zu beobachtenden Run **immer** über die eigene Commit-SHA zuordnen (nicht blind den neuesten Run nehmen — `cicd/F08`):
 
 ```bash
-run_id=$(gh run list --repo "$repo" --branch "$default_branch" --limit 1 \
-  --json databaseId --jq '.[0].databaseId')
-gh run watch "$run_id" --repo "$repo" --exit-status
+expect_sha="$(git rev-parse HEAD)"
+run_sha=$(gh run list --repo "$repo" --branch "$default_branch" --limit 1 \
+  --json headSha --jq '.[0].headSha')
+if [ "$run_sha" = "$expect_sha" ]; then
+  run_id=$(gh run list --repo "$repo" --branch "$default_branch" --limit 1 \
+    --json databaseId --jq '.[0].databaseId')
+  gh run watch "$run_id" --repo "$repo" --exit-status
+fi   # sonst: Fenster weiterbeobachten (Webhook-Verzögerung) statt fremden Run watchen
 ```
 
-`--exit-status` gibt Exit-Code != 0 bei Fehlschlag — damit lässt sich der Rollout sauber abbrechen. Alternative: `gh run watch --interval 10` für explizites Polling-Intervall.
+`--exit-status` gibt Exit-Code != 0 bei Fehlschlag — damit lässt sich der Rollout sauber abbrechen. Alternative: `gh run watch --interval 10` für explizites Polling-Intervall. Auf dem `default_branch` gilt die Fail-safe-Richtung (`cicd/F09`): erscheint kein Run für die eigene SHA, wird **nicht** übersprungen, sondern gewartet/`die`t.
 
 ---
 
@@ -235,6 +275,9 @@ gh run watch "$run_id" --repo "$repo" --exit-status
 - Rollout-Skripte/-Doku: `docker restart` statt `rm + run`? → **Important** (`cicd/F01`)
 - Rollout-Skripte/-Doku: `docker image prune -f` vorhanden? Fehlt → **Important** (`cicd/F07`)
 - Rollout-Skripte/-Doku: CI-Watch vor `docker pull`? Fehlt → **Important** (`cicd/F06`)
+- CI-Watch-/Ship-Skripte: wird der beobachtete Run über `headSha == eigene SHA` zugeordnet (nicht blind `gh run list --limit 1`)? Fehlt → **Critical** (`cicd/F08`)
+- CI-Gate-Skripte: wird `.github/workflows/*` (oder ein anderes strukturiertes Format) in Bash mit `grep`/`sed`/`awk`/Eigenbau-Parser interpretiert, um eine sicherheitskritische Entscheidung zu treffen? → **Critical** — empirisch beobachten statt parsen (`cicd/F08`)
+- CI-Gate-Entscheidung: führt jede Unsicherheit auf dem `default_branch` zum scharfen Watch/`die` (nie Skip)? Skip nur auf Nicht-`default_branch`? Kein Schalter, der den Watch auf `main` abschaltet? Fehlt → **Critical** (`cicd/F09`)
 - gitleaks-Allowlist-Änderungen: jeder neue Entry mit Begründung + bewiesener Nicht-Secret-Nachweis? (`cicd/F03`)
 
 ## Test-Approach (für den `tester`-Agenten)
@@ -242,3 +285,4 @@ gh run watch "$run_id" --repo "$repo" --exit-status
 - Versions-Stempel-Check: `docker inspect --format '{{index .Config.Labels "build.version"}}' <image>:latest` → nicht leer, nicht `dev`.
 - CI-Pipeline nach dem Fix: `gh run list --limit 1 --json conclusion` → `success`.
 - Prune-Check: `docker images --filter dangling=true` → nach `prune -f` sollte die Liste leer sein.
+- CI-Gate-Skript (`cicd/F08`/`F09`), Fixture-Stil mit `gh`-Mocks: (a) Mock-Run mit `headSha` ≠ eigene SHA → gilt **nicht** als eigener Run, Fenster läuft weiter (keine `conclusion`-Auswertung); (b) kein Run für die eigene SHA auf **Nicht-`default_branch`** → Skip (Exit 0, kurze Laufzeit); (c) kein Run für die eigene SHA auf **`default_branch`** → **kein** Skip (Timeout/`die`, kein Rollout).
