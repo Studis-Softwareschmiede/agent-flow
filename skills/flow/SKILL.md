@@ -18,7 +18,7 @@ Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task
 - `.claude/profile.md` lesen → Board-Referenz, `merge_policy` (`pr`|`direct`), Build/Test-Befehle, **`default_branch`**, **`cost_mode`** (Default `balanced`).
 - **Orchestrator-Lessons lesen (einmal, zu Beginn):** existiert `.claude/lessons/flow.md` im Projekt-Repo, diese Datei lesen und ihre Regeln für den gesamten Lauf befolgen — der Tier-1-Kanal für Orchestrator-Ebene (Landen/Konsolidieren/Recovery/Dispatch-Ökonomie), analog zu den coder/reviewer/tester-Lessons, die die Arbeits-Agenten über ihre Verträge lesen. Fehlt die Datei → kein Fehler, weiter. Der Orchestrator prependet eigene neue Lessons dorthin (newest-first) und landet sie mit dem nächsten Board-Commit. *[seen-in: ki-investment 2026-07-14 — Orchestrator-Lessons (Resume-Kosten 381k Token, Feature-Konsolidierung) existierten persistent in flow.md, wurden aber von keinem frischen /flow-Lauf gelesen, weil kein Vertrag darauf zeigte; promoted: 2026-07-14]*
 - **Projekt-Memory lesen (einmal, zu Beginn — Spec [`docs/specs/project-memory.md`](../../docs/specs/project-memory.md) AC2):** existiert `.claude/memory.md` im Projekt-Repo, sie lesen und ihre Kern-Punkte (`## Aktueller Stand` + relevante `## Offene Fäden`) als kurzen Kontext für die Story-Dispatches dieses Laufs merken (s. §3, „Projekt-Memory-Kontext"). Fehlt die Datei → kein Fehler, kein Memory-Kontext diese Session (deckt A2) — sie entsteht ggf. erstmalig im Kurations-Schritt am Session-Ende (§7). **Orientierung, nie Wahrheit (AC5):** widerspricht der Memory-Inhalt dem Board oder einer Spec, gelten **Board und Specs** — das Memory erzeugt kein Gate, kein Acceptance-Kriterium, keinen Spec-Ersatz; ein etwaiger Widerspruch wird im Kurations-Schritt (§7) korrigiert, nicht im laufenden Build-Loop verwendet.
-- **Cost-Mode auflösen** (einmal, merken — gilt für ALLE Dispatches dieses Laufs): Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced`. Kurzformen normalisieren (`low`→`low-cost`, `max`/`high`→`max-quality`, `front`→`frontier`). Unbekannter Wert → `balanced` + einzeiliger Hinweis (**nie** auf `frontier` raten — opt-in). **Beim Task-Dispatch jedes Agenten** (coder/reviewer/dba/tester in §3–§4 sowie **cicd** beim SHIP-Dispatch in §5) den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Zeile = Rolle, Spalte = Modus) mitgeben; bei `balanced` **keinen** `model`-Parameter setzen (Frontmatter gilt). Einmal zu Beginn ausgeben: „⚙ Cost-Mode: <mode>".
+- **Cost-Mode auflösen** (einmal, merken — gilt für ALLE Dispatches dieses Laufs): Präzedenz `--cost`-Argument > `profile.cost_mode` > `balanced`. Kurzformen normalisieren (`low`→`low-cost`, `max`/`high`→`max-quality`, `front`→`frontier`). Unbekannter Wert → `balanced` + einzeiliger Hinweis (**nie** auf `frontier` raten — opt-in). **Beim Task-Dispatch jedes Agenten** (coder/reviewer/dba/tester in §3–§4, **designer** in §2c sowie **cicd** beim SHIP-Dispatch in §5) den `model`-Parameter aus `${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md` (Zeile = Rolle, Spalte = Modus) mitgeben; bei `balanced` **keinen** `model`-Parameter setzen (Frontmatter gilt) — **Design-Rollen-Pinning** (`designer` u.a.) hat davon unabhängig Vorrang (s.o.). Einmal zu Beginn ausgeben: „⚙ Cost-Mode: <mode>".
 - **Arbeits-Repo Fork-sicher auflösen** (einmal, merken): Das Arbeits-Repo ist **`origin`**. ⚠️ `gh repo view` **ohne Argument** liefert bei einem Fork das **Upstream-Parent** (gh bevorzugt den `upstream`-Remote) — deshalb IMMER die origin-URL explizit übergeben:
   - `repo="$(gh repo view "$(git remote get-url origin)" --json nameWithOwner -q .nameWithOwner)"`
   - Fehlt `profile.default_branch` (Alt-Repo): `default_branch="$(gh repo view "$(git remote get-url origin)" --json defaultBranchRef -q .defaultBranchRef.name)"` (NICHT `main` annehmen — adoptierte Forks haben oft `master`).
@@ -223,7 +223,7 @@ Das Secret-Sync-Gate ist **Teil des regulären `reviewer`-Laufs** (Abschnitt 6a 
 ### Ledger-Verzeichnis
 Alle Ledger leben **ausschließlich** unter `${METRICS_ROOT}/.claude/metrics/` (Spec [`docs/specs/metrics-repo-anchor.md`](../../docs/specs/metrics-repo-anchor.md) AC2 — `${METRICS_ROOT}` aus §0, kein relativer Pfad, kein erneutes `rev-parse`, kein `${CLAUDE_PLUGIN_ROOT}`-basierter Pfad). Bei Bedarf `${METRICS_ROOT}/.claude/metrics/` anlegen (falls nicht vorhanden). Schreiben **ausschließlich append-only** (`>>` / `jq -c . >> datei`). Historische Zeilen werden nie gelöscht oder umgeschrieben (Ausnahme: späterer `tok`-Patch durch `metrics-token-collect`).
 
-### Vor jedem Agent-Dispatch (coder / reviewer / dba / tester / cicd / estimator)
+### Vor jedem Agent-Dispatch (coder / reviewer / dba / tester / cicd / estimator / designer)
 ```bash
 T0=$(date -u +%s)
 SEQ=$(( SEQ + 1 ))   # laufende Dispatch-Nummer innerhalb des Items, ab 1
@@ -239,7 +239,7 @@ Aus dem Klartext-Handoff deterministisch zählen (**kein** zweiter LLM-Lauf):
 | `ts` | `date -u +%Y-%m-%dT%H:%M:%SZ` |
 | `item` | **String** `S-###` — kanonische Board-ID (AC2, V2: identisch zur File-Board-ID, keine int-Konvertierung) |
 | `seq` | laufende Dispatch-Nummer **innerhalb** des Items (ab 1 hochzählen) |
-| `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` \| `estimator` |
+| `agent` | `coder` \| `reviewer` \| `dba` \| `tester` \| `cicd` \| `estimator` \| `designer` |
 | `iter` | N aus `Review-Handoff … (Iteration N)`; bei nicht-Loop-Rollen die zugehörige Iteration |
 | `gate` | `PASS` \| `CHANGES-REQUIRED` \| `FAIL` \| `SKIPPED-*` \| `null` (rollen-abhängig) |
 | `crit` | #Einträge unter `## Critical` (nur reviewer/dba; sonst 0) |
@@ -394,7 +394,33 @@ ergibt sich aus dem tatsächlichen Prozess-cwd der `/flow`-Session zur Laufzeit.
 - `baseline.json`: committet (von `retro` gepflegt, analog `LEARNINGS.md`).
 - Kein Secret, keine Diff-Inhalte, keine Befund-Prosa im Ledger (K6).
 
+## 2c. Design-Freigabe-Gate (Spec [`docs/specs/design-owner-approval.md`](../../docs/specs/design-owner-approval.md) AC5/AC6/AC8)
+
+**Bestandsschutz zuerst (AC8, deckt A2).** Ist das Projekt **kein** UI-Projekt (`language` ∉ flutter|angular|html UND Domäne weder `ui` noch `accessibility` — dieselbe Erkennung wie `new-project`) ODER trägt die soeben in Progress gesetzte Story (§2) **nicht** das Label `ui`, entfällt dieser gesamte Abschnitt: **kein** Gate, **kein** designer-Dispatch, Verhalten unverändert — weiter direkt mit §3.
+
+**Gate-Prüfung (AC6, nur bei UI-Projekt UND Label `ui`).** Vor dem ersten `coder`-Dispatch dieser Story (§3, Schritt 1) prüft `/flow`:
+1. Existiert `docs/design.md`?
+2. Ist im Frontmatter `owner_approved` gesetzt (nicht `null`, nicht fehlend)? Fehlendes Frontmatter (Bestands-`design.md` ohne den Vertrag aus `design-owner-approval`) gilt als **nicht freigegeben** (Spec-Vertrag).
+
+Beide Bedingungen erfüllt → Gate besteht, weiter mit §3 wie gewohnt — kein Zusatz-Dispatch.
+
+**Nicht erfüllt — interaktiv (AC5, Owner erreichbar).** `/flow` schiebt VOR dem coder-Dispatch dieser Story den designer-Freigabe-Lauf ein: Dispatch **designer** (Task, `agents/designer.md`) im Vorschlags-Modus. Design-Rollen-Pinning `opus` gilt unabhängig vom aktiven Cost-Mode (s. §0, „Design-Rollen-Pinning hat Vorrang vor der Modus-Spalte"). *(Metrik: §2b-Touchpoint — T0 vor Dispatch merken; nach Handoff `metrics-append-dispatch.sh` aufrufen, Agent-Rolle `designer`, `gate: null` — analog `estimator`.)* Der designer legt/aktualisiert `docs/design.md` als Entwurf, holt die Owner-Freigabe ein (Vorlage/`AskUserQuestion`) und stempelt bei Freigabe `owner_approved`. Nach erfolgreicher Freigabe: Gate erneut prüfen (jetzt erfüllt) → normal weiter mit §3. Lehnt der Owner ab / bricht ab: kein Stempel, kein Bau (Zustand bleibt Entwurf, s. Spec „Edge-Cases"). Derselbe Abschluss wie im headless-Zweig:
+```bash
+board set <story-id> status Blocked --reason "Design-Freigabe ausstehend"
+```
+Regulärer Session-Abschluss — weiter zu §7 (Blocked-Ausgang analog SPEC-LÜCKE-Mechanik in §3, kein Weiterziehen zum nächsten Item ohne `--all`).
+
+**Nicht erfüllt — headless (Owner nicht erreichbar, deckt A1).** Kein designer-Dispatch, kein Bau. Stattdessen:
+```bash
+board set <story-id> status Blocked --reason "Design-Freigabe ausstehend"
+```
+Regulärer Session-Abschluss — weiter zu §7 (Blocked-Ausgang analog SPEC-LÜCKE-Mechanik in §3, kein Weiterziehen zum nächsten Item ohne `--all`).
+
+**Platzierung im Ablauf.** Dieser Gate-Schritt läuft nach §2 (In Progress-Status/Branch gesetzt) — §2a (Secret-Sync-Gate lebt im reviewer-Lauf) und §2b (Metrik-Setup) sind davon unberührt — und **vor** dem ersten coder-Dispatch in §3.
+
 ## 3. Build-Loop (max. 3 Iterationen, N = 1..3)
+
+> **Design-Freigabe-Gate bereits geprüft (§2c).** Bei UI-Stories (Label `ui`) hat `/flow` vor Schritt 1 unten bereits sichergestellt, dass `docs/design.md` existiert und `owner_approved` gesetzt ist (bzw. die Story ist bereits als Blocked beendet und dieser Abschnitt wird gar nicht erreicht). `coder`/`reviewer` behandeln ein so freigegebenes `design.md` wie bisher als bindend — keine erneute Prüfung hier nötig.
 
 > **Dossier-Injektion bei `--parent <F-###>` (AC14).** Bevor der erste coder-Dispatch dieses Items erfolgt: ist dieser Lauf mit `--parent <F-###>` gestartet, `board/runs/<F-###>/dossier.md` lesen (falls vorhanden) und dessen Inhalt als vorangestellten Kontext-Abschnitt jedem coder-/reviewer-/tester-Dispatch dieses Items voranstellen (z. B. `FEATURE-DOSSIER: <inhalt>` vor `TASK #<n>`). Fehlt die Datei → einfach kein Voranstellen, kein Fehler. Ohne `--parent` (board-weiter Lauf): dieser Schritt entfällt vollständig, keine Injektion.
 >
@@ -496,7 +522,7 @@ Ohne diesen Schritt bliebe jede Solo-Reservierung (§3a-Vertrag oben) dauerhaft 
 ## 6. Nächstes (Spec [`docs/specs/flow-session-rotation.md`](../../docs/specs/flow-session-rotation.md) AC1/AC3/AC4)
 
 - **Default (ohne `--all`, auch headless):** Nach dem vollständigen Abschluss GENAU EINER Story (Done geschrieben + gelandet + Worktree abgebaut) bzw. eines SR1-Parallel-Batches (alle Storys des Batches gelandet oder einzeln geblockt, s. SR1 unten) endet diese Runde — weiter zu §7 (Abschluss). Kein automatisches Aufnehmen eines weiteren Items im selben Lauf. Rationale: Ø Cache-Read wuchs in einer 13-Story-Session von 82k auf 298k Token (Faktor 3,6, Messung 2026-07-02) — Rotation hält das Kontext-Wachstum über ein Board linear statt quadratisch; die äußere Schleife (dev-gui `ProjectDrain`, Nachtwächter) übernimmt die Rotation.
-- **Blocked-Ausgang (E1, AC4):** Endet das gewählte Item/Batch in Blocked (Loop-Schutz, SPEC-LÜCKE, `SKIPPED-NO-DOCKER`, Rollout-Gate FAIL/NEEDS-HUMAN), endet die Runde ebenso mit der bestehenden Blocked-Meldung — weiter zu §7, kein Weiterziehen zum nächsten Item.
+- **Blocked-Ausgang (E1, AC4):** Endet das gewählte Item/Batch in Blocked (Loop-Schutz, SPEC-LÜCKE, „Design-Freigabe ausstehend" (§2c), `SKIPPED-NO-DOCKER`, Rollout-Gate FAIL/NEEDS-HUMAN), endet die Runde ebenso mit der bestehenden Blocked-Meldung — weiter zu §7, kein Weiterziehen zum nächsten Item.
 - **Mit `--all` (interaktives Opt-in, A1):** Zurück zu 1, bis das Board leer ist oder der User stoppt (bisheriges Verhalten). Bei Blocked: User fragen, ob mit den restlichen Items weiter; bei Zustimmung zurück zu 1.
 
 ## 7. Abschluss (Spec [`docs/specs/flow-session-rotation.md`](../../docs/specs/flow-session-rotation.md) AC2)
@@ -505,7 +531,7 @@ Erreicht **nach jeder Runde**: Default (ohne `--all`) nach genau einem Item/Batc
 
 ### Projekt-Memory kuratieren (Spec [`docs/specs/project-memory.md`](../../docs/specs/project-memory.md) AC3–AC6, letzter Schritt jeder Session)
 
-**Trigger (AC3, HART):** genau einmal, als erster Schritt dieses Abschlusses — unabhängig davon, ob das Item/der Batch **gelandet** ist (`Rollout-Gate: PASS` bzw. gemergter PR) oder **Blocked** endete (SPEC-LÜCKE, Loop-Schutz, `SKIPPED-NO-DOCKER`, Rollout-Gate FAIL/NEEDS-HUMAN). **SR1-Parallel-Batch:** dieser Schritt läuft **einmal am Batch-Ende**, nicht je paralleler Story — `/flow` fasst alle gelandeten/geblockten Storys des Batches in einer Kurations-Runde zusammen.
+**Trigger (AC3, HART):** genau einmal, als erster Schritt dieses Abschlusses — unabhängig davon, ob das Item/der Batch **gelandet** ist (`Rollout-Gate: PASS` bzw. gemergter PR) oder **Blocked** endete (SPEC-LÜCKE, Loop-Schutz, „Design-Freigabe ausstehend" (§2c), `SKIPPED-NO-DOCKER`, Rollout-Gate FAIL/NEEDS-HUMAN). **SR1-Parallel-Batch:** dieser Schritt läuft **einmal am Batch-Ende**, nicht je paralleler Story — `/flow` fasst alle gelandeten/geblockten Storys des Batches in einer Kurations-Runde zusammen.
 
 **Kuratieren (AC3/AC4, HART — neu schreiben, nicht anhängen):**
 1. Ausgangsbasis: das in §0 gelesene `.claude/memory.md` (falls vorhanden); fehlt die Datei (Bestandsprojekt ohne Memory, A2), das leere Gerüst aus `templates/_shared/memory.md` als Startpunkt.
