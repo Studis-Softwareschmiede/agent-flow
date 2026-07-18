@@ -93,14 +93,16 @@ Dies ist der Haupt-Modus: ein lokal geprüfter Stand wird gelandet, der CI-Lauf 
 
 Repo-versionierte Meta-Dateien `.claude/lessons/*.md` sind **immer-Teil-der-Landung** — analog zum retro-Cooldown-Stempel `.claude/lessons/.retro-last-run` (`agents/retro.md` 3a). coder/reviewer/tester prependen ihre Lessons in den Worktree; ohne diesen Floor gingen sie beim `git worktree remove --force` spurlos verloren (belegt: dev-gui S-225). Der Floor liegt **in cicd** (Defense-in-Depth gegen eine SHIP-TRIGGER-Dateiliste, die die Lessons nicht aufzählt) — er hängt **nicht** am Gedächtnis des Orchestrators.
 
-1. **Geänderte, getrackte Lessons-Dateien ermitteln** (Working-Tree des Story-Branches/Worktrees):
+**`.claude/memory.md` — Ausnahmefall, nicht Regelweg (Spec `docs/specs/project-memory.md` AC6):** Der **Regelweg** für `.claude/memory.md` ist **nicht** dieser cicd-Floor, sondern der Session-Ende-Board-Meta-Commit, den `/flow` selbst **nach** der Landung fährt (`skills/flow/SKILL.md` §7, „Projekt-Memory kuratieren"): die Kuration verarbeitet das Landungsergebnis und kann strukturell erst **nach** A1 stattfinden, nicht davor. Liegt **ausnahmsweise** bereits ein `.claude/memory.md`-Delta **vor** der Landung im Story-Worktree vor (untypisch — z. B. ein manuell vorbereitetes Delta), behandelt dieser Floor `.claude/memory.md` als Defense-in-Depth-Backstop mit demselben Mechanismus wie Lessons (Schritte 1–4 unten). Im Regelfall findet dieser Floor für `.claude/memory.md` **nichts** (die Datei ist zu diesem Zeitpunkt noch unverändert) — das ist erwartetes Verhalten, kein Fehler.
+
+1. **Geänderte, getrackte Lessons-Dateien ermitteln** (Working-Tree des Story-Branches/Worktrees; derselbe Check läuft defensiv auch über `.claude/memory.md` mit, s.o. Ausnahmefall):
    ```bash
-   # Nur GETRACKTE Lessons-*.md mit Änderungen ggü. HEAD (staged + unstaged, inkl. neuer getrackter):
-   LESSON_FILES=$(git diff --name-only HEAD -- '.claude/lessons/*.md'; \
-                  git diff --name-only --cached -- '.claude/lessons/*.md')
+   # Nur GETRACKTE Lessons-*.md (+ ggf. memory.md im Ausnahmefall) mit Änderungen ggü. HEAD (staged + unstaged, inkl. neuer getrackter):
+   LESSON_FILES=$(git diff --name-only HEAD -- '.claude/lessons/*.md' '.claude/memory.md'; \
+                  git diff --name-only --cached -- '.claude/lessons/*.md' '.claude/memory.md')
    LESSON_FILES=$(printf '%s\n' $LESSON_FILES | sort -u | sed '/^$/d')
    ```
-2. **Guard — nur getrackt, kein Zwangs-Add (AC6, deckt E1):** Für jeden Kandidaten prüfen, ob er **getrackt und nicht gitignored** ist. Ist `.claude/lessons/` im Ziel-Repo **gitignored** (bewusste Ephemer-Entscheidung — so **auch in agent-flow selbst**, `.gitignore` Zeile `.claude/lessons/`), taucht keine Datei in `git diff` auf → **kein** `git add -f`, **kein** Fehler, kein Leer-Commit. Zusätzlicher expliziter Check:
+2. **Guard — nur getrackt, kein Zwangs-Add (AC6, deckt E1):** Für jeden Kandidaten prüfen, ob er **getrackt und nicht gitignored** ist. Ist `.claude/lessons/` im Ziel-Repo **gitignored** (bewusste Ephemer-Entscheidung — so **auch in agent-flow selbst**, `.gitignore` Zeile `.claude/lessons/`), taucht keine Lessons-Datei in `git diff` auf → **kein** `git add -f`, **kein** Fehler, kein Leer-Commit. Zusätzlicher expliziter Check:
    ```bash
    for f in $LESSON_FILES; do
      git ls-files --error-unmatch "$f" >/dev/null 2>&1 || continue   # nicht getrackt → überspringen
@@ -108,11 +110,11 @@ Repo-versionierte Meta-Dateien `.claude/lessons/*.md` sind **immer-Teil-der-Land
      TRACKED_LESSONS="$TRACKED_LESSONS $f"
    done
    ```
-   `TRACKED_LESSONS` (getrimmt) ist die **immer-mitzunehmende** Menge. Leer → Alternative A1-Fall (A1: keine Lessons-Änderung → kein zusätzlicher Datei-Anteil, kein Leer-Commit; A0 verläuft ergebnislos, aber **ohne** Fehler).
+   `TRACKED_LESSONS` (getrimmt) ist die **immer-mitzunehmende** Menge (Lessons; `.claude/memory.md` nur im o.g. Ausnahmefall). Leer → Alternative A1-Fall (A1: keine Lessons-Änderung → kein zusätzlicher Datei-Anteil, kein Leer-Commit; A0 verläuft ergebnislos, aber **ohne** Fehler).
 3. **Als Teil des Landungs-Commits/PR führen (AC1/AC4):** Die Lessons-Delta fährt als **Commit auf dem Story-Branch** durch die normale Merge-/Rebase-Maschinerie von A1 — sie wird **zusammen** mit den Story-Dateien committet (`git add $TRACKED_LESSONS` vor dem Commit in A1). Eine **überschreibende Datei-Kopie** des Worktree-Standes direkt auf `<default_branch>` ist **verboten** (`cp`/`git checkout <branch> -- <datei>` auf die Zieldatei), weil sie bereits gelandete Fremd-Lessons einer parallelen Story klobbern würde (AC4).
 4. **Zähler merken:** `LESSONS_LANDED=$(printf '%s\n' $TRACKED_LESSONS | sed '/^$/d' | wc -l)` — für die Handoff-Zeile `Lessons:` (AC8).
 
-Die Konfliktauflösung dieser Lessons-Delta beim Rebase/Merge regelt A1a (newest-first-Union, AC5).
+Die Konfliktauflösung dieser Lessons-Delta beim Rebase/Merge regelt A1a (newest-first-Union, AC5) — greift der Ausnahmefall oben (`.claude/memory.md`-Vorab-Delta), gilt für dessen Konflikt die abweichende Regel am Ende von A1a (jüngere Kurations-Fassung gewinnt).
 
 ### A1. Git-Operationen: Landen (merge + push)
 
@@ -154,6 +156,8 @@ Erzeugt das Landen (Rebase auf den aktuellen `<default_branch>`-Stand oder der P
 - Bei Konflikt-Markern (`<<<<<<<`/`=======`/`>>>>>>>`) die **Vereinigung** beider Seiten bilden: alle Eintrags-Blöcke beider Seiten übernehmen, nach dem Datums-Kopf **absteigend (newest-first)** sortieren, **Duplikate** (identische Block-Überschrift/-ID) auf **einen** Block reduzieren. Ergebnis: keine `<<<<<<<`-Marker mehr, alle unique Blöcke vorhanden.
 - Danach `git add <datei>` und Rebase/Merge fortsetzen. Eine optionale Helfer-Mechanik (deterministischer Union-Merger, z.B. `scripts/lessons-merge.sh`) ist zulässig, aber Implementierungs-Detail — der **Vertrag ist das Verhalten** (kein Eintrag verloren/dupliziert, newest-first).
 - Bei **echter inhaltlicher** Kollision, die sich nicht als reine additive Union auflösen lässt (z.B. derselbe Block mit divergierendem Inhalt), **nicht raten** → `NEEDS-HUMAN` melden statt einen Eintrag stumm zu verwerfen (kein stiller Datenverlust — Kern-NFR).
+
+**`.claude/memory.md` (Ausnahmefall aus A0 — kuratiertes Voll-Dokument, keine Block-Liste):** Tritt der A0-Ausnahmefall ein (Vorab-Delta im Story-Worktree) und erzeugt das Landen einen Konflikt in `.claude/memory.md`, gilt die newest-first-Union-Regel oben **nicht 1:1**, da `.claude/memory.md` bei jeder Kuration komplett neu geschrieben (nicht nur ergänzt) wird (Spec `docs/specs/project-memory.md` AC3). Stattdessen gewinnt die **jüngere** Kurations-Fassung — sie berücksichtigt bereits den aktuelleren Board-/Spec-Stand; kein automatisches Zusammenführen von Prosa-Absätzen. Ist nicht eindeutig erkennbar, welche Fassung jünger ist → `NEEDS-HUMAN`, nie raten. Dieselbe Tie-Break-Regel gilt sinngemäß, falls `/flow` selbst beim regulären Session-Ende-Push (Spec `project-memory.md` AC6) auf einen Remote-Vorsprung stösst (Push-Reject) — Pull/Rebase des frischen Standes und erneute Kuration statt Force-Push.
 
 ### A2. GitHub-Workflow beobachten (CI-Watch)
 
@@ -259,7 +263,7 @@ Lessons: <LESSONS_LANDED> Datei(en) gelandet | keine
 Notes: <ggf. Hinweise>
 ```
 
-Die `Lessons:`-Zeile ist **Pflicht** (AC8): `<n> Datei(en) gelandet` wenn `LESSONS_LANDED > 0`, sonst `keine`. Sie macht den Enforcement-Floor beobachtbar und schützt vor stiller Regression (Drift-Gate-Anker für den reviewer).
+Die `Lessons:`-Zeile ist **Pflicht** (AC8): `<n> Datei(en) gelandet` wenn `LESSONS_LANDED > 0`, sonst `keine`. `<n>` zählt Lessons-Dateien (Regelfall) plus ein etwaiges `.claude/memory.md`-Vorab-Delta aus dem A0-Ausnahmefall — im Regelfall enthält `.claude/memory.md` an dieser Stelle noch kein Delta (die Kuration läuft erst nach der Landung, s. A0). Sie macht den Enforcement-Floor beobachtbar und schützt vor stiller Regression (Drift-Gate-Anker für den reviewer).
 
 ### A6. Tier-1-Write-back (Abschluss jeder ship-/rollout-/rollback-/ci-fix-Sequenz)
 
@@ -392,5 +396,5 @@ Notes: <Hinweise, Spec-Lücken, nächste Schritte>
 - **gitleaks-Whitelist nur mit Beweis** — kein reflexartiges Whitelisten; ohne klaren False-Positive-Nachweis → `NEEDS-HUMAN`.
 - **CI-Fix nur in CI-/Build-Dateien** (`.github/workflows/`, `Dockerfile`, `.gitleaks.toml`) — keine App-Logik.
 - **Vertraut dem tester-Gate** — kein eigener Re-Test beim ship; tester-PASS = hinreichende Vorbedingung.
-- **Lessons-Floor IMMER (A0)** — jede getrackte, geänderte `.claude/lessons/*.md` fährt bei jeder ship-Landung mit (beide Policies), auch wenn der SHIP-TRIGGER sie nicht nennt. **NIE `git add -f`** für gitignored Lessons (kein Zwangs-Add, AC6); **NIE** eine überschreibende Datei-Kopie des Worktree-Standes auf `<default_branch>` (klobbert parallele Lessons, AC4). Lessons-Konflikt → additive newest-first-Union (A1a/AC5); unauflösbare inhaltliche Kollision → `NEEDS-HUMAN`, nie ein Eintrag stumm verwerfen. Handoff-Zeile `Lessons:` ist Pflicht (AC8).
+- **Lessons-Floor IMMER (A0)** — jede getrackte, geänderte `.claude/lessons/*.md` fährt bei jeder ship-Landung mit (beide Policies), auch wenn der SHIP-TRIGGER sie nicht nennt. **NIE `git add -f`** für gitignored Lessons (kein Zwangs-Add, AC6); **NIE** eine überschreibende Datei-Kopie des Worktree-Standes auf `<default_branch>` (klobbert parallele Lessons, AC4). Lessons-Konflikt → additive newest-first-Union (A1a/AC5); unauflösbare Kollision → `NEEDS-HUMAN`, nie ein Eintrag stumm verwerfen. Handoff-Zeile `Lessons:` ist Pflicht (AC8). **`.claude/memory.md` ist NICHT Teil dieses Regelwegs** (Spec `docs/specs/project-memory.md` AC6) — der Regelweg ist der Session-Ende-Board-Meta-Commit von `/flow` **nach** der Landung (`skills/flow/SKILL.md` §7); dieser Floor deckt `.claude/memory.md` nur im dokumentierten Ausnahmefall (Vorab-Delta bereits im Story-Worktree, s. A0) — dann gilt für dessen Konflikt die abweichende Tie-Break-Regel am Ende von A1a (jüngere Kurations-Fassung gewinnt).
 - **Tier-1-Write-back nur projekt-lokal** — der Write-back (A6) schreibt **NUR** nach `.claude/lessons/cicd.md` (projekt-lokal). **NIE** nach `.claude/lessons/coder.md` (Infra-Befunde nicht coder-umsetzbar) und **NIE** in die globale `${CLAUDE_PLUGIN_ROOT}/knowledge/cicd.md` (Destillation macht `retro` via PR+Gate).
