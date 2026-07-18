@@ -54,7 +54,7 @@
 | **Test-Gate** | tester-Verdikt: `PASS | FAIL`. PASS nur bei grünem Build + grünen Tests + allen genannten AC + grünem Coverage-Gate. |
 | **Coverage-Gate** | tester prüft: jede genannte AC + jede referenzierte BR von ≥ 1 Test gedeckt (über Trace-Tags). Lücke = `TRACE-GAP` → FAIL. |
 | **Rollout-Gate** | cicd-Verdikt nach dem produktiven Rollout: `PASS | FAIL | NEEDS-HUMAN`. |
-| **Gate (§5)** | Self-Improvement-Sicherung: Pack-/Skill-Änderungen laufen nie direkt auf `main` → PR → reviewer-Check + Mensch-Approve → merge. |
+| **Gate (§5)** | Self-Improvement-Sicherung: Pack-/Skill-Änderungen laufen nie direkt auf `main` → PR → reviewer-Check + Mensch-Approve → merge. **Ausnahme retro** (seit 2026-07-18): reviewer-`PASS` mergt automatisch, kein Mensch-Approve mehr (`docs/specs/retro-auto-merge.md`). |
 
 ## Wissen & Self-Improvement
 

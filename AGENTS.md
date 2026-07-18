@@ -42,7 +42,10 @@
 - **Observability (Tier 1, §5a):** Pack-Regeln haben stabile IDs (`flutter/R007`); `reviewer` taggt
   Befunde mit der ID; Promotions landen im `LEARNINGS.md`-Ledger + Improvement-Board.
 - **Gate (§5):** Skill-/Pack-Änderungen (`retro`/`train`) laufen NIE direkt auf `main` —
-  PR → `reviewer`-Check + Mensch-Approve → merge → neue Fabrik-Version.
+  PR → `reviewer`-Check + Mensch-Approve → merge → neue Fabrik-Version. **Ausnahme retro (seit
+  2026-07-18, `docs/specs/retro-auto-merge.md`):** `reviewer`-`PASS` → **Auto-Merge** (squash), kein
+  Mensch-Approve mehr; `CHANGES-REQUIRED` → Fix-Loop (max. 3 Iterationen) → offen + Meldung. `train`/
+  `teamLeader` behalten das Gate unverändert.
 
 ---
 
@@ -293,10 +296,12 @@ Ablauf         1. Tier-1-Lessons sammeln
 Mechanik       NICHT ${CLAUDE_PLUGIN_ROOT} editieren (read-only Cache) → agent-flow-Source
                temp-klonen (gh repo clone), Branch, edit, push, gh pr create. Details: agents/retro.md.
 Output         PR-Link + Liste: „promote → knowledge/<x>.md|agents/<role>.md: <Regel> [ID]"
-Gate           §5: reviewer-Check + Mensch-Approve → merge → neue Fabrik-Version
-Harte Grenzen  • NIE Direkt-Push auf main (nur PR)
+Gate           §5, retro-Ausnahme: reviewer-Check → PASS → Auto-Merge (squash, kein Mensch-Approve);
+               CHANGES-REQUIRED → Fix-Loop (max. 3 Iterationen) → offen + Meldung
+               (`docs/specs/retro-auto-merge.md`)
+Harte Grenzen  • NIE Direkt-Push auf main (nur PR) — auch nicht als Ausweichpfad bei Merge-Fehlschlag
                • promotet NUR Systemisches/Verallgemeinerbares (kein Dump)
-               • merged eigenen PR NICHT; fasst Projekt-Code nicht an
+               • mergt eigenen PR NUR nach dispatchtem reviewer-PASS; fasst Projekt-Code nicht an
 Scope          jetzt pro Projekt; Cross-Projekt-Aggregation später (Ausbau)
 ```
 

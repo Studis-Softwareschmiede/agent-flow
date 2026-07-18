@@ -83,7 +83,7 @@ Ein Owner-Override von G1 ist **nur** gültig, wenn **alle vier** belegt sind:
 ## Nicht-Ziele
 - **Keine** Aufweichung des Default-G1: ohne beanspruchten, vollständig belegten Override gilt „≥2 Projekte × ≥2 Stellen" unverändert (A2).
 - **Keine** Änderung an `G1-Sonar` (H3) oder der Estimator-G1-Freistellung (Modus E) (AC7).
-- **Kein** Auto-Merge / Bypass des reviewer-Gates (Schutzgitter #4 bleibt) — der Override ändert nur, **welche** Bedingung das Gate prüft, nicht **ob** es prüft.
+- **Kein** Bypass der reviewer-Prüfung selbst (Schutzgitter #4 bleibt zwingend) — der Override ändert nur, **welche** Bedingung das Gate prüft, nicht **ob** es prüft; der Merge-Auslöser folgt unverändert `[[retro-auto-merge]]`.
 - **Keine** automatische Owner-Approval-Erteilung durch `retro` — das Approval ist und bleibt eine explizite Owner-Handlung.
 
 ## Abhängigkeiten

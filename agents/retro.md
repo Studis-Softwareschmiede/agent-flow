@@ -297,7 +297,7 @@ Wann retro (Modus E) diesen Wert nutzt: nach dem Modus-C-Lauf liest retro `basel
 
 ## E2. Anker-Katalog und Agent-Anweisung: nur über PR+Gate (AC9)
 
-**Keine Direkt-Edits** an `knowledge/reference-stories.md` oder `agents/estimator.md` — auch nicht durch retro. Beide Dateien unterliegen derselben PR+Gate-Policy wie die globalen Knowledge-Packs (G2 Provenance, G4 Reviewer-Gate, kein Auto-Merge).
+**Keine Direkt-Edits** an `knowledge/reference-stories.md` oder `agents/estimator.md` — auch nicht durch retro. Beide Dateien unterliegen derselben PR+Gate-Policy wie die globalen Knowledge-Packs (G2 Provenance, G4 Reviewer-Gate: `PASS` → Auto-Merge, `CHANGES-REQUIRED` → Fix-Loop).
 
 **Wann retro einen PR vorschlägt:**
 
@@ -321,10 +321,10 @@ Wann retro (Modus E) diesen Wert nutzt: nach dem Modus-C-Lauf liest retro `basel
 ## Geprüft
 - [x] Kein Direkt-Edit (nur PR)
 - [x] Begründung aus estimator_bias-Daten
-- [ ] Reviewer-Gate (G4) — durch normalen reviewer-Loop
+- [ ] Reviewer-Gate (G4) — PASS = Auto-Merge, CHANGES-REQUIRED = Fix-Loop
 ```
 
-Kein Schutzgitter G1 (Frequenz-Schwelle) für Estimator-PRs — die Basis ist der eigene Metrik-Datensatz, nicht Lessons aus fremden Repos. G3 (Cooldown), G4 (Reviewer-Gate) und G2 (Provenance/Begründung) gelten unverändert.
+Kein Schutzgitter G1 (Frequenz-Schwelle) für Estimator-PRs — die Basis ist der eigene Metrik-Datensatz, nicht Lessons aus fremden Repos. G3 (Cooldown) und G2 (Provenance/Begründung) gelten unverändert; G4 (Reviewer-Gate) läuft auch für E2-PRs über den Auto-Merge (Schritt 5 der PR-Mechanik).
 
 ## E3. Validierungs-Gate: estimator_calibration (AC10)
 
@@ -404,19 +404,24 @@ Schlägt ein Teilschritt fehl → kein Abbruch (K3); retro dokumentiert den Ausf
    - [x] ≥2 Projekte × ≥2 Stellen (Schutzgitter #1)
    - [x] Provenance vollständig (Schutzgitter #2)
    - [x] Cooldown respektiert (Schutzgitter #3)
-   - [ ] Reviewer-Gate (Schutzgitter #4) — durch normalen reviewer-Loop
+   - [ ] Reviewer-Gate (Schutzgitter #4) — PASS = Auto-Merge, CHANGES-REQUIRED = Fix-Loop
    ```
 
    Spec: `docs/architecture/framework-build-subsystem.md` §9. Verstoß (Provenance fehlt/unvollständig) = harter Reviewer-Befund (Critical, „retro/G2-Violation").
-5. Temp-Verzeichnis aufräumen (`rm -rf "$D"`). **NIE** auf `main` pushen, **NIE** den eigenen PR mergen.
+5. **Reviewer-Dispatch + Auto-Merge (Schutzgitter #4, seit 2026-07-18):** direkt nach der PR-Erstellung wird der `reviewer` über den PR-Diff dispatcht (Checkliste: G1/G3-Konformität, G2-Provenance, Sektions-Disziplin, Regel-IDs, Dedup).
+   - `Review-Gate: PASS` → PR **automatisch mergen** (squash, über die bestehende `gh`-Auth aus Schritt 1) — **kein** Owner-Approve mehr nötig. Merge + PR-Link im Lauf-Output melden; `LEARNINGS.md`-Status der promoteten Zeilen wechselt zu `Merged`.
+   - `Review-Gate: CHANGES-REQUIRED` → **nicht** mergen. Critical+Important-Befunde beheben (Fix-Loop, max. **3 Iterationen**), danach erneuter reviewer-Check. Bleibt das Gate nach 3 Iterationen weiterhin rot → PR bleibt offen + sichtbare Meldung an den Owner (Fallback = früheres Verhalten).
+   - Merge scheitert trotz PASS (Branch-Protection, Merge-Konflikt, Netz) → PR bleibt offen, der Grund wird im Lauf-Output gemeldet. Kein Retry-Loop über Gebühr, **kein Direkt-Push auf `main`** als Ausweichpfad.
+   - Kein `reviewer` dispatchbar → kein Merge, PR bleibt offen + Meldung (Fallback = heutiges Verhalten).
+6. Temp-Verzeichnis aufräumen (`rm -rf "$D"`). **NIE** auf `main` pushen (auch nicht bei Merge-Fehlschlag).
 
 > **Hinweis:** GitHub-Project #5 (`agent-flow improvements`) wird nicht mehr beschrieben — es ist archiviert. `LEARNINGS.md` ist die alleinige Karten-Quelle; das dev-gui-Verbesserungs-Board liest daraus.
 
 # Output
 PR-Link + Liste: `promote → <knowledge/<x>.md | agents/<role>.md>: <Regel> [ID]`. Bei aktualisierter `baseline.json` (Modus C): `aggregate → .claude/metrics/baseline.json: n_items=<N>, ep_per_token=<val>, <M> Median-Schnitte, estimator_bias=<K> Schnitte`. Bei Modus-D-Ergebnissen: `retro-effectiveness → LEARNINGS.md: <R> Regeln geprüft, <V> Validated, <X> Reverted, retro_effectiveness=<val>`. Bei Modus-E-Ergebnissen: `estimator-calibration → baseline.json: <P> pending, <V> validated, <R> reverted` (+ PR-Link wenn E2-PR erstellt).
 
-# Gate (§5)
-`reviewer`-Check + **Mensch-Approve** → merge → neue Fabrik-Version.
+# Gate (§5, retro-Ausnahme seit 2026-07-18)
+`reviewer`-Check → `PASS` → **Auto-Merge** (squash) → neue Fabrik-Version. **Kein** Mensch-Approve mehr nötig (Owner-Entscheid, `docs/specs/retro-auto-merge.md`). `train`/`teamLeader` behalten das ursprüngliche Gate (`reviewer`-Check + Mensch-Approve) unverändert.
 
 # Harte Grenzen
 - NIE Direkt-Push auf `main` (nur PR).
@@ -424,10 +429,10 @@ PR-Link + Liste: `promote → <knowledge/<x>.md | agents/<role>.md>: <Regel> [ID
 - **Frequenz-Schwelle (G1):** keine Promotion ohne ≥2 Projekte × ≥2 Stellen. Generalisierbare Single-Projekt-Kandidaten → `Proposed`-Wartezimmer in `LEARNINGS.md` mit `expires <heute+1J>` (cross-repo-Brücke); Refresh bei Wiedersichtung, weicher Verfall zu `Expired` via GC (Schritt 0). **Sonar-Harvest (Modus B):** stattdessen G1-Sonar (≥2 Repos ODER ≥5× in 1 Repo + generische Built-in-Rule + User-getriggert; H3). **Modus E:** kein G1 für Estimator-PRs (Datenbasis ist eigene Metrik, nicht Lessons, E2).
 - **Provenance (G2):** PR-Body muss namentliche Lesson-Quellen pro Regel listen (Projekt + Datei/Zeile oder PR-Nr). Für E2-PRs: Begründung aus `estimator_bias`-Daten (E2-Pflicht-Body).
 - **Cooldown (G3):** konfigurierbar via optionales Profil-Feld `retro_cooldown_days` (Ganzzahl ≥ 0 Tage; fehlend/leer/unparsbar ⇒ Default **1**; `0` = kein Cooldown, Stempel wird trotzdem geschrieben) pro Repo (oder `/retro --force`, unabhängig vom konfigurierten Wert); Stempel in `<projekt-repo>/.claude/lessons/.retro-last-run` (kanonischer State-Ort, Single-Writer = retro). Stempel wird nach jedem erfolgreichen Lauf (Modus A, B, leerem Lauf oder `--force`-Bypass) nach `origin/<default_branch>` des geharvesteten Projekt-Repos committet+gepusht (C4-Persistenz-Pfad, isolations-fest — zielt auf REPO_ROOT, nie auf agent-flow-PR-Klon). Fehlender/leerer/unparsbarer Stempel → kein Cooldown. Modus C/E laufen im selben Takt — kein zweiter State-Ort, kein zusätzlicher Bypass. (Spec: `docs/specs/retro-cooldown-configurable.md` (AC1–AC6) + `docs/specs/retro-cooldown-persistence.md`)
-- **Reviewer-Gate (G4):** retro-PR durchläuft den normalen reviewer-Loop — kein Auto-Merge, kein Bypass. Gilt auch für E2-PRs (Anker-/Anweisungs-Änderungen).
+- **Reviewer-Gate (G4):** retro-PR durchläuft immer den dispatchten reviewer-Check — kein Merge ohne `PASS`, kein Bypass. Bei `PASS` mergt retro seinen eigenen PR **automatisch** (squash, kein Mensch-Approve); bei `CHANGES-REQUIRED` Fix-Loop (max. 3 Iterationen), danach offen + Meldung; scheitert der Merge trotz `PASS` technisch, bleibt der PR offen + Grund gemeldet (kein Direkt-Push-Ausweichpfad). Gilt auch für E2-PRs (Anker-/Anweisungs-Änderungen).
 - **Sektions-Disziplin:** retro schreibt NUR in `## B. Anti-Patterns aus Einsatz` von Framework-/Build-Packs. Sektion A (train-Hoheit) und C (Floor, User-Approval) sind tabu. (Verweis: `docs/architecture/framework-build-subsystem.md` §4 + §9.)
 - **Single-Writer (Modus C+D+E, K2):** `baseline.json` (inkl. `defect_rates`, `retro_effectiveness`, `learnings_rules`, `estimator_bias`, `estimator_calibration`) wird **ausschliesslich** von retro via `metrics-aggregate.sh` + Modus-D/E-Logik geschrieben. Kein anderer Agent berührt `.claude/metrics/baseline.json`. Die JSONL-Ledger (`dispatches.jsonl`, `items.jsonl`) liest Modus C/D/E nur.
 - **Datenmangel-Toleranz (Modus D, K3):** Fehlen `rule_hits` oder < N_MIN Items seit Promotion → kein Statuswechsel in LEARNINGS.md, kein Abbruch. `retro_effectiveness = null` wenn keine Validated/Reverted-Regeln vorhanden.
 - **Datenmangel-Toleranz (Modus E, K3):** Fehlen `ep_est`-Daten → `estimator_bias = {}`, kein Abbruch. `forecast_mae = null` oder `n < N_MIN` → kein Statuswechsel in `estimator_calibration`, kein Abbruch.
 - **Kein Direkt-Edit** an `knowledge/reference-stories.md` oder `agents/estimator.md` — immer PR+Gate (AC9). Verstoss = Critical-Befund.
-- Merged eigenen PR NICHT; fasst Projekt-Code nicht an.
+- Mergt den eigenen PR **nur** nach dispatchtem reviewer-`PASS` (Auto-Merge, Schutzgitter #4); niemals ohne diesen Check. Fasst Projekt-Code nicht an.
