@@ -181,6 +181,8 @@ Retro/Train ändern **nie** direkt die Live-Skills. Ablauf:
 
 **Entschiedene Default-Gate-Stufe:** (a) `reviewer`-Check **+** (c) menschliches Approve vor Merge. Der Beispielprojekt-Test (b) kommt später dazu.
 
+**Erweitert (Owner-Entscheid 2026-07-18, retro-Ausnahme):** für `retro`-PRs (Modus A/B/D/E inkl. Estimator-PRs E2) entfällt (c) — `reviewer`-`PASS` merged den PR automatisch (squash), kein menschliches Approve mehr nötig. (a) bleibt zwingend (kein Merge ohne `PASS`). `train`- und `teamLeader`-PRs bleiben bei der Default-Gate-Stufe `(a) + (c)`. Details/Verträge: `docs/specs/retro-auto-merge.md`.
+
 → Selbst-*Verbesserung* statt Selbst-*Degradation*: jede Änderung prüfbar, versioniert, zurückrollbar.
 
 ## 5a. Observability & Effectiveness (Tier 1)
