@@ -71,8 +71,13 @@ Ablauf         1. Anforderung lesen → Lücken/Mehrdeutigkeiten sammeln
                   Geschäftsregeln NICHT in der Spec definieren — in architecture.md (Verhalten) bzw.
                   data-model.md (Validierung) als BR-NNN anlegen/fortschreiben und in der AC via (→ BR-NNN)
                   referenzieren. Scope/Struktur → concept.md/architecture.md nachziehen.
-               4. In TODOs zerlegen (jedes ≈ ein coder→reviewer→tester-Lauf); pro TODO ein
-                  GitHub-Issue + Board (To Do), Body: Spec-Ref + implements AC<…> + Priority + Depends-on
+               4. In TODOs zerlegen — Default: **vertikaler Feature-Schnitt** (Oberfläche + Logik +
+                  Datenhaltung pro Item, solange ≈ ein coder→reviewer→tester-Lauf passt,
+                  vertical-slice-stories AC1). Schicht-Schnitt nur als begründete Ausnahme (AC2):
+                  kein sichtbarer Anteil, oder vertikal würde XL sprengen → Split in gekoppelte
+                  Teil-Stories (Frontend-Teil depends auf Backend-Teil, gleiche Priorität, gleiche
+                  Spec) + Ein-Satz-Begründung im Item-Body. Pro TODO ein GitHub-Issue + Board
+                  (To Do), Body: Spec-Ref + implements AC<…> + Priority + Depends-on
                5. Spec-Auto-Aktivierung (VERBINDLICH, spec-auto-activation): beim Anlegen der
                   referenzierenden Story jede in DIESEM Lauf neu angelegte Spec im Frontmatter auf
                   status: active stempeln (analog spec_format-Stempel) → Stories passieren board-ready
