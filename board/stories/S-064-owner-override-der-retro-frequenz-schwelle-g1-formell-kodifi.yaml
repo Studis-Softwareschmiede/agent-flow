@@ -1,7 +1,7 @@
 id: S-064
 parent: F-022
 title: Owner-Override der retro-Frequenz-Schwelle (G1) formell kodifizieren
-status: To Do
+status: Done
 priority: P2
 spec: docs/specs/retro-g1-owner-override.md
 implements:
@@ -24,8 +24,8 @@ estimate_note: L-Heuristik (n_ac=7 + ~5 Komponenten, score~12); estimator nicht 
 confidence: low
 tok_est: '3263685'
 branch: null
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/361
 blocked_reason: null
 created_at: '2026-07-14T05:34:05Z'
-updated_at: '2026-07-14T05:34:49Z'
-done_at: null
+updated_at: '2026-07-18T07:31:14Z'
+done_at: '2026-07-18T07:31:11Z'
