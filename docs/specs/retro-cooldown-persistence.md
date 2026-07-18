@@ -11,11 +11,11 @@ version: 1
 > **Schicht 3 von 3.** Testbares **Verhalten + Verträge**, sprach-/paradigma-unabhängig (Intent, keine Idiome/Klassen).
 > **Source of Truth** für `coder` (baut daraus), `tester` (testet die Acceptance-Kriterien), `reviewer` (prüft den Diff dagegen — hartes Drift-Gate).
 >
-> **Subsystem-Bindung.** Diese Spec präzisiert das **Schutzgitter G3 (Cooldown)** aus `docs/architecture/framework-build-subsystem.md` §9 Punkt 3. Sie ändert weder die Schwelle (1×/Woche/Repo) noch den State-Ort (`.claude/lessons/.retro-last-run`), sondern schliesst eine **Persistenz-Lücke**: der Stempel-Write muss denselben Commit-Pfad nehmen wie die bereits etablierte `baseline.json`-Persistenz (`agents/retro.md` Modus C / C4).
+> **Subsystem-Bindung.** Diese Spec präzisiert das **Schutzgitter G3 (Cooldown)** aus `docs/architecture/framework-build-subsystem.md` §9 Punkt 3. Sie ändert weder die Cooldown-Schwelle (konfigurierbar via optionales Profil-Feld `retro_cooldown_days`, Default 1 Tag — siehe [[retro-cooldown-configurable]]) noch den State-Ort (`.claude/lessons/.retro-last-run`), sondern schliesst eine **Persistenz-Lücke**: der Stempel-Write muss denselben Commit-Pfad nehmen wie die bereits etablierte `baseline.json`-Persistenz (`agents/retro.md` Modus C / C4).
 
 ## Zweck
 
-Schutzgitter G3 begrenzt `retro` auf max. 1 Lauf pro Woche pro geharvestetem Projekt-Repo. Der State ist ein ISO-Datum in `.claude/lessons/.retro-last-run` **im geharvesteten Projekt-Repo**. Heute schreibt `retro` (Schritt 3a) das Datum nur in den Working-Tree, ohne zu garantieren, dass es nach `origin/<default_branch>` des Projekt-Repos persistiert wird. Weil retro-Läufe typischerweise **isoliert** ablaufen (Lessons-Read aus einem Worktree, PR gegen agent-flow via `mktemp`-Klon), landet der Stempel in einem verworfenen Working-Tree und geht verloren → G3 ist wirkungslos. Diese Spec macht die Persistenz testbar und schliesst sie an den bestehenden `baseline.json`-Commit-Pfad an.
+Schutzgitter G3 begrenzt `retro` auf max. 1 Lauf pro konfigurierbarem Cooldown-Zeitraum (`retro_cooldown_days`, Default 1 Tag, siehe [[retro-cooldown-configurable]]) pro geharvestetem Projekt-Repo. Der State ist ein ISO-Datum in `.claude/lessons/.retro-last-run` **im geharvesteten Projekt-Repo**. Heute schreibt `retro` (Schritt 3a) das Datum nur in den Working-Tree, ohne zu garantieren, dass es nach `origin/<default_branch>` des Projekt-Repos persistiert wird. Weil retro-Läufe typischerweise **isoliert** ablaufen (Lessons-Read aus einem Worktree, PR gegen agent-flow via `mktemp`-Klon), landet der Stempel in einem verworfenen Working-Tree und geht verloren → G3 ist wirkungslos. Diese Spec macht die Persistenz testbar und schliesst sie an den bestehenden `baseline.json`-Commit-Pfad an.
 
 ## Kontext / Motivation (reale Belege, 2026-06-14/15 — bindend)
 
@@ -89,7 +89,7 @@ Mehrfaches Schreiben desselben ISO-Datums am selben Tag ist idempotent (kein Feh
 
 ## Nicht-Ziele
 
-- Cooldown-Schwelle ändern (bleibt 1×/Woche/Repo) oder State-Ort verschieben (bleibt `.claude/lessons/.retro-last-run`).
+- Cooldown-Schwelle ändern (Schwellenwert-Konfigurierbarkeit ist [[retro-cooldown-configurable]]) oder State-Ort verschieben (bleibt `.claude/lessons/.retro-last-run`).
 - `--force`-Semantik ändern.
 - baseline.json-Aggregation/Inhalt ([[metrics-retro-aggregation]], [[metrics-retro-effectiveness]]).
 - Sonar-spezifische G1-Sonar-Schwelle (separat, `agents/retro.md` H3).
@@ -99,3 +99,4 @@ Mehrfaches Schreiben desselben ISO-Datums am selben Tag ist idempotent (kein Feh
 
 - `docs/architecture/framework-build-subsystem.md` §9 (Schutzgitter, bindend).
 - [[metrics-retro-aggregation]] / [[metrics-retro-effectiveness]] — teilen den C4-Persistenz-Pfad (baseline.json), an den V3 anschliesst.
+- [[retro-cooldown-configurable]] — macht die Cooldown-**Schwelle** konfigurierbar (`retro_cooldown_days`, Default 1 Tag); orthogonal zu dieser Spec (Persistenz-Mechanik), State-Ort/-Persistenz bleiben hier maßgebend.
