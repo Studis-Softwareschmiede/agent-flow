@@ -1,9 +1,9 @@
 ---
 name: flow
-description: Orchestriert die Softwareschmiede — liest das Projekt-Board und arbeitet EIN To-Do-Item (bzw. einen SR1-Parallel-Batch) ab (coder → reviewer ⇄ Loop → tester → cicd ship → Done), dann endet die Session (Default, auch headless — Kontext-Wachstum vermeiden; äußere Schleifen wie dev-gui ProjectDrain/Nachtwächter rotieren). `--all` (interaktives Opt-in) behält das bisherige Bis-Board-leer-Verhalten. Einziger Schreiber von Board-Status. Git-Abschluss-Operationen (merge+push) delegiert /flow an cicd als ausführenden Abschluss-Arm. Im Ziel-Projekt-Repo ausführen.
+description: Orchestriert die Softwareschmiede — liest das Projekt-Board und arbeitet EIN To-Do-Item (bzw. einen SR1-Parallel-Batch) ab (coder → reviewer ⇄ Loop → tester → cicd ship → Done), dann endet die Session (Default, auch headless — Kontext-Wachstum vermeiden; äußere Schleifen wie dev-gui ProjectDrain/Nachtwächter rotieren). `--all` (interaktives Opt-in) behält das bisherige Bis-Board-leer-Verhalten. `--plan` (Spec `docs/specs/parallel-session-plan.md`) erstellt statt eines Item-Build-Loops einmalig einen persistierten Wellen-Plan (`board/runs/session-plan.yaml`) für parallele äußere Sessions, dann endet der Aufruf. Einziger Schreiber von Board-Status. Git-Abschluss-Operationen (merge+push) delegiert /flow an cicd als ausführenden Abschluss-Arm. Im Ziel-Projekt-Repo ausführen.
 ---
 
-# /flow [--cost <mode>] [--all] [--parent <F-###>] — Board abarbeiten (Orchestrator)
+# /flow [--cost <mode>] [--all] [--parent <F-###>] [--plan] — Board abarbeiten (Orchestrator)
 
 Du bist der **Orchestrator** (Haupt-Session). Du dispatchst die Agenten via Task-Tool und bist der **einzige Schreiber** von Board-Status. Git/PR-Operationen im Abschluss werden an `cicd` als ausführenden Arm delegiert (s. §5). cwd = Ziel-Projekt-Repo.
 
@@ -50,6 +50,66 @@ Abarbeitungsplan:
 ```
 
 Dieser Plan wird dem User ausgegeben und steuert die Dispatch-Reihenfolge in §3.
+
+**Verhältnis zum Plan-Modus (`--plan`, §0b):** Dieser Abschnitt (§0a) plant **innerhalb** einer laufenden Session über die **bereiten** Stories (SR1, Innen-Parallelität). §0b hebt dieselbe dreiteilige Analyse (Hot-Spot/Konflikt/depends) eine Ebene höher: über **alle** To-Do-Stories (bereit + wartend), als **persistiertes Artefakt** für **mehrere unabhängige** `/flow`-Sessions der äußeren Schleife. §0a bleibt unverändert der Normalfall eines einzelnen `/flow`-Laufs.
+
+---
+
+## 0b. Plan-Modus (`/flow --plan` — Spec [`docs/specs/parallel-session-plan.md`](../../docs/specs/parallel-session-plan.md) AC1–AC5/AC8–AC10)
+
+Wird `/flow` mit `--plan` aufgerufen, ersetzt dieser Abschnitt den normalen Item-Build-Loop (§1–§7) für **diesen** Aufruf vollständig — der Plan-Modus baut **kein** Item, er erstellt und persistiert nur den Wellen-Plan für die äußere Schleife (dev-gui Nachtwächter/ProjectDrain). Setup (§0) läuft unverändert davor, soweit für den Plan-Schritt benötigt (Board-Referenz aus `.claude/profile.md`).
+
+**Genau EIN LLM-Planungsdurchgang (AC1).** Die folgenden Schritte 1–4 laufen als **eine** zusammenhängende Analyse dieser Session (kein Agent-Dispatch, kein zusätzlicher LLM-Call pro Story) — danach ist alles Weitere (Revalidierung vor jeder Welle, §0c) rein mechanisch.
+
+1. **Alle To-Do-Stories lesen** (bereite UND wartende — nicht nur `board next`): `board list --type story --status "To Do"` liefert alle Kandidaten inkl. `depends`, `labels`, `spec`, `implements`, `parent`. **Feature-Batches:** jedes Feature mit ≥ 1 To-Do-Story zählt planerisch als **eine** Session — Stories desselben Features werden nie auf mehrere parallele Wellen verteilt (Edge-Case der Spec; keine Schwelle, `docs/specs/feature-batch-orchestration.md` v2 AC1).
+2. **Hot-Spot-Datei-Analyse** (§0a-(a), hier über ALLE To-Do-Stories statt nur die bereiten): für jede Story die referenzierte Spec (`docs/specs/<feature>.md`) + `implements`-ACs lesen, zentrale berührte Dateien ableiten. Taucht eine Datei bei ≥ 2 Stories auf → **Hot-Spot**; diese Stories werden **nie** gemeinsam in derselben Welle parallel eingeplant (AC3, HART).
+3. **Konflikt-/„heben-sich-auf"-Check** (§0a-(b)): inhaltlich widersprechende Stories (eine baut um, was eine andere voraussetzt) werden serialisiert — nie gemeinsame Welle.
+4. **depends-Topologie** (§0a-(c)): eine Story startet erst in einer Welle, deren `depends` bereits in einer früheren Welle stehen (oder bereits terminal sind, `{Done, Verworfen}`). Direkte UND transitive `depends`-Beziehungen verhindern gemeinsame Wellen-Zugehörigkeit (AC3).
+
+**Wellen bilden.** Welle 1 = alle Stories ohne offene `depends` und ohne gemeinsamen Hot-Spot/Konflikt untereinander; Welle 2 = Stories, deren `depends` ausschließlich in Welle 1 stehen (oder bereits terminal sind), usw. — bis alle To-Do-Stories eingeplant sind. `parallel` je Welle = Anzahl der Stories dieser Welle (**keine** konfigurierte Obergrenze — Owner-Entscheid, AC5); jede Gruppierung bekommt eine kurze `rationale` (welche Stories warum parallel/seriell laufen, AC5 — Owner-Sichtbarkeit).
+
+**ID-Reservierungs-Vorbedingung (AC8, HART — kein Downgrade).** Bevor eine Welle mit **mehr als einer** Session geplant wird, deren Stories neue namespaced IDs (`BR`/`ADR`/`C`) einführen könnten (Heuristik: Spec-Abschnitt „Verträge" der jeweiligen Story-Spec erwähnt einen dieser Namespaces): prüfen, ob der Reservierungs-Mechanismus funktionsfähig ist — `scripts/board-id-reserve.sh show <erste-story-id-der-welle>` (reine Lese-Operation, kein Ledger-Diff) muss ohne harten Fehler laufen. Schlägt das fehl (Skript fehlt, kein Git-Remote erreichbar) → diese Welle mit ID-Vergabe-Risiko startet **NICHT** — Abbruch der Wellen-Ausführung mit Klartext-Diagnose (analog `id-block-reservation` AC11: „harter Abbruch statt Blind-Vergabe"; auch eine einzelne Session würde ohne funktionierende Reservierung blind vergeben und verstiesse gegen `id-block-reservation` AC9/A2 — „Board-weite `/flow`-Parität: reserviert, bevor er die ID vergibt"). **Kein** Downgrade auf `parallel: 1` als Ersatz für die fehlende Reservierung. Wellen **ohne** ID-Vergabe-Risiko (keine der Stories führt eine neue namespaced ID ein) sind von diesem Gate unberührt und laufen parallel wie geplant (AC8 gilt nur für Wellen mit Risiko). Ist die Reservierung funktionsfähig, bleibt die risikobehaftete Welle parallel — die eigentliche Reservierung passiert weiterhin lazy je Story-Session (§3a, unverändert, bestehender Solo-Pfad-Mechanismus aus [[id-block-reservation]]).
+
+**Kein Plan bei leerem Board (AC10, deckt E1).** Liefert `board list --type story --status "To Do"` **keine** Story → **kein** `session-plan.yaml` schreiben; stattdessen die bestehende Leerlauf-Diagnose (`board ready`, [[empty-drain-diagnostics]]) unverändert ausgeben. Der Plan-Modus endet danach — kein Item-Build-Loop, kein §7.
+
+**Plan-Artefakt schreiben (AC2).** `board/runs/session-plan.yaml` (gitignored, ephemer — analog `board/runs/<F-###>/`) im Schema:
+```yaml
+schema_version: 1
+generated_at: '2026-07-18T06:00:00Z'   # ISO-8601 UTC, date -u +%Y-%m-%dT%H:%M:%SZ
+board_ref: agent-flow                   # project_slug aus board/board.yaml
+waves:
+  - wave: 1
+    parallel: 3
+    stories: [S-101, S-103, S-107]
+    rationale: 'disjunkte Dateien, keine depends untereinander'
+  - wave: 2
+    parallel: 1
+    stories: [S-104]
+    rationale: 'depends auf S-101; Hot-Spot skills/flow/SKILL.md mit S-103 → seriell'
+```
+Zusätzlich menschenlesbar ausgeben (analog dem bestehenden §0a-Format):
+```
+Wellen-Plan (board/runs/session-plan.yaml):
+  Welle 1 (parallel: 3): S-101 ‖ S-103 ‖ S-107 — disjunkte Dateien, keine depends
+  Welle 2 (parallel: 1): S-104 — depends auf S-101; Hot-Spot mit S-103
+  Landen: immer seriell (main = eine Senke)
+```
+
+Danach endet der `--plan`-Aufruf (kein Item-Build-Loop, kein Landen). Die äußere Schleife (dev-gui Nachtwächter/ProjectDrain) liest `session-plan.yaml` und startet je Welle die geplanten `/flow`-Sessions parallel — Konsumenten-Vertrag: eine Story je Session, Wellen strikt nacheinander, Revalidierung vor jedem Wellen-Start (§0c) (AC9). Fehlt die Plan-Datei bei einem Konsumenten-Aufruf, bleibt dessen bisheriges serielle Verhalten unverändert (AC9 — die dev-gui-seitige Umsetzung ist eine separate Story im dev-gui-Repo, hier nur der Datei-Vertrag).
+
+**Ein Schreiber je Story (AC4).** Der Plan garantiert, dass keine Story in mehr als einer Welle/Session gleichzeitig eingeplant ist (Konsequenz aus Schritt „Wellen bilden" oben — jede Story erscheint in genau einer `stories`-Liste). Die Board-Schreibregel bleibt **je Story genau ein schreibender `/flow`-Orchestrator**: parallele Sessions derselben Welle schreiben ausschließlich `board set` für die **eigene** zugeteilte Story-YAML + ihre **eigenen** Metrik-Zeilen (§2b) — nie für eine Story, die eine andere Session dieser Welle bearbeitet (Präzisierung in `docs/architecture/board-subsystem.md` §7).
+
+## 0c. Mechanische Revalidierung vor jeder Welle (`/flow --plan`-Konsument, AC6/AC7 — kein LLM)
+
+Vor dem Start jeder Welle (durch die äußere Schleife) wird der Plan **mechanisch** gegen den aktuellen Board-Ist-Stand geprüft: `scripts/board-plan-validate.sh board/runs/session-plan.yaml <wave-nummer>`. Reines Bash/Python, **kein** LLM-Lauf (AC6):
+- Story nicht mehr `To Do` (`Done`/`Verworfen` = erfüllt; andere Nicht-To-Do-Status bereits anderweitig behandelt) → aus der Welle entfernt (`REMOVED <id> (<status>)`).
+- `depends` nicht terminal (Blocked-Vorgänger o. Ä.) → Story dieser Welle übersprungen, `WAITING <story>: wartet auf <dep> (<status>)` gemeldet (deckt A1 — eine während einer Welle geblockte Story stoppt nur ihren Abhängigkeits-Ast, nicht die ganze Abarbeitung).
+- Story-ID aus dem Plan referenziert **keine** existierende Story mehr (`board show` liefert „nicht gefunden") → grob invalider Plan; das Skript bricht mit Exit 2 + Klartext-Diagnose ab — die äußere Schleife bricht den Drain ab, statt still weiterzulaufen (Edge-Case „Plan veraltet").
+- Sonst → `READY: S-### S-### …` (die tatsächlich zu startenden Sessions dieser Welle).
+
+Die äußere Schleife startet ausschließlich die in `READY` gelisteten Stories als parallele `/flow`-Sessions (eine Story je Session, Session-Rotation unverändert, [[flow-session-rotation]]).
+
+**Landen bleibt seriell (AC7).** Der Plan-Mechanismus erzwingt keine parallelen Merges — jede Story landet über den bestehenden §5-Mechanismus (`scripts/board-ship.sh`, first-come, seriell, Rebase vor jedem Merge). Der Plan dokumentiert keine Land-Reihenfolge vorab.
 
 ---
 

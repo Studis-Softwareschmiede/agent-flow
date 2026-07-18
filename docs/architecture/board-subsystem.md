@@ -378,6 +378,20 @@ die erste Story mit `status=To Do`, deren `depends` alle terminal sind (Status �
 darf `feature add`/`story add` und nicht-Status-Felder setzen. Das ist die heutige
 Regel „`/flow` ist einziger Schreiber von Board-Status", nur auf die CLI gehoben.
 
+**Präzisierung für parallele `/flow`-Sessions (Spec [`docs/specs/parallel-session-plan.md`](../specs/parallel-session-plan.md) AC4).**
+Startet die äußere Schleife (dev-gui Nachtwächter/ProjectDrain) je Welle **mehrere**
+unabhängige `/flow`-Sessions parallel (eine Story je Session, s. Plan-Modus
+`/flow --plan`), gilt die Single-Writer-Regel **je Story**, nicht mehr nur global:
+**je Story genau ein schreibender `/flow`-Orchestrator.** Jede parallele Session
+schreibt via `board set` ausschließlich die YAML ihrer **eigenen zugeteilten**
+Story + ihre **eigenen** Metrik-Zeilen (`dispatches.jsonl`/`items.jsonl`, §4.4) —
+nie den Status einer Story, die eine andere Session derselben Welle bearbeitet.
+Da der Wellen-Plan (AC3) garantiert, dass jede Story in genau einer Welle/Session
+eingeplant ist, entstehen dadurch keine konkurrierenden Schreiber auf derselben
+Story-YAML; verschiedene Story-YAML-Dateien vertragen parallele Schreiber ohnehin
+(dateibasiert, kein geteilter Zustand). Landen (§5-Merge in `/flow`) bleibt trotz
+paralleler Sessions seriell (eine Senke `main`, s. `parallel-session-plan.md` AC7).
+
 ---
 
 ## 8. Auswirkung auf die bestehenden Agents/Skills
