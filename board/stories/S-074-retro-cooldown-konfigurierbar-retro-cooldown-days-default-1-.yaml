@@ -1,7 +1,7 @@
 id: S-074
 parent: F-022
 title: Retro-Cooldown konfigurierbar (retro_cooldown_days, Default 1 Tag)
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/retro-cooldown-configurable.md
 implements:
@@ -23,8 +23,8 @@ estimate_note: M-Heuristik (n_ac=6 + ~4 Komponenten, score~10); dispo_est aus ba
 confidence: low
 tok_est: null
 branch: null
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/357
 blocked_reason: null
 created_at: '2026-07-18T05:34:32Z'
-updated_at: '2026-07-18T05:34:51Z'
-done_at: null
+updated_at: '2026-07-18T05:55:13Z'
+done_at: '2026-07-18T05:55:12Z'
