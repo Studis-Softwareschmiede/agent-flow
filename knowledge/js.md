@@ -24,11 +24,13 @@ Expertise für JavaScript/Node. Geladen bei `profile.language: js`. Regel-IDs: `
 - `new Date()` für komplexe Datums-/Zeitarithmetik auf Node.js 26+ (`js/R08`) → **Important**: `Temporal`-API bevorzugen (unveränderlich, timezone-korrekt, Stage 4).
 - `require('_stream_readable')` / `_stream_writable` / `_stream_duplex` etc. direkt importiert (`js/R09`) → **Critical** bei Node.js 26+: Module entfernt; auf `require('node:stream').Readable` migrieren.
 - `map.has(k) ? map.get(k) : (map.set(k, v), v)`-Pattern auf Node.js 26+ (`js/R10`) → **Info**: `map.getOrInsert(k, v)` verfügbar.
+- Test für einen Cross-Repo-/Cross-Komponenten-Vertrag baut den Fixture als **handgeschriebenen Mock**, der die **Annahme der eigenen (Konsumenten-)Komponente** spiegelt, statt vom **echten Produzenten-Output** abzuleiten (`js/R11`) → **Important**: Solche Tests bestätigen den Bug statt ihn zu fangen (der Mock hat per Konstruktion genau die Form, die der Konsument erwartet). Verlangt einen Fixture aus einer realen Produzenten-Zeile/-Ausgabe **und** mindestens einen Integrations-/Contract-Test Produzent→Konsument.
 
 ## Test-Approach
 - Lint; Build; Node-Smoke / Unit-Tests.
 - Ab Node.js 20: `node:test` als zero-dependency Alternative zu Jest/Mocha prüfen (`node --test **/*.test.js`).
 - **`Test suite failed to run` / `Cannot use import statement outside a module` / `duplicate haste module` in einer Datei, die der aktuelle Diff NICHT geändert hat = fast immer Umgebungs-/Cache-Artefakt, KEIN Code-FAIL.** Zuerst `jest --clearCache` + erneut laufen (häufigste Wurzel: Worktree-Interferenz, `js/R07`), bevor ein FAIL gemeldet wird. Bleibt es nach sauberem Cache rot → echter Defekt.
+- **Cross-Repo-Vertrag gegen echten Produzenten-Output testen (`js/R11`):** Berührt der Diff eine Naht zwischen zwei Komponenten/Repos (Runner ↔ Agent-Ausgabe, Backend ↔ Ledger-Datei, API-Producer ↔ Consumer), den Fixture aus einer **realen Produzenten-Zeile** ableiten — nie einen Mock erfinden, der die Erwartung des Konsumenten spiegelt. Zusätzlich ein Integrations-/Contract-Test, der echten Produzenten-Output durch den echten Konsumenten-Parser/-Renderer schickt. *Zweimal in dieser Fabrik verbrannt: 2026-07-08 (regression-define: Mock trug `status`-Feld, das das Agent-Format nie liefert → „kein gültiges JSON" fehlgemeldet, ~5h); 2026-07-17 (Story-Detail: Test mockte `tok: 800`, real ist `tok: {in,out,cache}` → `[object Object]` unbemerkt, weil `tok` wochenlang `null` war).*
 
 ## Node Deprecation Taxonomy
 

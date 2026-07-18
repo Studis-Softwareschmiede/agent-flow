@@ -34,11 +34,13 @@ Expertise für TypeScript. Geladen bei `profile.language: ts`. Regel-IDs: `ts/R<
 - `enum` oder Parameter-Properties in Klassen in Projekten, die `--erasableSyntaxOnly` anstreben → **Suggestion** (R11, verhindert nativen Typ-Stripping-Betrieb).
 - `.ts`/`.tsx`-Extension in relativen Imports ohne `--rewriteRelativeImportExtensions` im Build → **Important** (R12, führt zu Runtime-Fehlern „cannot find module ./foo.ts").
 - `import defer * as ns` mit `--module commonjs`/`node16`/`node18` → **Important** (R13, kein Downlevel-Emit — laufzeitunterstützte Plattform und `--module preserve`/`esnext` nötig).
+- Test für einen Cross-Repo-/Cross-Komponenten-Vertrag baut den Fixture als handgeschriebenen Mock, der die Annahme der eigenen Komponente spiegelt, statt vom echten Produzenten-Output abzuleiten → **Important** (R14): der Mock hat per Konstruktion die vom Konsumenten erwartete Form und bestätigt so den Bug statt ihn zu fangen. Fixture aus realer Produzenten-Ausgabe **plus** ein Integrations-/Contract-Test Produzent→Konsument verlangen. Typ-Sicherheit hilft hier nur, wenn der Producer-Typ **geteilt** ist — ein lokal getippter Mock (`const x: LocalShape = {...}`) reproduziert dieselbe Lücke.
 
 ## Test-Approach
 - **Type-Check Pflicht:** `tsc --noEmit` muss grün — kein TS-Code geht durch, wenn der Compiler rot ist.
 - **Unit-Tests:** Framework-/Build-Tool-spezifisch — `vitest` (Vite-Projekte), `jest` (Bestand-Setups), `node --test` (Pure-Node ab Node 20). Siehe `knowledge/build/<build>.md` Test-Approach und ggf. Framework-Pack.
 - **Lint:** ESLint mit `@typescript-eslint/recommended` als Floor; `eslint-plugin-import` für Import-Ordnung; ggf. Prettier für Formatting (out-of-scope dieses Packs).
+- **Cross-Repo-Vertrag gegen echten Produzenten-Output testen (R14):** An einer Naht zwischen zwei Komponenten/Repos den Fixture aus realem Produzenten-Output ableiten, nie einen Mock erfinden, der die Konsumenten-Erwartung spiegelt; zusätzlich ein Integrations-/Contract-Test Produzent→Konsument. Ein geteilter Producer-Typ macht die Naht compile-fest — ein lokal getippter Mock nicht. *Fabrik-Präzedenz: 2026-07-08 regression-define (`status`-Feld), 2026-07-17 Story-Detail (`tok`-Objekt → `[object Object]`).*
 
 ## Spec-Tagging
 Trace-Tag je gedecktem Kriterium gemäss `docs/architecture/traceability-subsystem.md`.
