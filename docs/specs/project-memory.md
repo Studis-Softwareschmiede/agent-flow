@@ -19,7 +19,7 @@ Jedes Projekt führt eine **kuratierte, kurze Standort-Datei** `.claude/memory.m
 1. `/flow` startet in einem Projekt-Repo und liest — falls vorhanden — `.claude/memory.md` als Teil seiner Startlektüre; die Kern-Punkte fliessen als Kontext in die Dispatches (coder/reviewer) ein.
 2. Die Story wird regulär abgearbeitet (coder → reviewer ⇄ Loop → tester → cicd ship).
 3. Als **letzter Schritt der Session** (nach Landung bzw. nach Blocked-Setzung) sichtet `/flow` das Memory und schreibt es neu: aktueller Stand, letzte Arbeiten, offene Fäden — Erledigtes/Veraltetes fliegt raus, der Größen-Deckel wird eingehalten.
-4. Das aktualisierte Memory wird über den bestehenden Landungs-Pfad persistiert (fährt mit wie die Lessons-Dateien) und steht der nächsten Session zur Verfügung.
+4. Das aktualisierte Memory wird über den bestehenden **Session-Ende-Board-Meta-Commit** persistiert — denselben Commit, mit dem `/flow` nach der Landung ohnehin Board-Meta-Felder schreibt (Dispo-Spiegel) — **nicht** den Landungs-Commit selbst (der liegt zeitlich vor der Kuration, s. AC6) — und steht der nächsten Session zur Verfügung.
 
 ## Alternative Flows
 ### A1: Story endet Blocked
@@ -38,7 +38,7 @@ Jedes Projekt führt eine **kuratierte, kurze Standort-Datei** `.claude/memory.m
 - **AC3** — Kuratieren am Session-Ende (HART): als letzter Schritt jeder `/flow`-Session (nach bestätigter Landung ODER nach Blocked-Setzung) wird das Memory **neu geschrieben**: neuer Stand rein, Erledigtes/Veraltetes/nicht mehr Benötigtes **gelöscht** — reines Anhängen ohne Sichtung verletzt diese Spec. *(deckt A1)*
 - **AC4** — Deckel wird durchgesetzt: überschreitet die kuratierte Fassung die Limits aus AC1, wird zusammengefasst/gekürzt statt überschritten (ältere „Letzte Arbeiten"-Einträge fliegen zuerst).
 - **AC5** — Orientierung, nie Wahrheit: `skills/flow/SKILL.md` (und die Memory-Sektion selbst via Kopfzeilen-Hinweis in der Datei) stellen klar: bei Widerspruch gelten Board/Specs; das Memory erzeugt keine Gates, keine Acceptance-Kriterien, keinen Spec-Ersatz. *(deckt E1)*
-- **AC6** — Persistenz über den Landungs-Pfad: das geänderte `.claude/memory.md` fährt wie die getrackten `.claude/lessons/*.md` **immer** mit der Landung mit (Erweiterung des Meta-Datei-Vertrags aus [[flow-lessons-landing]] AC3/cicd-Floor A0 um `memory.md`); im Blocked-Fall nutzt es denselben Persistenz-Weg wie der Blocked-Board-Status. Kein eigener, zweiter Commit-Mechanismus.
+- **AC6** — Persistenz über den Session-Ende-Board-Meta-Commit (HART, präzisiert 2026-07-18): die Kuration läuft **nach** der Landung (letzter Schritt der Session, s. Main Success Scenario Schritt 3/4) — `.claude/memory.md` fährt deshalb **nicht** im eigentlichen Landungs-Commit von `cicd`/`board-ship.sh` mit (das wäre zeitlich unmöglich: die Kuration verarbeitet erst dessen Ergebnis). Stattdessen nutzt die Persistenz denselben, bereits etablierten Session-Ende-Commit-Pfad, den `/flow` nach jeder Landung für Board-Meta-Felder ohnehin fährt (Dispo-Spiegel, `skills/flow/SKILL.md` §2b): `.claude/memory.md` fährt in **diesem** Commit mit (z. B. `chore(board): <story-id> dispo mirror + memory`). Im Blocked-Fall nutzt es denselben Commit wie `board set … status Blocked …`. „Kein eigener, zweiter Commit-Mechanismus" heisst konkret: **kein neuer**, von diesem Session-Ende-Board-Meta-Commit **getrennter** Mechanismus (insbesondere **kein** eigenständiger `chore(memory): …`-Commit als Regelfall) — der Board-Meta-Commit ist der eine Weg. `.claude/memory.md` ist **nicht** Teil des `cicd`-Lessons-Floors ([[flow-lessons-landing]] AC1–AC3): jener deckt ausschliesslich `.claude/lessons/*.md` ab, die bereits **vor** der Landung im Story-Worktree entstehen — memory.md entsteht strukturell erst danach. **Ausnahme (selten):** liegt ein `.claude/memory.md`-Delta ausnahmsweise bereits **vor** der Landung im Story-Worktree vor, fährt es wie die Lessons über den `cicd`-Floor A0 mit (Defense-in-Depth) — das bleibt der Ausnahmefall, nicht der Regelweg.
 - **AC7** — Bootstrap: `new-project`/`init` legen eine leere `.claude/memory.md` (Abschnitts-Gerüst + Kopfzeilen-Hinweis) aus der Vorlage an; `init`/`adopt` überschreiben eine bestehende Datei NICHT (idempotent, analog bestehender Scaffold-Regel).
 - **AC8** — Schreiber-Disziplin: einziger Schreiber ist der `/flow`-Orchestrator (Kurations-Schritt). coder/reviewer/tester lesen ggf., schreiben aber nie ins Memory (Lessons bleiben deren Write-back-Kanal).
 
@@ -68,9 +68,9 @@ Jedes Projekt führt eine **kuratierte, kurze Standort-Datei** `.claude/memory.m
 
 | Artefakt | Garantie |
 |---|---|
-| `.claude/memory.md` | Kuratierter Projekt-Stand. Single-Writer = `/flow`. Deckel 60 Zeilen. Getrackt + landet mit jeder Session. |
-| `skills/flow/SKILL.md` | Start-Lektüre (AC2) + Kurations-Schritt als letzter Session-Schritt (AC3/AC4) + „Orientierung, nie Wahrheit" (AC5). |
-| [[flow-lessons-landing]] / cicd-Floor A0 | Meta-Datei-Menge um `.claude/memory.md` erweitert — fährt immer mit der Landung mit (AC6). |
+| `.claude/memory.md` | Kuratierter Projekt-Stand. Single-Writer = `/flow`. Deckel 60 Zeilen. Getrackt + landet mit jeder Session (über den Session-Ende-Board-Meta-Commit, AC6). |
+| `skills/flow/SKILL.md` | Start-Lektüre (AC2) + Kurations-Schritt als letzter Session-Schritt (AC3/AC4) + „Orientierung, nie Wahrheit" (AC5) + Session-Ende-Board-Meta-Commit-Persistenz (§2b Dispo-Spiegel bzw. Blocked-Commit, AC6). |
+| [[flow-lessons-landing]] / cicd-Floor A0 | **Unverändert:** deckt ausschliesslich `.claude/lessons/*.md` (entstehen vor der Landung im Worktree). `.claude/memory.md` fährt hier nur im Ausnahmefall mit (Delta bereits vor der Landung im Worktree vorhanden, s. AC6) — der Regelweg ist der Session-Ende-Board-Meta-Commit. |
 | `templates/_shared/` + `new-project`/`init`/`adopt` | Leeres Gerüst wird gescaffoldet, bestehende Datei nie überschrieben (AC7). |
 
 ## Edge-Cases & Fehlerverhalten
@@ -90,6 +90,6 @@ Jedes Projekt führt eine **kuratierte, kurze Standort-Datei** `.claude/memory.m
 
 ## Abhängigkeiten
 - [[flow-session-rotation]] — der Kurations-Schritt hängt am Session-Ende (eine Story/Batch pro Session).
-- [[flow-lessons-landing]] — Persistenz-Muster für repo-versionierte Meta-Dateien (wird um memory.md erweitert).
-- `skills/flow/SKILL.md`, `agents/cicd.md` (Meta-Datei-Floor), `skills/new-project/SKILL.md`, `skills/adopt/SKILL.md`, `templates/_shared/`.
+- [[flow-lessons-landing]] — Persistenz-Muster für `.claude/lessons/*.md` (unverändert; deckt `.claude/memory.md` nur im Ausnahmefall vor der Landung ab, s. AC6).
+- `skills/flow/SKILL.md` (§2b Dispo-Spiegel = Regelweg der Persistenz), `agents/cicd.md` (Lessons-Floor A0, Ausnahmefall-Backstop für `.claude/memory.md`), `skills/new-project/SKILL.md`, `skills/adopt/SKILL.md`, `templates/_shared/`.
 - Entscheidungsquelle: Owner-Entscheid 2026-07-18 (Dialog-Session, „Orchestrator kuratiert nach Abschluss, Veraltetes löschen").
