@@ -18,6 +18,16 @@
 # zweite Korrektur — KEINE Mindestanzahl von 2: der Weg ist für 1 Story
 # genauso gültig wie für 30, kein Sonderfall).
 #
+# ID-Block-Reservierung (docs/specs/id-block-reservation.md, AC1/AC2/AC5/
+# AC7/AC10/AC11): VOR der ersten Story-Session reserviert dieses Skript über
+# scripts/board-id-reserve.sh je Namespace (BR/ADR/C) einen zusammen-
+# hängenden Nummernblock im zentralen Ledger board/id-reservations.yaml
+# (committet auf origin/<default_branch>) — verhindert kollidierende
+# Neu-IDs zwischen parallel laufenden Feature-Batches. Scheitert die
+# Reservierung endgültig, bricht dieses Skript VOR jeder Story-Session ab
+# (kein Blind-Vergabe-Risiko). Nach dem finalen Merge werden die
+# Reservierungen freigegeben (High-Water-Mark bleibt stehen).
+#
 # Blockade-Verhalten (Owner-Entscheidung 2026-07-06): Bleibt eine Story
 # BEWUSST Blocked (status=="Blocked"), wartet das GANZE Feature — kein
 # Timeout, kein Teil-Deploy der bereits fertigen Storys. Das Skript beendet
@@ -53,7 +63,9 @@ cd "$REPO_ROOT"
 
 BOARD_SCRIPT="${SCRIPT_DIR}/board"
 SHIP_SCRIPT="${SCRIPT_DIR}/board-ship.sh"
+ID_RESERVE_SCRIPT="${SCRIPT_DIR}/board-id-reserve.sh"
 FEATURE_BRANCH="feature/${FEATURE_ID}"
+ID_RESERVE_NAMESPACES="BR ADR C"
 
 log() { echo "[board-feature-drain] $*"; }
 die() { echo "FEHLER [board-feature-drain]: $*" >&2; exit 1; }
@@ -209,6 +221,26 @@ print(",".join(out))
 PYEOF
 }
 
+id_reservations_summary() {
+  # Menschenlesbare Zusammenfassung der für dieses Feature aktiven/genutzten
+  # ID-Block-Reservierungen (docs/specs/id-block-reservation.md AC3/AC4) —
+  # gelesen aus dem Ledger (board/id-reservations.yaml, authoritativ auf
+  # origin/<default_branch>). Reine Lese-Operation, kein Fehlerfall blockiert
+  # den Drain (best-effort, analog generate_dossier).
+  local json
+  json="$("$ID_RESERVE_SCRIPT" show "$FEATURE_ID" 2>/dev/null || echo '[]')"
+  python3 - "$json" <<'PYEOF'
+import sys, json
+entries = json.loads(sys.argv[1] or "[]")
+if not entries:
+    print("(keine aktiven ID-Block-Reservierungen)")
+else:
+    for e in entries:
+        hw = e.get("high_water")
+        print(f"- {e['namespace']}: {e['range_start']}-{e['range_end']} (status: {e['status']}, high_water: {hw if hw is not None else '-'})")
+PYEOF
+}
+
 generate_dossier() {
   # Feature-Kontext-Dossier (einmalig, best-effort, AC13/E4): erzeugt
   # board/runs/<F-###>/dossier.md über EINE claude -p-Session, BEVOR die erste
@@ -223,7 +255,15 @@ generate_dossier() {
   # OHNE --dangerously-skip-permissions (anders als die Story-Session weiter
   # unten): kleinerer Blast-Radius, da der Prompt Freitext (Story-Titel) aus
   # board/stories/*.yaml einbettet (Prompt-Injection-Fläche).
+  #
+  # id-block-reservation AC3: die für dieses Feature reservierten ID-Blöcke
+  # werden VOR dem LLM-Abschnitt deterministisch in dossier.md geschrieben
+  # (menschenlesbar neben dem Ledger). Bleibt E4 (Dossier-Session scheitert)
+  # unverändert: die GESAMTE Datei (inkl. ID-Block-Abschnitt) wird dann
+  # entfernt — kein Sonderfall, kein Teil-Dossier.
   local dossier_file="${RUN_DIR}/dossier.md"
+  local id_blocks
+  id_blocks="$(id_reservations_summary)"
   local stories_summary
   stories_summary="$(python3 - "$FEATURE_ID" <<'PYEOF'
 import sys, glob, yaml
@@ -260,7 +300,12 @@ ${stories_summary}
 Schreibe ein knappes Markdown-Dossier mit folgenden Abschnitten: Feature-Ziel, betroffene Specs + AC-Nummern, sinnvolle Story-Reihenfolge/Abhängigkeiten, Architektur-Hinweise, bekannte Fallen. Halte es kurz (kein Roman) — es dient als vorangestellter Kontext für jede einzelne Story-Session dieses Features."
 
   mkdir -p "$RUN_DIR"
-  if timeout 120s "${BOARD_FEATURE_DRAIN_CLAUDE_CMD:-claude}" -p "$prompt" > "$dossier_file" 2>/dev/null; then
+  {
+    echo "## Reservierte ID-Blöcke (id-block-reservation)"
+    echo "$id_blocks"
+    echo
+  } > "$dossier_file"
+  if timeout 120s "${BOARD_FEATURE_DRAIN_CLAUDE_CMD:-claude}" -p "$prompt" >> "$dossier_file" 2>/dev/null; then
     if [[ -s "$dossier_file" ]]; then
       log "Feature-Kontext-Dossier erzeugt (${dossier_file})."
       return 0
@@ -429,6 +474,29 @@ if ! git rev-parse "origin/${FEATURE_BRANCH}" >/dev/null 2>&1; then
   log "Feature-Branch ${FEATURE_BRANCH} neu angelegt (von origin/${DEFAULT_BRANCH})."
 fi
 
+# --- ID-Block-Reservierung: VOR der ersten Story-Session (id-block-reservation
+# AC1/AC2/AC5/AC7/AC11). Konservativ ALLE drei Standard-Namespaces (Spec AC1:
+# "mindestens BR, ADR, C — konservativ: alle drei, sofern nicht explizit
+# ausgeschlossen"). Idempotent (AC7): ein erneuter Drain-Start desselben
+# Features erkennt die bestehende aktive Reservierung und legt keinen
+# zweiten Block an. Scheitert die Reservierung endgültig (AC11, nach
+# Retries in board-id-reserve.sh): die() bricht HIER ab, VOR jeder
+# Story-Session — last_error wird über den bestehenden EXIT-Trap gesetzt.
+# Gilt NUR, wenn dieser Lauf tatsächlich eine Story-Session starten wird
+# (CUR_DONE < CUR_TOTAL) — ein idempotenter Re-Lauf eines BEREITS
+# vollständigen Features (AC1-Wortlaut: "vor der ERSTEN Story-Session")
+# startet keine Session und reserviert daher auch nichts (kein Ledger-Diff,
+# feature-batch-orchestration-Idempotenz bleibt gewahrt).
+if [[ "$CUR_DONE" -lt "$CUR_TOTAL" ]]; then
+  for ns in $ID_RESERVE_NAMESPACES; do
+    "$ID_RESERVE_SCRIPT" reserve "$ns" "$FEATURE_ID" >/dev/null \
+      || die "ID-Block-Reservierung für Namespace ${ns}/${FEATURE_ID} fehlgeschlagen (siehe Log oben) — kein Story-Start ohne gültige Reservierung."
+  done
+  log "ID-Blöcke reserviert (${ID_RESERVE_NAMESPACES// /, }) für ${FEATURE_ID} — siehe board/id-reservations.yaml."
+else
+  log "Feature ${FEATURE_ID} bereits vollständig (${CUR_DONE}/${CUR_TOTAL}) — keine ID-Block-Reservierung nötig (idempotenter Re-Lauf, keine neue Story-Session)."
+fi
+
 # --- Feature-Kontext-Dossier: einmalig, VOR der ersten Story-Session (AC13) ---
 generate_dossier
 
@@ -535,6 +603,16 @@ fi
 CUR_PHASE="rollout"
 CUR_DONE="$CUR_TOTAL"
 state_write "$CUR_PHASE" "$CUR_STORY" "$CUR_DONE" "$CUR_TOTAL" "$CUR_ROUND" "-"
+
+# --- ID-Block-Freigabe (id-block-reservation AC10): NUR nach erfolgreichem
+# finalen Merge — markiert alle aktiven Reservierungen dieses Features als
+# `released` (High-Water-Mark bleibt aus den `consume`-Aufrufen der
+# Story-Sessions stehen; ungenutzte Bereiche werden für spätere
+# Reservierungen wiederverwendbar). Nicht fatal: der Merge/Rollout ist
+# bereits erfolgreich, ein Ledger-Cleanup-Fehler soll das nicht rückgängig
+# machen — bleibt im Fehlerfall einfach mit aktiven Einträgen stehen.
+"$ID_RESERVE_SCRIPT" release "$FEATURE_ID" >/dev/null \
+  || log "WARN: ID-Reservierungs-Freigabe für ${FEATURE_ID} fehlgeschlagen (nicht fatal — Ledger bleibt mit aktiven Einträgen stehen)."
 
 log "Feature ${FEATURE_ID} vollständig gelandet + deployt."
 
