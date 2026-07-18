@@ -1,0 +1,37 @@
+# board/id-reservations.yaml — zentrales Reservierungs-Ledger für
+# ID-Nummernblöcke bei parallelen Feature-Batches.
+#
+# Spec: docs/specs/id-block-reservation.md ("Verträge" — Feldnamen/Enums sind
+# verbindlich, Änderungen nur über Spec-Fortschreibung). COMMITTET auf dem
+# default_branch (im Gegensatz zum gitignoreten board/runs/) — cross-Batch-
+# sichtbare Single Source of Truth. Wird NIE von Hand editiert, sondern
+# ausschliesslich über `scripts/board-id-reserve.sh` (reserve/extend/consume/
+# release/seed) mutiert (atomar, fetch+commit+push mit Retry gegen
+# origin/<default_branch>).
+#
+# Ausnahme — Erstinbetriebnahme (docs/specs/id-block-reservation.md, Edge-Case
+# "Bestehende, historisch vergebene IDs unterhalb des ersten Blocks"): der
+# C-Namespace-Eintrag unten entspricht exakt dem Ergebnis von
+# `scripts/board-id-reserve.sh seed C 2` (Bestand agent-flow: C-001/C-002,
+# siehe CONCEPT.md) und wurde einmalig von Hand ins committete Ledger
+# übernommen, um den allerersten `reserve C ...`-Aufruf gegen den echten
+# Bestand statt gegen ein leeres Ledger zu berechnen. BR/ADR haben in
+# agent-flow (Stand 2026-07-18) keinen realen Bestand — leere reservations
+# bleiben korrekt.
+schema_version: 1
+namespaces:
+  BR:
+    block_size: 10
+    reservations: []
+  ADR:
+    block_size: 10
+    reservations: []
+  C:
+    block_size: 10
+    reservations:
+      - feature_id: _bestand
+        range_start: 1
+        range_end: 2
+        status: active
+        reserved_at: '2026-07-18T00:00:00Z'
+        high_water: 2
