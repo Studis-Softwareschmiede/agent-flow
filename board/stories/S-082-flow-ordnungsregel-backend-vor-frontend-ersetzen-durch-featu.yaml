@@ -1,7 +1,7 @@
 id: S-082
 parent: F-018
 title: '/flow: Ordnungsregel Backend-vor-Frontend ersetzen durch feature-weise Fertigstellung'
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/vertical-slice-stories.md
 implements:
@@ -16,9 +16,9 @@ dispo_forecast: null
 estimate_note: S-Heuristik; dispo_est aus baseline md|balanced|S (n=5); keine Baseline-Tokens
 confidence: medium
 tok_est: null
-branch: null
+branch: feat/S-082-flow-ordnungsregel
 pr: null
 blocked_reason: null
 created_at: '2026-07-18T13:51:27Z'
-updated_at: '2026-07-18T13:52:18Z'
+updated_at: '2026-07-18T15:22:57Z'
 done_at: null
