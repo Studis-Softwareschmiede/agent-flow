@@ -43,7 +43,7 @@ Die angezeigte Version eines Projekts soll **immer** dem tatsächlich laufenden 
 
 ## Acceptance-Kriterien
 
-- **AC1** — EINE Build-Zeit-Quelle: `templates/_shared/build.yml` übergibt `--build-arg APP_VERSION=<build-version>` **und** die git-SHA (`github.sha`) an `docker/build-push-action`; alle abgeleiteten Metadaten (Datei, ENV, Labels) stammen aus diesen Werten — **keine** zweite Versionsquelle. *(deckt Muster 1)*
+- **AC1** — EINE Build-Zeit-Quelle: `templates/_shared/build.yml` übergibt `--build-arg APP_VERSION=<build-version>` **und** `--build-arg GIT_SHA=<github.sha>` an `docker/build-push-action` (kanonischer Build-Arg-Name für die git-SHA: `GIT_SHA`); alle abgeleiteten Metadaten (Datei, ENV, Labels) stammen aus diesen Werten — **keine** zweite Versionsquelle. *(deckt Muster 1)*
 - **AC2** — Jedes **Service-Dockerfile** (`js`, `java`, `python`) nimmt `ARG APP_VERSION` (+ git-SHA-ARG) entgegen und **brennt die Version zur Build-Zeit in eine unveränderliche Image-Datei** (kanonischer Pfad `/app/VERSION`); die Datei ist Image-Bestandteil, nicht ENV-abgeleitet. *(deckt Muster 2)*
 - **AC3** — Der `/version`-Endpunkt-Vertrag liest die Version aus der gebrannten **Datei**, nicht aus der ENV; Fallback-Kette **Datei → ENV → "dev"**, fail-soft (nie 5xx). *(deckt Muster 2, E1)*
 - **AC4** — Jedes Dockerfile (Service **und** Frontend) setzt die **OCI-Standard-Labels** `org.opencontainers.image.version` (=`APP_VERSION`), `org.opencontainers.image.revision` (=git-SHA), `org.opencontainers.image.created` (=Build-Zeit UTC) aus derselben Quelle; im geteilten `build.yml` leiten sich dieselben Labels aus `APP_VERSION`/git-SHA ab (z.B. `docker/metadata-action`-Inputs), nie aus einer abweichenden zweiten Quelle. *(deckt Muster 3)*
@@ -60,13 +60,13 @@ Die angezeigte Version eines Projekts soll **immer** dem tatsächlich laufenden 
 
 ### Geänderte / neue Scaffold-Artefakte
 ```
-templates/_shared/build.yml            # build-args APP_VERSION + git-SHA; OCI-Labels aus derselben Quelle
-templates/js/Dockerfile                # ARG APP_VERSION → /app/VERSION brennen + OCI-LABEL
-templates/java/Dockerfile              # ARG APP_VERSION → /app/VERSION brennen + OCI-LABEL
-templates/python/Dockerfile            # ARG APP_VERSION → /app/VERSION brennen + OCI-LABEL
-templates/html/Dockerfile              # ARG APP_VERSION → version.json in served-dir + nginx no-cache index.html + OCI-LABEL
-templates/flutter/Dockerfile           # ARG APP_VERSION → --dart-define/version.json + nginx no-cache index.html + OCI-LABEL
-templates/angular/Dockerfile           # ARG APP_VERSION → Build-Env/version.json + nginx no-cache index.html + OCI-LABEL
+templates/_shared/build.yml            # build-args APP_VERSION + GIT_SHA (=github.sha); OCI-Labels aus derselben Quelle
+templates/js/Dockerfile                # ARG APP_VERSION, ARG GIT_SHA → /app/VERSION brennen + OCI-LABEL
+templates/java/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA → /app/VERSION brennen + OCI-LABEL
+templates/python/Dockerfile            # ARG APP_VERSION, ARG GIT_SHA → /app/VERSION brennen + OCI-LABEL
+templates/html/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA → version.json in served-dir + nginx no-cache index.html + OCI-LABEL
+templates/flutter/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA → --dart-define/version.json + nginx no-cache index.html + OCI-LABEL
+templates/angular/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA → Build-Env/version.json + nginx no-cache index.html + OCI-LABEL
 templates/_shared/<nginx-no-cache-snippet>   # geteilte nginx-Konfig für no-cache index.html (Frontend-Templates)
 templates/_docs/specs/version-endpoint.md    # NEU: sprach-neutrale /version-Endpunkt-Spec-Vorlage (Bootstrap-kopiert)
 <Board-Story „Version-Endpunkt">       # idempotent, To Do, spec: docs/specs/version-endpoint.md (im Ziel-Projekt)

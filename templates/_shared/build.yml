@@ -29,6 +29,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # EINE Build-Zeit-Quelle (docs/specs/build-version-stamping.md AC1): APP_VERSION
+      # + git-SHA werden hier EINMAL bestimmt und unverändert an build-args UND Labels
+      # weitergereicht. Keine zweite Versionsquelle (z.B. kein separates ENV im Dockerfile).
+      - name: Build-Version bestimmen
+        id: version
+        run: |
+          echo "app_version=$(TZ=Europe/Zurich date +'%y%m%d%H%M%S')" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -36,12 +44,19 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.app_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.version.outputs.created }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.app_version }}
+            GIT_SHA=${{ github.sha }}
 # Härtung später (train/teamLeader): Actions auf SHA pinnen.
 #
 # SECRETS — Build-Time-Pfad (INAKTIV, P1):
