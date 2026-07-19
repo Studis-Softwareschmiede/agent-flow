@@ -12,6 +12,7 @@ area: anforderung-intake
 stories:
 - S-079
 - S-081
-progress: 2/2 done
+- S-088
+progress: 2/3 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-18T15:45:01Z'
+updated_at: '2026-07-19T13:57:22Z'
