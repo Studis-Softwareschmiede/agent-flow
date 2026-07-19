@@ -64,10 +64,12 @@ templates/_shared/build.yml            # build-args APP_VERSION + GIT_SHA (=gith
 templates/js/Dockerfile                # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → /app/VERSION brennen + OCI-LABEL
 templates/java/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → /app/VERSION brennen + OCI-LABEL
 templates/python/Dockerfile            # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → /app/VERSION brennen + OCI-LABEL
-templates/html/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA → version.json in served-dir + nginx no-cache index.html + OCI-LABEL
-templates/flutter/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA → --dart-define/version.json + nginx no-cache index.html + OCI-LABEL
-templates/angular/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA → Build-Env/version.json + nginx no-cache index.html + OCI-LABEL
-templates/_shared/<nginx-no-cache-snippet>   # geteilte nginx-Konfig für no-cache index.html (Frontend-Templates)
+templates/html/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → version.json in served-dir + nginx no-cache index.html + OCI-LABEL
+templates/html/nginx.conf              # NEU: template-lokale nginx-Konfig für no-cache index.html
+templates/flutter/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → version.json in served-dir + nginx no-cache index.html + OCI-LABEL
+templates/flutter/nginx.conf           # NEU: template-lokale nginx-Konfig für no-cache index.html
+templates/angular/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → version.json in served-dir + nginx no-cache index.html + OCI-LABEL
+templates/angular/nginx.conf           # NEU: template-lokale nginx-Konfig für no-cache index.html
 templates/_docs/specs/version-endpoint.md    # NEU: sprach-neutrale /version-Endpunkt-Spec-Vorlage (Bootstrap-kopiert)
 <Board-Story „Version-Endpunkt">       # idempotent, To Do, spec: docs/specs/version-endpoint.md (im Ziel-Projekt)
 ```
