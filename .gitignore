@@ -18,7 +18,15 @@ board/runs/
 # Projekt-lokale Lessons (Tier-1, von reviewer.md geschrieben) — NIE committen
 # Sie sind per Spec-Lifecycle projekt-lokal; retro promotet sie via PR ins
 # globale knowledge/ (4 Schutzgitter, siehe agents/retro.md).
-.claude/lessons/
+# Ausnahme: der G3-Cooldown-Stempel .retro-last-run MUSS versioniert werden,
+# sonst geht er im (auch hier, dogfooding) verworfenen Working-Tree verloren
+# und G3 wird wirkungslos (docs/specs/retro-cooldown-persistence.md AC1).
+# `.claude/lessons/*` statt `.claude/lessons/` ist hier bewusst gewählt:
+# gitignore kann Dateien in einem komplett ignorierten Verzeichnis NICHT
+# per `!`-Regel re-includen (gitignore(5)); mit `*` bleibt das Verzeichnis
+# selbst nicht ignoriert, nur sein Inhalt — die Negation greift dadurch.
+.claude/lessons/*
+!.claude/lessons/.retro-last-run
 
 # OS / Editor
 .DS_Store
