@@ -56,6 +56,12 @@ docker run -d --name "$app" \
   "${image}:latest"
 ```
 
+### Konkretisierung der Platzhalter (bindend für `cicd`/`preview`)
+
+- **Existence-Guard:** der Mount erfolgt **nur**, wenn das Projekt einen Admin-Bereich hat (`config/admin-manifest.yaml` existiert) **und** `db_dialect = none` ist. Fehlt die Datei → kein Admin-Bereich in diesem Projekt → kein Mount, kein Fehler (graceful, analog `db-subsystem.md` §14-Amendment). Ist `db_dialect != none` → die Settings-Tabelle liegt bereits im DB-Volume (A1) → ebenfalls kein separates Mount.
+- **`settings_mount`** ist fabrikweit fix `/data` (analog zur bestehenden SQLite-Konvention `-v <volume>:/data`, `docs/architecture/db-subsystem.md` §12) — konfliktfrei, weil der Mount nur bei `db_dialect = none` greift und `/data` dort sonst ungenutzt ist.
+- **`settings_volume`**-Namenskonvention: `agents/cicd.md` (Einzelcontainer, kein Compose-Project) → `${app}-settings-data`; `skills/preview/SKILL.md` (`up`) → `${compose_project}_settings_data` (analog `db_volume`).
+
 ## Edge-Cases & Fehlerverhalten
 
 - **Volume fehlt beim Rollout** → Einstellungen sind nach Redeploy verloren; Reviewer-Befund (Rollout mountet kein Settings-Volume).

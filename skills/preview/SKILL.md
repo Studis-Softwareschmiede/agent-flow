@@ -19,11 +19,13 @@ cwd = Ziel-Projekt-Repo (für `up`/`down` **ohne** Argument; liest `.claude/prof
 - `container_port` ← **nach dem Pull aus dem Image** ableiten: `docker inspect --format '{{range $p,$_ := .Config.ExposedPorts}}{{$p}} {{end}}' "${image}:latest"` → erste Portnummer; Fallback `80`.
 - `preview_port` ← **erste freie** ab `8080` (Laufzeit, nicht persistiert — evtl. kein lokales Profil).
 - `db_dialect` ← **immer `none`** (Spec §12 — repo-loser Preview kann den DB-Dialekt nicht aus dem ghcr-Image ableiten; nur App-Container). Hinweis ausgeben: „Repo-loser Preview unterstützt keine DB; im Repo ausführen für vollen Stack."
+- `settings_volume` ← **immer leer, kein Mount** — der Guard `.claude/profile.md` (s. `SETTARG`, Schritt 3) ist in diesem Modus nie vorhanden, ein zufällig gleichnamiges `config/admin-manifest.yaml` im `cwd` löst also keinen Fehl-Mount aus.
 
 - `role` ← env `DEPLOY_ROLE` (sonst `local`); `domain` ← env `PREVIEW_DOMAIN` (nur bei `vps` nötig).
 - `compose_project` ← `preview-${app}-${preview_port}` (eindeutiger Compose-`-p`-Name pro Preview → **isoliertes Network + isolierte Volumes**, mehrere PR-Previews parallel ohne State-Race; Spec §12).
 - `db_volume` ← `${compose_project}_db_data` (vom Compose-Fragment automatisch als named-Volume mit diesem Prefix erzeugt; Spec §12).
 - `db_network` ← `${compose_project}_default` (Compose-implicit Default-Netz; App muss `--network "$db_network"` joinen, damit `db` per DNS auflösbar ist).
+- `settings_volume` ← nur im Repo-Modus (`.claude/profile.md` vorhanden), wenn das Projekt einen Admin-Bereich hat (`config/admin-manifest.yaml` existiert) **und** `db_dialect = none`: `${compose_project}_settings_data` (Settings-Daten-Volume, `docs/specs/admin-bereich-settings-rollout.md` AC1/AC3, BR-006). Bei DB-Projekten kein separates Volume — die Settings-Tabelle liegt bereits im DB-Volume (A1).
 
 ## up  [<app>]
 Ohne Argument: Image/App aus dem cwd-`profile.md`. Mit `<app>`: `image=ghcr.io/studis-softwareschmiede/<app-lowercase>`, kein Profil nötig (Name kleinschreiben!).
@@ -61,14 +63,22 @@ Ohne Argument: Image/App aus dem cwd-`profile.md`. Mit `<app>`: `image=ghcr.io/s
      postgres|mysql|mongodb) DBENV="-e DB_HOST=db" ;;
      sqlite)                 DBENV="-e DB_PATH=/data/app.db -v ${compose_project}_db_data:/data" ;;
    esac
+   # SETTARG: Settings-Daten-Volume (admin-bereich-settings-rollout AC1/AC3) — nur Repo-Modus
+   # (.claude/profile.md vorhanden, NIE bei repo-losem `up <app>`), Admin-Bereich vorhanden
+   # (config/admin-manifest.yaml) und db_dialect=none (sonst liegt die Settings-Tabelle bereits
+   # im DB-Volume, A1). Mountpunkt /data ist frei, da sqlite (einziger anderer /data-Nutzer)
+   # und db_dialect=none sich gegenseitig ausschliessen.
+   SETTARG=""
+   [ -f .claude/profile.md ] && [ -f config/admin-manifest.yaml ] && [ "$db_dialect" = "none" ] && \
+     SETTARG="-v ${compose_project}_settings_data:/data"
    docker run -d --name "$app" --label agent-flow.preview="$app" \
      --label agent-flow.compose-project="$compose_project" \
      --label agent-flow.db-dialect="$db_dialect" \
      --restart unless-stopped \
-     $NETARG $DBENV \
+     $NETARG $DBENV $SETTARG \
      -p "${preview_port}:${container_port}" "${image}:latest"
    ```
-   *(Die `agent-flow.compose-project`/`agent-flow.db-dialect`-Labels werden in `down`/`list` gebraucht — sie sind die einzige Quelle, um die DB-Stack-Zuordnung wiederzufinden, ohne erneut `profile.md` zu lesen.)*
+   *(Die `agent-flow.compose-project`/`agent-flow.db-dialect`-Labels werden in `down`/`list` gebraucht — sie sind die einzige Quelle, um die DB-Stack-Zuordnung wiederzufinden, ohne erneut `profile.md` zu lesen. Das Settings-Volume `${compose_project}_settings_data` überlebt `docker rm` + `docker run` unverändert — Persistenz über den Recreate ist dadurch strukturell gegeben, admin-bereich-settings-rollout AC3.)*
 4. **Smoke:** `curl -fsS -o /dev/null -w '%{http_code}' http://localhost:$preview_port/` → 200 erwartet (sonst Logs `docker logs "$app"` zeigen + melden; bei DB-Fehler auch `docker compose -p "$compose_project" logs db migrations`).
 5. **URL melden:** (DB ist intern, kein Port-Mapping → URL unverändert zur Variante ohne DB)
    - `local` → **`http://localhost:$preview_port`**
@@ -176,6 +186,15 @@ Flags:
      [ -n "$db_dialect" ] && docker compose -p "$compose_project" -f "$FRAG" down
      ```
      Volume überlebt für späteres `up` (gleicher `compose_project` → gleiches Volume).
+3a. **Settings-Daten-Volume** (nur wenn `db_dialect` leer/`none` — bei DB-Projekten liegt die Settings-Tabelle im DB-Volume aus Schritt 3, hier nichts zu tun; `admin-bereich-settings-rollout` AC1):
+   - Default (Volume löschen, wie beim DB-Volume — Preview ist disposable):
+     ```
+     { [ -z "$db_dialect" ] || [ "$db_dialect" = "none" ]; } && \
+       docker volume rm "${compose_project}_settings_data" >/dev/null 2>&1 || true
+     ```
+   - Mit `--keep-data`: dieser Schritt entfällt — das Volume bleibt für ein späteres `up` mit demselben State (gleicher `compose_project` → gleiches Volume).
+
+   Existiert kein Settings-Volume (Projekt ohne Admin-Bereich), ist `docker volume rm` ein No-Op (unterdrückter Fehler) — kein Crash.
 4. `role=vps`: Tunnel-Ingress-Regel für `$app` entfernen + DNS-CNAME `$app.$domain` via Cloudflare-API löschen.
 5. **Optional `--prune`:** `docker rmi "${image}:latest"` (lokales Image; aus ghcr jederzeit wieder ziehbar).
 6. **NIE anfassen:** ghcr-Image, Repo, Board, Issues, ghcr-DB-Images (`postgres:17-alpine` etc. — bleiben für nächstes `up` im lokalen Cache).
@@ -206,4 +225,5 @@ Listet die **previewbaren Apps** der Org (= Projekt-Repos → ghcr-Image-Kandida
 - TTL = manuell: eine Preview lebt bis `/preview down`.
 - DB ist **intern pro Preview** (kein Port-Mapping nach außen — die `ports:`-Zeile im Compose-Fragment ist Preview/Dev-only und auskommentiert für postgres/mongodb; für mysql nur via env-Override). Preview-URL bleibt identisch zur DB-losen Variante.
 - DB-Volumes sind **pro Preview isoliert** (`preview-<app>-<port>_db_data`) — parallele PR-Previews kollidieren nicht, Default-`down` löscht das Volume (disposable).
+- **Settings-Daten-Volume** (Admin-Bereich, `admin-bereich-settings-rollout` AC1/AC3): bei Nicht-DB-Projekten mit Admin-Bereich analog isoliert pro Preview (`${compose_project}_settings_data`), Default-`down` löscht es, `--keep-data` behält es. Bei DB-Projekten kein separates Volume — die Settings-Tabelle liegt im DB-Volume.
 - **Validate-Cache (Schritt 0+6, Spec §18):** Cache-Hit (Flag gesetzt, Dialect+Companions unverändert) → kein Mini-Re-Validate (schneller preview-up). Cache-Miss → Mini-Re-Validate **best-effort**: FAIL bricht preview-up **nicht** ab (Dev-Loop-Verfügbarkeit > Verifikation; Fix via `/adopt re-validate` oder nächstes `/flow`-Item). Schwergewichtiger Coder-Fix-Loop lebt nur in `/adopt` §6, nicht hier.
