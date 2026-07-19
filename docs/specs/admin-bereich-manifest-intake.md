@@ -54,6 +54,8 @@ Ziel:          config/admin-manifest.yaml (Manifest-Vertrag BR-011)
 Default (autonom): editierbar:false; Secret-Namensmuster ⇒ secret:true
 ```
 
+**Feld-Defaults (beide Pfade, Owner-Antwort wie autonom):** `quelle: env`; `typ: secret` bei Secret-Namensmuster (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD*`, `*_URL`), sonst `typ: string`; `editierbar: false`; `secret: true` bei Secret-Namensmuster, sonst `false`; `validierung` leer (Verfeinerung projekt-lokal). Die Owner-Antwort bestimmt ausschliesslich, **welche** `.env`-Keys als Parameter aufgenommen werden — nicht die Feld-Werte selbst.
+
 ## Edge-Cases & Fehlerverhalten
 
 - **Kein `.env`/keine Keys vorhanden** → leeres Manifest-Gerüst mit Vertrags-Kommentar; Parameter kommen später projekt-lokal dazu.
