@@ -2,7 +2,7 @@ id: S-092
 parent: F-024
 title: 'Build-Versionierung: Versions-Endpunkt Scaffold-Standard — Spec-Vorlage +
   new-project/adopt-Wiring + idempotente Board-Story'
-status: To Do
+status: In Progress
 priority: P2
 spec: docs/specs/build-version-stamping.md
 implements:
@@ -22,9 +22,9 @@ estimate_note: S/M-Heuristik score~7 => M (n_ac=2, Endpunkt-Vorlage + new-projec
   aus baseline md|balanced|M.
 confidence: medium
 tok_est: '4736471'
-branch: null
+branch: feat/S-092-version-endpoint-scaffold
 pr: null
 blocked_reason: null
 created_at: '2026-07-19T14:28:53Z'
-updated_at: '2026-07-19T14:29:56Z'
+updated_at: '2026-07-19T16:38:19Z'
 done_at: null
