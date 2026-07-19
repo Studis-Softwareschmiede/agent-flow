@@ -39,8 +39,8 @@ Oder: `/cicd <verb> [<args>]` direkt (z.B. `/cicd ship`, `/cicd rollback <tag>`,
 | Produktiver Docker-Rollout (pull + rm + run, NICHT restart) | **cicd** |
 | Disk-Hygiene nach Rollout (`docker image prune -f`) | **cicd** — Pflichtschritt |
 | Rollback auf vorheriges Image/Tag | **cicd** |
-| Build-Zeit-Versionsstempel ins Image einbacken (`ARG`/`ENV` in Dockerfile) | **cicd** |
-| Versions-Endpunkt/-Dashboard (`GET /api/version`) planen + verifizieren | **cicd** |
+| Build-Zeit-Versionsstempel datei-/label-basiert ins Image einbacken (`ARG` → Datei + OCI-Labels in Dockerfile) | **cicd** |
+| Versions-Endpunkt/-Dashboard (`GET /version`) planen + Datei-/Label-Abgleich verifizieren | **cicd** |
 | Laufende `build.yml`-Pflege: rote Pipelines diagnostizieren + fixen | **cicd** |
 | Secret-Scan-Gate (gitleaks) in `build.yml` pflegen/härten | **cicd** |
 | Ephemerer Preview-Deploy (Dev/PR-Loop) | **`/preview`** — NICHT cicd |
@@ -191,13 +191,18 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
    ```bash
    docker pull "${image}:latest"
    ```
-3. **Versions-Stempel auslesen** (aus dem frisch gepullten Image):
+3. **Versions-Stempel auslesen** (Label-first, kanonische Reihenfolge — `cicd/P08`, `docs/specs/build-version-verification.md` AC2; aus dem frisch gepullten Image, noch kein neuer Container gestartet — der Datei-Read via `/version` folgt nach dem Recreate in Schritt 8):
    ```bash
-   BUILD_VERSION=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "${image}:latest" 2>/dev/null \
-     || docker inspect --format '{{index .Config.Labels "build.version"}}' "${image}:latest" 2>/dev/null \
-     || docker run --rm --entrypoint="" "${image}:latest" printenv BUILD_VERSION 2>/dev/null \
-     || echo "unknown")
+   BUILD_VERSION=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "${image}:latest" 2>/dev/null)
+   if [ -z "$BUILD_VERSION" ] || [ "$BUILD_VERSION" = "<no value>" ]; then
+     BUILD_VERSION=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${image}:latest" 2>/dev/null \
+       | sed -n 's/^APP_VERSION=//p')
+   fi
+   BUILD_VERSION="${BUILD_VERSION:-unknown}"
    ```
+   1. `org.opencontainers.image.version`-Label (aus der EINEN Build-Zeit-Quelle, [[build-version-stamping]] AC1/AC4) — primär.
+   2. ENV `APP_VERSION` des Images — **nur letzter Fallback** (recreate-überschreibbar, `cicd/F02`-Amendment), kein eigenes `build.version`-Label mehr (historisches Schema, abgelöst durch `cicd/P08`).
+   3. `"unknown"` wenn beides fehlt.
 4. **Alten Container-Tag merken (für Rollback):**
    ```bash
    PREV_TAG=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$app" 2>/dev/null || echo "")
@@ -240,11 +245,21 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
    HTTP_CODE=$(curl -fsS -o /dev/null -w '%{http_code}' "http://localhost:${preview_port}/" 2>/dev/null || echo "000")
    ```
    Schlägt fehl → Logs zeigen (`docker logs "$app" --tail 50`), `Rollout-Gate: FAIL` melden.
-8. **Versions-Endpunkt abgleichen** (falls vorhanden, best-effort):
+8. **Versions-Abgleich Datei vs. Label** (nach dem Recreate, best-effort — Erweiterung des bisherigen Versions-Endpunkt-Abgleichs, **kein Duplikat**: `cicd/P08`, `docs/specs/build-version-verification.md` AC3):
    ```bash
-   VERSION_ENDPOINT=$(curl -fsS "http://localhost:${preview_port}/api/version" 2>/dev/null || echo "")
+   RUNNING_VERSION=$(curl -fsS "http://localhost:${preview_port}/version" | jq -r '.version' 2>/dev/null || echo "")
+   IMAGE_VERSION="$BUILD_VERSION"
+   if [ -n "$RUNNING_VERSION" ]; then
+     if [ "$RUNNING_VERSION" = "$IMAGE_VERSION" ]; then
+       echo "Version-Abgleich: OK ($RUNNING_VERSION)"
+     else
+       echo "Version-Abgleich: WARN mismatch (running=$RUNNING_VERSION image=$IMAGE_VERSION) — mögliche ENV-Overwrite-Regression"
+     fi
+   else
+     echo "Version-Abgleich: /version fehlt — Spec-Lücke (A1, cicd/P01), kein Rollout-Blocker"
+   fi
    ```
-   Enthält der Response `$BUILD_VERSION` → Verifikation OK. Fehlt der Endpunkt → Hinweis ausgeben, nicht scheitern.
+   `RUNNING_VERSION` kommt aus der **gebrannten Datei** (App-Selbstauskunft via `/version`, von innen), `IMAGE_VERSION` aus dem OCI-Label (von außen, Schritt 3) — beide Quellen sind unabhängig befüllt, deshalb ist ihr Abgleich aussagekräftig (kein Zirkelschluss). Mismatch → **sichtbare WARN** im Rollout-Output, **kein Hard-Fail** (Diagnose-Signal, E1). Fehlt `/version` (Alt-Projekt, noch nicht migriert) → Hinweis ausgeben, nicht scheitern (A1, `cicd/P01`).
 
 **A3-VPS (Variante):** Wenn `DEPLOY_ROLE=vps` (aus factory-`.env` oder `/etc/softwareschmiede/role`): Rollout läuft remote auf dem VPS; `bash scripts/decrypt-env.sh` auf dem VPS ausführen (Passphrase ist dort provisioniert — eine der vier Ketten-Quellen, Spec §3); danach Container-Recreate mit `--env-file .env` **inkl. `$SETTINGS_VOLARG` aus 5b** (Cross-Repo-Hinweis: der dev-gui-VPS-Rollout muss dasselbe Settings-Daten-Volume mounten, sonst gehen Admin-Bereich-Einstellungen beim Redeploy verloren — `docs/specs/admin-bereich-settings-rollout.md` AC2); Cloudflare-Route sicherstellen (s. CONCEPT §8a). Sequenz identisch zu lokal, URL = `https://<app>.<domain>`.
 
@@ -327,43 +342,54 @@ Wenn der Code bereits gelandet ist (z.B. nach manuellem Merge bei `pr`-Policy) u
 
 ## D. Build-Metadaten / Versionsstempel (`version-stamp`)
 
-**Ziel:** Build-Zeitstempel (Europe/Zurich, Format `yyMMddHHmmss ZZZ`) + ggf. Git-SHA ins Image einbacken — zur Build-Zeit, nicht zur Container-Start-Zeit.
+**Ziel:** Die Build-Version wird **datei-/label-basiert** ins Image gebrannt — nicht ENV-only (`docs/specs/build-version-verification.md` AC1, `docs/specs/build-version-stamping.md`, `cicd/F02`-Amendment). Container-Recreate-Werkzeuge übernehmen die ENV des Alt-Containers 1:1 und frieren so eine ENV-only-Versionsanzeige ein; eine gebrannte Image-Datei ist recreate-immun. Quelle: **EINE** Build-Zeit-Quelle (`APP_VERSION` + git-SHA), aus der sich Datei **und** OCI-Labels ableiten.
 
-1. **Dockerfile prüfen** (ob `ARG`/`ENV BUILD_VERSION` bereits vorhanden):
+1. **Dockerfile prüfen** (ob das datei-basierte Schema bereits vorhanden ist):
    ```
-   grep -n "BUILD_VERSION\|build.version\|org.opencontainers.image.version" Dockerfile || echo "not found"
+   grep -n "ARG APP_VERSION\|RUN echo.*APP_VERSION.*>\|org.opencontainers.image.version" Dockerfile || echo "not found"
    ```
-2. Falls NICHT vorhanden → `Dockerfile` und `build.yml` anpassen (Schritt 3–4).
-3. **Dockerfile-Pattern einbauen** (additiv, vor dem `CMD`/`ENTRYPOINT`):
+   Findet der grep nur das **historische** ENV-only-Schema (`ARG BUILD_VERSION`/`ENV BUILD_VERSION`/`LABEL build.version` ohne gebrannte Datei) → wie „not found" behandeln, auf das datei-basierte Schema migrieren (Schritt 3–4) — `cicd/F02`-Amendment.
+2. Falls NICHT vorhanden (oder nur das historische Schema) → `Dockerfile` und `build.yml` anpassen (Schritt 3–4).
+3. **Dockerfile-Pattern einbauen** (additiv, vor dem `CMD`/`ENTRYPOINT`; Service-Projekte — Frontend-Templates brennen statt `/app/VERSION` ein `version.json` im served-dir, siehe `templates/{html,flutter,angular}/Dockerfile`):
    ```dockerfile
-   ARG BUILD_VERSION=dev
-   ENV BUILD_VERSION=$BUILD_VERSION
-   LABEL build.version=$BUILD_VERSION
-   LABEL org.opencontainers.image.version=$BUILD_VERSION
+   ARG APP_VERSION=dev
+   ARG GIT_SHA=unknown
+   ARG BUILD_CREATED=""
+   RUN echo "$APP_VERSION" > /app/VERSION
+
+   LABEL org.opencontainers.image.version="$APP_VERSION" \
+         org.opencontainers.image.revision="$GIT_SHA" \
+         org.opencontainers.image.created="$BUILD_CREATED"
    ```
-4. **`build.yml`-Pattern einbauen** (im `docker build`-Schritt, additiv):
+   Die Version landet **in einer Datei** (`/app/VERSION` bzw. `version.json`) — die ENV-Zuweisung entfällt bewusst (kein `ENV APP_VERSION=…` mehr); die OCI-Labels stammen aus **denselben** `ARG`-Werten wie die Datei, keine zweite Quelle (Vorlage: `templates/js/Dockerfile`).
+4. **`build.yml`-Pattern einbauen** (EINE Build-Zeit-Quelle für `build-args` **und** Labels, additiv — Vorlage: `templates/_shared/build.yml`):
    ```yaml
-   - name: Build and push
-     uses: docker/build-push-action@v5
+   - name: Build-Version bestimmen
+     id: version
+     run: |
+       echo "app_version=$(TZ=Europe/Zurich date +'%y%m%d%H%M%S')" >> "$GITHUB_OUTPUT"
+       echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+   - id: meta
+     uses: docker/metadata-action@v5
      with:
+       images: ghcr.io/${{ github.repository }}
+       labels: |
+         org.opencontainers.image.version=${{ steps.version.outputs.app_version }}
+         org.opencontainers.image.revision=${{ github.sha }}
+         org.opencontainers.image.created=${{ steps.version.outputs.created }}
+   - uses: docker/build-push-action@v6
+     with:
+       labels: ${{ steps.meta.outputs.labels }}
        build-args: |
-         BUILD_VERSION=${{ env.BUILD_VERSION }}
+         APP_VERSION=${{ steps.version.outputs.app_version }}
+         GIT_SHA=${{ github.sha }}
    ```
-   Und vor dem Build-Step eine `env`-Zeile setzen:
-   ```yaml
-   env:
-     BUILD_VERSION: ${{ github.run_number }}-${{ github.sha }}
+   `APP_VERSION` (Format `yyMMddHHmmss`, Europe/Zurich) und `github.sha` sind die **einzige** Quelle — `build-args` und `labels` leiten sich aus denselben Werten ab, keine zweite Versionsvariable.
+5. **Versions-Endpunkt-Hinweis** (nicht implementieren — das ist coder-Aufgabe; nur als Spec-Lücke melden, falls `/version` nicht existiert):
    ```
-   Alternativ (Format `yyMMddHHmmss ZZZ`, Europe/Zurich):
-   ```yaml
-   - name: Set build version
-     run: echo "BUILD_VERSION=$(TZ=Europe/Zurich date +'%y%m%d%H%M%S %Z')" >> $GITHUB_ENV
-   ```
-5. **Versions-Endpunkt-Hinweis** (nicht implementieren — das ist coder-Aufgabe; nur als Spec-Lücke melden, falls `/api/version` nicht existiert):
-   ```
-   SPEC-HINWEIS: Versions-Endpunkt (GET /api/version → {"version":"<BUILD_VERSION>"}) fehlt.
-   Als Board-Item anlegen: Spec docs/specs/version-endpoint.md, AC1: GET /api/version antwortet
-   200 mit aktuellem BUILD_VERSION-Wert.
+   SPEC-HINWEIS: Versions-Endpunkt (GET /version → {"version":"<APP_VERSION>", "revision":"<git-sha>", "source":"file|env|dev"}) fehlt.
+   Als Board-Item anlegen: Spec docs/specs/version-endpoint.md, AC1: GET /version liest aus der
+   gebrannten Datei (Fallback Datei → ENV → "dev", fail-soft, nie 5xx).
    ```
 6. Output: geänderte Dateien (`Dockerfile`, `.github/workflows/build.yml`) + Hinweis auf Versions-Endpunkt.
 
@@ -381,7 +407,7 @@ Wenn der Code bereits gelandet ist (z.B. nach manuellem Merge bei `pr`-Policy) u
    - **gitleaks False-Positive:** `REDACTED`-Pattern im Log → gitleaks-Allowlist in `.gitleaks.toml` ergänzen (nur wenn nachweislich kein echtes Secret — Befund ohne Beweis → nicht whitelisten).
    - **GITHUB_TOKEN `packages: write` fehlt:** Image-Push `denied` → `permissions: packages: write` in `build.yml` prüfen.
    - **Action-Version veraltet:** `uses: actions/checkout@v2` o.Ä. → auf aktuelle stable Version updaten.
-   - **Build-Args nicht weitergegeben:** `BUILD_VERSION` im Dockerfile aber nicht in `build-args:` → Pattern aus Abschnitt D einbauen.
+   - **Build-Args nicht weitergegeben:** `APP_VERSION`/`GIT_SHA` im Dockerfile aber nicht in `build-args:` → Pattern aus Abschnitt D einbauen.
 4. **Fix vorbereiten** (editiert `.github/workflows/build.yml` oder `.gitleaks.toml` oder `Dockerfile` direkt im Working-Tree). **Kein App-Code**, kein Spec-Drift.
 5. Output: was gefixt wurde + `ci-fix-Gate: PASS | NEEDS-HUMAN` (letzteres wenn das Problem nicht klar identifizierbar oder mehrdeutig ist).
 
