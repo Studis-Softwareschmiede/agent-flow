@@ -2,7 +2,7 @@ id: S-089
 parent: F-024
 title: 'Build-Versionierung: CI-Workflow — EINE Quelle (APP_VERSION + git-SHA) → build-args
   + OCI-Labels'
-status: In Progress
+status: Done
 priority: P1
 spec: docs/specs/build-version-stamping.md
 implements:
@@ -14,15 +14,16 @@ labels:
 - cicd
 size_est: M
 dispo_est: '3.0'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '3'
+dispo_forecast: '0'
 estimate_note: 'S/M-Heuristik score~5 => M (n_ac=2, ~3 Komp: build.yml/build-push/metadata-action).
   Baseline md|balanced|M (ep 3.0, tok 4736471, n=24); tok_est aus baseline md|balanced|M.'
 confidence: medium
 tok_est: '4736471'
 branch: feat/S-089-ci-version-source
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/377
 blocked_reason: null
 created_at: '2026-07-19T14:28:46Z'
-updated_at: '2026-07-19T14:31:38Z'
-done_at: null
+updated_at: '2026-07-19T14:40:39Z'
+done_at: '2026-07-19T14:39:36Z'
+tok: '46478132'
