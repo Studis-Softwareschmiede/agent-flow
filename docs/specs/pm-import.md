@@ -69,6 +69,16 @@ Notizen aus dem pm-skills-Plugin (PRD, Problem-Statement, Hypothesen, User Stori
 | `launch-checklist` / `prd`: Milestones | Zerlege-Hinweise für Stufe c | AC8 |
 | Frontmatter `version` / Revision History | Idempotenz-/Divergenz-Anker | zusätzlicher Vergleichsanker neben `sync_hash` (AC6) |
 
+**Heuristik-Signale (Struktur-Fallback, AC1 — nur wenn `artifact:` fehlt; synchron mit `scripts/pm-intake-gate.py::looks_like_pm`, dort das mechanische Vor-Gate, hier die vom Pipeline-Skill angewandte Klassifikation):**
+
+| Signal in der Notiz | vermuteter Typ |
+|---|---|
+| `FR-n` vorhanden **und** Sektion „Functional Requirements" | `prd` |
+| Zeile beginnt mit `Given`/`When`/`Then` | `acceptance-criteria` |
+| Sektionen „Decision" **und** „Consequences" vorhanden | `adr` |
+| `US-n` vorhanden **und** Sektion „User Stories" | `user-stories` |
+| kein Signal trifft | unklassifiziert → Ideen-Pfad |
+
 **Frontmatter der erzeugten Spec:** exakt nach `templates/_docs/specs/_template.md` — `id` (feature-slug aus dem PRD-Titel, kebab-case, stabil), `title`, `status: draft`, `version: 1`, `spec_format`-Stempel aus der Vorlage, `area` via `requirement`-Intake (`[[requirement-area-intake]]`).
 
 ## Edge-Cases & Fehlerverhalten
