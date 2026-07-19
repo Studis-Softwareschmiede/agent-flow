@@ -39,28 +39,38 @@ docker compose up -d --force-recreate   # --force-recreate ist Pflicht; ohne es 
 ### cicd/F02 — Versionsstempel zur Container-Start-Zeit, nicht zur Build-Zeit
 **Problem:** `ENV BUILD_VERSION=$(date ...)` in der `RUN`-Anweisung oder beim `docker run` als `-e BUILD_VERSION=$(date ...)` gesetzt — dann zeigt jeder Container-Neustart ein neues Datum, obwohl das Image unverändert ist.
 
-**Korrekt:** Der Stempel wird **zur Build-Zeit** via Docker `ARG` gesetzt (GitHub Actions schreibt ihn in `build-args`). Das Image trägt den unveränderlichen Build-Zeitpunkt.
+**Korrekt (Build-Zeit-Quelle):** Der Stempel wird **zur Build-Zeit** via Docker `ARG` gesetzt (GitHub Actions schreibt ihn in `build-args`). Das Image trägt den unveränderlichen Build-Zeitpunkt.
 
+> **Amendment (flashrescue, 2026-07-19) — auch build-zeit-gesetzte ENV bleibt ein Laufzeit-Anti-Pattern:**
+> Selbst wenn der Stempel korrekt zur Build-Zeit via `ARG`→`ENV` gesetzt wird, darf die **ENV** zur Laufzeit nicht die alleinige Selbstauskunfts-Quelle sein. Befund: Container-Recreate-Werkzeuge (z.B. dev-guis „Update") übernehmen beim Neuaufbau die **ENV des Alt-Containers 1:1** — inkl. der alten `APP_VERSION`/`BUILD_VERSION` — und überschreiben damit die des neuen Images. Ergebnis: neuer Code läuft, die Versionsanzeige bleibt auf dem alten Stand **eingefroren**, wiederholt Fehlalarm beim Betreiber.
+> **Fix:** Die Selbstauskunft (`/version`) liest aus einer **beim Build ins Image gebrannten Datei** (kanonisch `/app/VERSION`, siehe [[build-version-stamping]] AC2/AC3), nicht aus der ENV — die Datei ist recreate-immun, die ENV nicht. Die ENV bleibt nur **letzter Fallback**, wenn die Datei fehlt (Lese-/Abgleich-Reihenfolge und Rationale: `cicd/P08`).
+
+**Aktuelles Schema (Standard der Schmiede, siehe [[build-version-stamping]]):**
 ```dockerfile
-ARG BUILD_VERSION=dev
-ENV BUILD_VERSION=$BUILD_VERSION
-LABEL build.version=$BUILD_VERSION
-LABEL org.opencontainers.image.version=$BUILD_VERSION
+ARG APP_VERSION=dev
+ARG GIT_SHA=unknown
+ARG BUILD_CREATED=""
+RUN echo "$APP_VERSION" > /app/VERSION
+
+LABEL org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.created="$BUILD_CREATED"
 ```
 
 ```yaml
-# .github/workflows/build.yml
-- name: Set build version
-  run: echo "BUILD_VERSION=$(TZ=Europe/Zurich date +'%y%m%d%H%M%S %Z')" >> $GITHUB_ENV
-
+# templates/_shared/build.yml
 - name: Build and push
-  uses: docker/build-push-action@v5
+  uses: docker/build-push-action@v6
   with:
     build-args: |
-      BUILD_VERSION=${{ env.BUILD_VERSION }}
+      APP_VERSION=${{ steps.version.outputs.app_version }}
+      GIT_SHA=${{ github.sha }}
+    labels: ${{ steps.meta.outputs.labels }}   # docker/metadata-action setzt .created zusätzlich auf Registry-Ebene
 ```
 
-**Format (Standard der Schmiede):** `yyMMddHHmmss ZZZ` (Europe/Zurich) + optional `-<git-sha-short>` (8 Zeichen) für Traceability.
+**Historisches Schema (abgelöst, nicht mehr Standard):** `ARG BUILD_VERSION` / `ENV BUILD_VERSION` / `LABEL build.version` / `/api/version`-Endpunkt aus reiner ENV-Auskunft — ersetzt durch datei-gebrannte `APP_VERSION` + OCI-Standard-Labels + `/version` (`cicd/P08`). Alte Board-/Repo-Referenzen auf `build.version`/`BUILD_VERSION`/`/api/version` sind Bestandsschema, kein aktueller Zielzustand für neue Projekte.
+
+**Format (Standard der Schmiede, weiterhin gültig für den `APP_VERSION`-Wert selbst):** `yyMMddHHmmss ZZZ` (Europe/Zurich) + optional `-<git-sha-short>` (8 Zeichen) für Traceability. Wie der Wert die App zur Laufzeit erreicht, hat sich geändert (Datei statt ENV-Selbstauskunft — siehe Amendment oben).
 
 ---
 
@@ -171,6 +181,8 @@ Die Zuordnung erfolgt **ausschliesslich** über `headSha == eigene SHA`. Ob übe
 ## Patterns / Best-Practices (P-Regeln)
 
 ### cicd/P01 — Rollout-Verifikation via Versions-Endpunkt
+> **Historisches Schema, für neue Projekte abgelöst durch `cicd/P08` — siehe dort.** Gültig nur noch für Bestandsprojekte, die noch nicht auf das datei-/label-basierte Schema migriert sind.
+
 Nach `docker run` (frische Instanz) den Build-Stempel gegen den laufenden Container abgleichen:
 ```bash
 RUNNING_VERSION=$(curl -fsS "http://localhost:${port}/api/version" | jq -r '.version' 2>/dev/null || echo "")
@@ -182,7 +194,9 @@ Fehlt der Endpunkt → als Spec-Lücke melden (Board-Item anlegen); kein Blocker
 
 ---
 
-### cicd/P02 — Versions-Endpunkt-Spec (Standard der Schmiede)
+### cicd/P02 — Versions-Endpunkt-Spec (historisches Schema)
+> **Historisches Schema, für neue Projekte abgelöst durch `cicd/P08` — siehe dort.** Gültig nur noch für Bestandsprojekte, die noch nicht auf das datei-/label-basierte Schema migriert sind.
+
 Ein einfacher HTTP-Endpunkt `GET /api/version` antwortet mit:
 ```json
 { "version": "<BUILD_VERSION>", "built": "<ISO-Datetime optional>" }
@@ -269,9 +283,35 @@ fi   # sonst: Fenster weiterbeobachten (Webhook-Verzögerung) statt fremden Run 
 
 ---
 
+### cicd/P08 — Datei-gebrannte Version als Selbstauskunfts-Quelle (ENV nur letzter Fallback)
+Die laufende Version wird **datei-/label-first** gelesen, nie ENV-first — weil Recreate-Werkzeuge die ENV überschreiben (`cicd/F02`-Amendment), das Image aber nicht:
+
+```
+1. docker inspect → org.opencontainers.image.version   (Label, von außen, Registry-Metadatum)
+2. curl /version   → { version } aus gebrannter Datei    (App-Selbstauskunft, von innen)
+3. ENV APP_VERSION                                        (letzter Fallback)
+4. "unknown"/"dev"
+```
+
+**Version-Abgleich nach dem Rollout** (Erweiterung von `cicd/P01`, nicht Duplikat):
+```bash
+RUNNING_VERSION=$(curl -fsS "http://localhost:${port}/version" | jq -r '.version' 2>/dev/null || echo "")
+IMAGE_VERSION=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "${image}:latest")
+[ "$RUNNING_VERSION" = "$IMAGE_VERSION" ] && echo "OK" || echo "WARN: version mismatch (mögliche ENV-Overwrite-Regression)"
+```
+Mismatch → **sichtbare WARN**, kein Hard-Fail (Diagnose-Signal, kein Rollout-Blocker).
+
+**Invariante — eine App kann ihre eigenen OCI-Labels nicht von innen lesen:** `org.opencontainers.image.*`-Labels sind Registry-/`docker inspect`-Metadaten für Tools, kein vom laufenden Prozess lesbares Datei-/ENV-Artefakt. Die App selbst kann sie deshalb **nicht** als `/version`-Quelle nutzen. Der Abgleich liest sie darum von außen (`docker inspect`, Schritt 1 oben) gegen die App-eigene `/version`-Auskunft (datei-basiert, Schritt 2) — beide Quellen sind unabhängig voneinander befüllt, deshalb ist ihr Abgleich aussagekräftig (kein Zirkelschluss).
+
+**Frontend-Ergänzung:** bei Web-Frontends ohne serverseitigen `/version`-Endpunkt trägt ein zur Build-Zeit erzeugtes `version.json` im served-dir dieselbe Rolle; `index.html` wird mit `Cache-Control: no-cache`/kurzer Cache-Control ausgeliefert, damit die GUI-Version beim Deploy sofort mitzieht (kein langlebiger Edge-Cache auf dem Einstieg).
+
+Löst die frühere `build.version`-Label-/`/api/version`-Praxis (`cicd/P01`/`cicd/P02`, historisches Schema) für neue Projekte ab, siehe `cicd/F02`-Amendment. Scaffold-Bausteine (Dockerfile/build.yml je Sprach-Template): [[build-version-stamping]]. Rationale + Read-/Abgleich-Reihenfolge: [[build-version-verification]] AC2/AC3/AC5/AC6.
+
+---
+
 ## Reviewer-Checklist (für den `reviewer`-Agenten)
 - CI-Workflow-Änderungen (`build.yml`): `permissions: packages: write` vorhanden? Secret-Scan vor Build-Step? (`cicd/P03`, `cicd/F04`)
-- Dockerfile-Änderungen: `ARG BUILD_VERSION` + `ENV BUILD_VERSION` + `LABEL build.version` vorhanden? (`cicd/F02`)
+- Dockerfile-Änderungen: wird die Version zur Build-Zeit in eine **Datei** gebrannt (kanonisch `/app/VERSION` bzw. `version.json` bei Frontends), nicht nur als ENV gesetzt? OCI-Standard-Labels (`org.opencontainers.image.version`/`.revision`/`.created`) aus derselben Quelle vorhanden? ENV als **alleinige** Laufzeit-Versionsquelle ohne Datei-Fallback → **Important** (`cicd/F02`, `cicd/P08`)
 - Rollout-Skripte/-Doku: `docker restart` statt `rm + run`? → **Important** (`cicd/F01`)
 - Rollout-Skripte/-Doku: `docker image prune -f` vorhanden? Fehlt → **Important** (`cicd/F07`)
 - Rollout-Skripte/-Doku: CI-Watch vor `docker pull`? Fehlt → **Important** (`cicd/F06`)
@@ -282,7 +322,8 @@ fi   # sonst: Fenster weiterbeobachten (Webhook-Verzögerung) statt fremden Run 
 
 ## Test-Approach (für den `tester`-Agenten)
 - Nach einem Rollout: Smoke `curl -fsS http://localhost:<port>/` → HTTP 200.
-- Versions-Stempel-Check: `docker inspect --format '{{index .Config.Labels "build.version"}}' <image>:latest` → nicht leer, nicht `dev`.
+- Versions-Stempel-Check: `docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' <image>:latest` → nicht leer, nicht `dev`.
+- Version-Abgleich Datei/Label nach dem Rollout (`cicd/P08`): `curl -fsS http://localhost:<port>/version` (bzw. `version.json` bei Frontends) gegen `docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' <image>:latest` — bei Match `OK`, bei Mismatch **WARN** erwartet (kein Hard-Fail), mit Hinweis auf mögliche ENV-Overwrite-Regression.
 - CI-Pipeline nach dem Fix: `gh run list --limit 1 --json conclusion` → `success`.
 - Prune-Check: `docker images --filter dangling=true` → nach `prune -f` sollte die Liste leer sein.
 - CI-Gate-Skript (`cicd/F08`/`F09`), Fixture-Stil mit `gh`-Mocks: (a) Mock-Run mit `headSha` ≠ eigene SHA → gilt **nicht** als eigener Run, Fenster läuft weiter (keine `conclusion`-Auswertung); (b) kein Run für die eigene SHA auf **Nicht-`default_branch`** → Skip (Exit 0, kurze Laufzeit); (c) kein Run für die eigene SHA auf **`default_branch`** → **kein** Skip (Timeout/`die`, kein Rollout).
