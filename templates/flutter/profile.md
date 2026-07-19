@@ -1,6 +1,6 @@
 # Projekt-Profil (Vorlage: flutter) — new-project füllt <…> aus
 language: flutter
-domains: []
+domains: [ui]
 frameworks: []                          # optional Array — siehe docs/architecture/framework-build-subsystem.md §3
 build: flutter build web --release      # Freitext (Backwards-Compat) — flutter hat keinen kanonischen Build-Pack (Build = Sprach-Toolchain)
 test: flutter test

@@ -22,7 +22,7 @@ Der Admin-Bereich ist eine sicherheitskritische Standard-Komponente jeder UI-App
 
 - **AC1** — `knowledge/security.md` trägt Admin-Bereich-**⚑-Floor-Regeln** (Coder-Guidance): (a) Admin-Passwort als **argon2id**-Hash statt Klartext (→ BR-002, verschärft `security/R06`); (b) **Fehlversuch-Sperre/Rate-Limit** am Login (→ BR-009); (c) **signiertes HttpOnly+SameSite-Session-Cookie** (→ BR-010); (d) **CSRF-Schutz** auf state-ändernden Admin-Requests (→ BR-010); (e) **Secrets im UI maskiert** (→ BR-008); (f) **Setup-Seite nur von localhost** (→ BR-004, `security/R04`).
 - **AC2** — Die `knowledge/security.md`-**Reviewer-Checklist** trägt die Spiegel-Einträge zu AC1 mit Severity: Klartext-/schwaches Passwort-Hashing für den Admin-Login → **Critical**; fehlender Login-Rate-Limit → **Important**; fehlendes CSRF / kein HttpOnly+SameSite-Cookie am Admin-Bereich → **Important**; Setup-Seite ohne localhost-Beschränkung (auf VPS erreichbar) → **Critical**; Secret unmaskiert an den Browser ausgeliefert → **Important**.
-- **AC3** — Die **UI-Pack-Guidance** (`knowledge/ui.md`, anlegen falls nicht vorhanden) trägt das **generische Manifest-Rendering-Muster**: die Admin-UI wird aus `config/admin-manifest.yaml` gerendert (nicht pro Parameter handgebaut, → GE3/BR-011); `editierbar: false`-Parameter werden nur **maskiert angezeigt** (→ BR-007); `secret`-Parameter werden im UI **maskiert** (→ BR-008).
+- **AC3** — Die **UI-Pack-Guidance** (`knowledge/ui.md`, anlegen falls nicht vorhanden) trägt das **generische Manifest-Rendering-Muster**: die Admin-UI wird aus `config/admin-manifest.yaml` gerendert (nicht pro Parameter handgebaut, → GE3/BR-011); `editierbar: false`-Parameter werden nur **maskiert angezeigt** (→ BR-007); `secret`-Parameter werden im UI **maskiert** (→ BR-008). **Erreichbarkeit (Präzisierung):** der Pack-Lademechanismus lädt Domänen-Packs ausschließlich über `profile.domains` (kein automatisches UI-Projekt-Matching) — damit `ui/R01`–`R03` nicht totes Wissen bleiben, deklarieren die UI-Templates (`templates/{angular,html,flutter}/profile.md`) `ui` additiv in `domains` (analog `css`).
 
 > **Traceability:** Jeder Test trägt das kanonische Trace-Tag `@trace admin-bereich-knowledge-floor#AC<n>[,BR-NNN]`
 > gemäss `knowledge/<lang>.md` → `## Spec-Tagging`. Der `tester` rechnet das Coverage-Gate.
@@ -34,6 +34,9 @@ Der Admin-Bereich ist eine sicherheitskritische Standard-Komponente jeder UI-App
 ```
 knowledge/security.md   # ⚑ Admin-Bereich-Floor (Coder-Guidance + Reviewer-Checklist)
 knowledge/ui.md         # generisches Manifest-Rendering-Muster (anlegen falls fehlend)
+templates/angular/profile.md   # domains: [css, tailwind, ui] — additiv, Pack-Erreichbarkeit (AC3)
+templates/html/profile.md      # domains: [css, ui]           — additiv, Pack-Erreichbarkeit (AC3)
+templates/flutter/profile.md   # domains: [ui]                 — additiv, Pack-Erreichbarkeit (AC3)
 ```
 
 ## Edge-Cases & Fehlerverhalten
