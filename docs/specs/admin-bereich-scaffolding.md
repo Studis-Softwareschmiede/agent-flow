@@ -95,4 +95,4 @@ scripts/set-admin-password.sh        # kopiert aus templates/_shared/admin/ (exe
 - `docs/architecture/admin-bereich-subsystem.md` — bindende Geschäftsregeln (BR-001…BR-011) + gelockte Entscheidungen.
 - [[secrets-subsystem]] — `ADMIN_PASSWORD_HASH` via `.env`/`.env.gpg`; `set-admin-password.sh` ruft `encrypt-env.sh`.
 - [[regression-scaffolding]] — Vorbild für idempotentes Scaffold + Board-Story-Anlage.
-- `skills/new-project`, `skills/init`, `skills/adopt` — die Bootstrap-Skills, in die dieser Schritt eingebaut wird.
+- `skills/new-project` (deckt auch `/init` — es gibt kein separates `skills/init`), `skills/adopt` — die Bootstrap-Skills, in die dieser Schritt eingebaut wird.
