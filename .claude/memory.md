@@ -2,33 +2,38 @@
 > Kuratiert von /flow am Ende jeder Session. Max. 60 Zeilen.
 
 ## Aktueller Stand
-Das Board ist wieder leer — die 5 Stories des Owner-Auftrags vom 18.07.2026
-(Design-Freigabe-Gate + vertikale Schnitte, PRs #365–#369) sind gelandet.
-Neu in der Fabrik: (1) Der designer arbeitet im Vorschlags-/Freigabe-Modus —
-docs/design.md entsteht als Entwurf (owner_approved: null) und wird erst nach
-expliziter Owner-Freigabe bindend; /flow baut ui-gelabelte Stories nur mit
-freigegebenem design.md (§2c-Gate, headless → Blocked). from-notes Stufe b
-und requirement dispatchen den designer bei UI-Projekten; requirement vergibt
-das ui-Label deterministisch. (2) requirement zerlegt vertikal (Feature-
-Schnitte statt Schichten); die /flow-Ordnungsregel „Backend vor Frontend"
-ist durch feature-weise Fertigstellung ersetzt.
+Board leer — 11 Stories am 19.07.2026 gelandet (PRs #376–#387), zwei neue
+Fabrik-Standards: (1) **Admin-Bereich** für UI-Projekte: passwortgeschützter
+Konfig-Editor (nur Passwort, argon2id-Hash in .env via set-admin-password.sh,
+wandert über .env.gpg mit), deklaratives config/admin-manifest.yaml, Settings-
+Ablage auf Daten-Volume (/data) mit Vorrang über .env/config.yaml-Defaults;
+Scaffold in new-project 4g / adopt 2i, Floor security/R13–R16 + knowledge/ui.md
+(domains:[ui] in UI-Templates). (2) **Build-Versionierung** (flashrescue-
+Vorfall 19.07.): EINE Quelle APP_VERSION+GIT_SHA als build-args, Version ins
+Image gebrannt (/app/VERSION bzw. version.json), OCI-Labels, nginx no-cache
+auf index.html+version.json, cicd liest/vergleicht datei-/label-first statt
+ENV (cicd/P08), Version-Endpunkt-Scaffold in new-project 4h / adopt 2j.
 
 ## Letzte Arbeiten
-- S-078/S-079/S-080 (design-owner-approval): designer-Freigabe-Modus,
-  Intake-Einbindung (Ein-Katalog-Grundsatz in Stufe b gewahrt), /flow-§2c-
-  Bau-Gate. Je 1 Review-Iteration mit Befund (fehlendes Bash-Tool im
-  designer-Frontmatter; Abbruch-Zweig ohne Endzustand) — beide gefixt.
-- S-081/S-082 (vertical-slice-stories): requirement-Vertrag + AGENTS.md
-  vertikal, /flow-§0a-(b)-Ordnungsregel ersetzt. Jeweils PASS in Iteration 1.
-- Batch lief als /flow --all mit 3 Wellen (S-078‖S-081 → S-082 → S-079‖S-080),
-  Hot-Spot-Serialisierung AGENTS.md bzw. skills/flow/SKILL.md.
+- S-084/S-085/S-086/S-087/S-088 (admin-bereich-*): Scaffold-Fragment +
+  Wiring + Knowledge-Floor + Settings-Volume (cicd/preview) + requirement-
+  Manifest-Frage. Befunde: $-Quoting argon2-Hash in .env (eval zerstört),
+  knowledge/ui.md ohne domains:[ui] unerreichbar — beide gefixt.
+- S-089/S-090/S-091/S-092/S-093/S-094 (build-version-*): build.yml eine
+  Quelle, Service-/Frontend-Dockerfiles brennen Version, nginx.conf neu
+  (inkl. Scaffold-Wiring-Nachzug), Version-Endpunkt-Vorlage, cicd-Abgleich,
+  cicd-Pack F02-Amendment + P08.
+- S-083: .retro-last-run vom lessons-gitignore ausgenommen.
 
 ## Offene Fäden
-- AGENTS.md §1c (designer-Abschnitt) beschreibt noch den alten Ablauf ohne
-  Vorschlags-/Freigabe-Modus — kleiner Doku-Nachzug (reconcile oder Mini-Story).
-- board-ship.sh: `gh pr merge` scheitert weiterhin lokal, wenn main im
-  Hauptordner ausgecheckt ist (heute 4× reproduziert, PRs #365–#369 remote
-  sauber gemerged; Restschritte je Story manuell). Fix-Kandidat: orchestrator/L05.
-- Veraltete „1×/Woche"-Erwähnungen in metrics-subsystem.md /
-  metrics-retro-aggregation.md (Kontext-Prosa) — kleiner Doku-Nachzug.
-- dev-gui-Story für den Wellen-Plan-Konsum (Nachtwächter) noch anzulegen.
+- dev-gui: (a) VPS-Rollout muss Settings-Daten-Volume mounten (Hinweis in
+  agents/cicd.md A3 + admin-bereich-settings-rollout AC2), (b) Wellen-Plan-
+  Konsum-Story (Nachtwächter) weiterhin anzulegen.
+- Der konsumierende Admin-Bereich + /version-Endpunkt entstehen erst
+  projekt-lokal beim nächsten new-project/adopt-Lauf (Board-Story-Automatik).
+- board-ship.sh: `gh pr merge` scheitert lokal weiter (main im Hauptordner
+  ausgecheckt, heute 12× — PRs remote sauber gemerged, Restschritte manuell).
+- knowledge/cicd.md F05 nennt noch env.BUILD_VERSION (Tag-Beispiel) und F02
+  das Format „yyMMddHHmmss ZZZ" (real: ohne Zeitzone) — kleine Doku-Nachzüge.
+- AGENTS.md §1c (designer) beschreibt noch den alten Ablauf ohne Freigabe-
+  Modus — Doku-Nachzug offen (aus Vorsession).
