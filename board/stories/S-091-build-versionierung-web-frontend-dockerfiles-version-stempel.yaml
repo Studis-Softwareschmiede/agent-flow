@@ -2,7 +2,7 @@ id: S-091
 parent: F-024
 title: 'Build-Versionierung: Web-Frontend-Dockerfiles — Version-Stempel + no-cache
   index.html (html, flutter, angular)'
-status: In Progress
+status: Done
 priority: P1
 spec: docs/specs/build-version-stamping.md
 implements:
@@ -14,16 +14,17 @@ labels:
 - scaffolding
 size_est: L
 dispo_est: '5.5'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '7.5'
+dispo_forecast: -.2666
 estimate_note: Heuristik score~8 => L (n_ac=2, 3 Frontend-Dockerfiles + nginx-Snippet
   + 3 Inject-Mechaniken). estimator nicht dispatchbar (kein Task-Tool im Lauf) =>
   Baseline md|balanced|L (ep 5.5, tok 5236055, n=11); tok_est aus baseline md|balanced|L.
 confidence: low
 tok_est: '5236055'
 branch: feat/S-091-frontend-version-stamp
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/379
 blocked_reason: null
 created_at: '2026-07-19T14:28:46Z'
-updated_at: '2026-07-19T14:52:21Z'
-done_at: null
+updated_at: '2026-07-19T15:10:13Z'
+done_at: '2026-07-19T15:09:19Z'
+tok: '40507857'
