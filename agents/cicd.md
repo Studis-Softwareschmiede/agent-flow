@@ -208,6 +208,19 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
    ```
    **Invariante:** Das Image enthält **keine** App-Secrets — Secret-Injektion ist eine Laufzeit-Eigenschaft des Containers, nicht des Images. `build.yml` enthält **keinen** decrypt-Schritt und **kein** App-Secret (GE3, §8 Build-Time-Pfad inaktiv).
 
+5b. **Settings-Daten-Volume ermitteln** (Admin-Bereich-Fabrik-Standard, Spec [`docs/specs/admin-bereich-settings-rollout.md`](../../docs/specs/admin-bereich-settings-rollout.md) AC1, BR-006 — nur wenn das Projekt einen Admin-Bereich hat):
+   ```bash
+   SETTINGS_VOLARG=""
+   if [ -f config/admin-manifest.yaml ]; then
+     db_dialect="$(yq -r '.db_dialect // "none"' .claude/profile.md 2>/dev/null || echo none)"
+     if [ "$db_dialect" = "none" ]; then
+       settings_volume="${app}-settings-data"
+       SETTINGS_VOLARG="-v ${settings_volume}:/data"
+     fi   # DB-Projekt: Settings-Tabelle liegt bereits im DB-Volume — kein separates Mount nötig (A1)
+   fi
+   ```
+   Existence-Guard analog zu `db-subsystem.md` §14-Amendment: kein `config/admin-manifest.yaml` → kein Admin-Bereich in diesem Projekt → kein Mount, kein Fehler.
+
 6. **Container recreaten** (`--force-recreate`-Semantik — NIEMALS `docker restart`):
    ```bash
    docker rm -f "$app" 2>/dev/null || true
@@ -216,10 +229,11 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
      --label agent-flow.build-version="$BUILD_VERSION" \
      --restart unless-stopped \
      -p "${preview_port}:${container_port}" \
+     $SETTINGS_VOLARG \
      --env-file .env \
      "${image}:latest"
    ```
-   **Warum nicht `docker restart`:** `restart` startet denselben Container mit demselben alten Image-Layer neu — es zieht NICHT das neue Image. Das neue Image wird erst nach `rm + run` aktiv (`cicd/F01`).
+   **Warum nicht `docker restart`:** `restart` startet denselben Container mit demselben alten Image-Layer neu — es zieht NICHT das neue Image. Das neue Image wird erst nach `rm + run` aktiv (`cicd/F01`). **Settings-Daten-Volume (`$SETTINGS_VOLARG`, aus 5b):** ein benanntes Docker-Volume überlebt `docker rm` (ohne `-v`) und `docker run` unverändert — die Persistenz über den Recreate ist dadurch strukturell gegeben (admin-bereich-settings-rollout AC3).
 7. **Smoke-Verifikation:**
    ```bash
    sleep 2
@@ -232,7 +246,7 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
    ```
    Enthält der Response `$BUILD_VERSION` → Verifikation OK. Fehlt der Endpunkt → Hinweis ausgeben, nicht scheitern.
 
-**A3-VPS (Variante):** Wenn `DEPLOY_ROLE=vps` (aus factory-`.env` oder `/etc/softwareschmiede/role`): Rollout läuft remote auf dem VPS; `bash scripts/decrypt-env.sh` auf dem VPS ausführen (Passphrase ist dort provisioniert — eine der vier Ketten-Quellen, Spec §3); danach Container-Recreate mit `--env-file .env`; Cloudflare-Route sicherstellen (s. CONCEPT §8a). Sequenz identisch zu lokal, URL = `https://<app>.<domain>`.
+**A3-VPS (Variante):** Wenn `DEPLOY_ROLE=vps` (aus factory-`.env` oder `/etc/softwareschmiede/role`): Rollout läuft remote auf dem VPS; `bash scripts/decrypt-env.sh` auf dem VPS ausführen (Passphrase ist dort provisioniert — eine der vier Ketten-Quellen, Spec §3); danach Container-Recreate mit `--env-file .env` **inkl. `$SETTINGS_VOLARG` aus 5b** (Cross-Repo-Hinweis: der dev-gui-VPS-Rollout muss dasselbe Settings-Daten-Volume mounten, sonst gehen Admin-Bereich-Einstellungen beim Redeploy verloren — `docs/specs/admin-bereich-settings-rollout.md` AC2); Cloudflare-Route sicherstellen (s. CONCEPT §8a). Sequenz identisch zu lokal, URL = `https://<app>.<domain>`.
 
 ### A4. Disk-Hygiene (Pflichtschritt)
 
