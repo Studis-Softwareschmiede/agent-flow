@@ -1,7 +1,7 @@
 id: S-085
 parent: F-024
 title: 'Admin-Bereich: new-project/init/adopt-Wiring + idempotente Board-Story'
-status: To Do
+status: In Progress
 priority: P2
 spec: docs/specs/admin-bereich-scaffolding.md
 implements:
@@ -21,9 +21,9 @@ estimate_note: Heuristik score~9 => L (n_ac=4, ~5 Komp). estimator nicht dispatc
   => Baseline md|balanced|L (ep 5.5, tok 5236055, n=11).
 confidence: low
 tok_est: '5236055'
-branch: null
+branch: feat/S-085-admin-wiring
 pr: null
 blocked_reason: null
 created_at: '2026-07-19T13:55:29Z'
-updated_at: '2026-07-19T13:56:18Z'
+updated_at: '2026-07-19T15:30:23Z'
 done_at: null
