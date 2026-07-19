@@ -61,9 +61,9 @@ Die angezeigte Version eines Projekts soll **immer** dem tatsächlich laufenden 
 ### Geänderte / neue Scaffold-Artefakte
 ```
 templates/_shared/build.yml            # build-args APP_VERSION + GIT_SHA (=github.sha); OCI-Labels aus derselben Quelle
-templates/js/Dockerfile                # ARG APP_VERSION, ARG GIT_SHA → /app/VERSION brennen + OCI-LABEL
-templates/java/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA → /app/VERSION brennen + OCI-LABEL
-templates/python/Dockerfile            # ARG APP_VERSION, ARG GIT_SHA → /app/VERSION brennen + OCI-LABEL
+templates/js/Dockerfile                # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → /app/VERSION brennen + OCI-LABEL
+templates/java/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → /app/VERSION brennen + OCI-LABEL
+templates/python/Dockerfile            # ARG APP_VERSION, ARG GIT_SHA, ARG BUILD_CREATED → /app/VERSION brennen + OCI-LABEL
 templates/html/Dockerfile              # ARG APP_VERSION, ARG GIT_SHA → version.json in served-dir + nginx no-cache index.html + OCI-LABEL
 templates/flutter/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA → --dart-define/version.json + nginx no-cache index.html + OCI-LABEL
 templates/angular/Dockerfile           # ARG APP_VERSION, ARG GIT_SHA → Build-Env/version.json + nginx no-cache index.html + OCI-LABEL
@@ -91,6 +91,7 @@ GET /version   →  200  { "version": "<APP_VERSION>", "revision": "<git-sha>", 
 - **Lokaler `docker build` ohne `--build-arg APP_VERSION`** → `ARG APP_VERSION=dev` als Default; gebrannte Datei enthält `dev`, `/version` liefert `dev` (kein Fehler).
 - **Container-Recreate mit übernommener Alt-ENV** → irrelevant: `/version` liest die Datei, nicht die ENV; die Anzeige zieht mit dem neuen Image mit (Kern-Ziel).
 - **Frontend ohne serverseitigen Endpunkt** (statisches nginx) → Version als Stempel-Artefakt im served-dir (`version.json`/Meta), Einstieg no-cache → GUI zeigt die neue Version nach Hard-Reload/Deploy sofort.
+- **`org.opencontainers.image.created` im Dockerfile ohne `--build-arg BUILD_CREATED`** → Docker `LABEL` kann Zeitstempel nicht selbst berechnen (keine Kommandosubstitution), daher `ARG BUILD_CREATED=""` als Default; das geteilte `build.yml` setzt den korrekten `created`-Wert unabhängig davon bereits auf Registry-Ebene (`docker/metadata-action` → `labels:`-Input von `docker/build-push-action`, überschreibt/ergänzt Dockerfile-`LABEL`s beim Push) — im veröffentlichten Image ist der Wert also immer korrekt gesetzt, unabhängig vom Dockerfile-ARG-Default.
 
 ## NFRs
 
