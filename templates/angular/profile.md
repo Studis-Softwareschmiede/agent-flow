@@ -1,6 +1,6 @@
 # Projekt-Profil (Vorlage: angular) — new-project füllt <…> aus
 language: angular
-domains: [css, tailwind]
+domains: [css, tailwind, ui]
 frameworks: ["angular@<major>"]   # via /adopt aus package.json gesetzt; siehe docs/architecture/framework-build-subsystem.md §3
 build: npm run build              # Freitext (Backwards-Compat) ODER kanonisch: npm | pnpm | uv | maven | gradle | cargo | none
 test: "npm test -- --watch=false --browsers=ChromeHeadless"

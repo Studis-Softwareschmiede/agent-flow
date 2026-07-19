@@ -1,6 +1,6 @@
 # Projekt-Profil (Vorlage: html) — new-project füllt <…> aus
 language: html
-domains: [css]
+domains: [css, ui]
 frameworks: []          # statische Seite — keine Frameworks; siehe docs/architecture/framework-build-subsystem.md §3
 build: "true"          # statisch, kein Build (kanonisch wäre: none)
 test: "true"           # Smoke = Seite lädt
