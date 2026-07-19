@@ -1,7 +1,7 @@
 id: S-084
 parent: F-024
 title: 'Admin-Bereich: Spec-Vorlage + Scaffold-Fragment (Manifest + set-admin-password.sh)'
-status: In Progress
+status: Done
 priority: P1
 spec: docs/specs/admin-bereich-scaffolding.md
 implements:
@@ -15,16 +15,17 @@ labels:
 - security
 size_est: L
 dispo_est: '5.5'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '5.5'
+dispo_forecast: '0'
 estimate_note: Heuristik score~10 => L (n_ac=4, ~5 Komp, +1 security). estimator im
   requirement-Lauf nicht dispatchbar => Baseline md|balanced|L (ep 5.5, tok 5236055,
   n=11).
 confidence: low
 tok_est: '5236055'
 branch: feat/S-084-admin-scaffold
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/376
 blocked_reason: null
 created_at: '2026-07-19T13:55:19Z'
-updated_at: '2026-07-19T13:59:57Z'
-done_at: null
+updated_at: '2026-07-19T14:19:12Z'
+done_at: '2026-07-19T14:18:12Z'
+tok: '69695550'
