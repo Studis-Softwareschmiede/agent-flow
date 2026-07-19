@@ -2,7 +2,7 @@ id: S-091
 parent: F-024
 title: 'Build-Versionierung: Web-Frontend-Dockerfiles — Version-Stempel + no-cache
   index.html (html, flutter, angular)'
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/build-version-stamping.md
 implements:
@@ -21,9 +21,9 @@ estimate_note: Heuristik score~8 => L (n_ac=2, 3 Frontend-Dockerfiles + nginx-Sn
   Baseline md|balanced|L (ep 5.5, tok 5236055, n=11); tok_est aus baseline md|balanced|L.
 confidence: low
 tok_est: '5236055'
-branch: null
+branch: feat/S-091-frontend-version-stamp
 pr: null
 blocked_reason: null
 created_at: '2026-07-19T14:28:46Z'
-updated_at: '2026-07-19T14:29:46Z'
+updated_at: '2026-07-19T14:52:21Z'
 done_at: null
