@@ -13,6 +13,9 @@ stories:
 - S-079
 - S-081
 - S-088
-progress: 2/3 done
+- S-095
+- S-096
+- S-097
+progress: 3/6 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-19T13:57:22Z'
+updated_at: '2026-07-19T17:28:07Z'

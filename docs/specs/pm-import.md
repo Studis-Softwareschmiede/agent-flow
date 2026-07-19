@@ -1,7 +1,7 @@
 ---
 id: pm-import
 title: PM-Import — pm-skills-Artefakte als strukturierte Requirement-Quelle (Erweiterung obsidian-ingest)
-status: draft
+status: active
 area: anforderung-intake
 version: 1
 spec_format: use-case-2.0
