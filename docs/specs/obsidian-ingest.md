@@ -3,7 +3,7 @@ id: obsidian-ingest
 title: Obsidian-Ingest — Notiz-Ordner als Requirement-Quelle (Notiz → Konzept → Spec → Stories)
 status: active
 area: anforderung-intake
-version: 2
+version: 3
 spec_format: use-case-2.0
 ---
 
@@ -15,6 +15,7 @@ spec_format: use-case-2.0
 > **Schwester-Spec:** `[[obsidian-sync]]` (der Re-Sync-Modus) teilt Reader + Fragenkatalog-Gate dieser Spec.
 > **Konzept-Herkunft:** `(← C-002)` — CONCEPT.md §11 „Entschieden (Idea-Roundtrip, 07.07.2026)", entstanden aus Ideennotiz `IDEA-002` (`Agent Flow – Konzept Idea-Intake.md`).
 > **Erweitert 07.07.2026 (Idea-Roundtrip, Subsystem-Vertrag §4b/§5a):** ID-Kette + Frontmatter-Stempel (AC15–AC18) und `--audit`-Modus (AC19–AC22); das frühere Komplett-Verbot „kein Schreiben in den Vault" ist durch das **Zonen-Modell** ersetzt (AC6/AC17). Der Rückkanal Repo→Vault ist NICHT hier, sondern `[[reconcile]]` Stufe 3.
+> **Erweitert 20.07.2026 (Headless-Ausgabevertrag, AC23–AC25):** Ein explizites Aufruf-Signal `--gui` schaltet den **Headless-JSON-Modus** — statt interaktivem `AskUserQuestion` endet jede Runde mit **genau einem** JSON-Objekt (`{status:"needs-answers",catalog:[…]}` bzw. `{status:"done"}`), damit der dev-gui-`ObsidianIngestRunner` das Runden-Ende maschinenlesbar erkennt. Behebt einen reproduzierten Defekt (Pilot-Lauf research-app, Session a69c8b13, 2026-07-19): der headless Lauf gab einen korrekt aufgebauten Stufe-a-Fragenkatalog als **Fliesstext** aus, worauf der Runner „Lauf fehlgeschlagen (kein JSON-Ausgang)" klassifizierte.
 
 ## Zweck
 `/agent-flow:from-notes <ordnerpfad>` speist einen **Obsidian-Projektordner** (mehrere freie `.md`-Notizen aus der
@@ -163,14 +164,58 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
   `id`, Ketten-Bezug, Klasse, Fundstelle), damit dev-gui ihn später rendern kann — **ohne** Änderung an
   agent-flow.
 
+### Headless-Ausgabevertrag — `--gui`-Signal + JSON-Endausgabe (dev-gui-Schnittstelle, 20.07.2026)
+- **AC23** — **Explizites Headless-Signal `--gui` (keine Heuristik):** Ein zusätzliches Aufruf-Token `--gui`
+  wird — genau wie `--cost`/`--sync`/`--audit` — **vor** der Ordnerpfad-Auswertung herausgeparst und gehört
+  **nicht** zum Ordnerpfad. Ist es gesetzt, läuft die Pipeline im **Headless-JSON-Modus**: **kein** interaktives
+  `AskUserQuestion`, stattdessen die JSON-Endausgabe nach AC24. Fehlt das Token, bleibt das **heutige interaktive
+  Verhalten** (Katalog via `AskUserQuestion`) **unverändert** — rückwärtskompatibel, keine Verhaltensänderung für
+  den Terminal-/Direktaufruf. Das Signal ist **explizit** (der Aufrufer sendet es); die Pipeline **rät nie** anhand
+  von TTY-/Umgebungs-Heuristiken, ob sie headless läuft. `--gui` ist mit den bestehenden Modi kombinierbar
+  (`--gui --sync`, `--gui --cost <mode>`); es ändert **nur den Ausgabekanal** des Fragenkatalog-Gates, **nicht** die
+  Stufen-Logik, die Reihenfolge oder die Schreibzonen.
+- **AC24** — **Genau EIN JSON-Objekt als Runden-Ende (Headless-Vertrag):** Im `--gui`-Modus endet **jede Runde**
+  (Initial-Lauf **und** jeder Resume nach beantworteten Fragen, Stufe a/b/c **und** `sync` gleichermassen) mit
+  **genau EINEM** JSON-Objekt als **letzter Ausgabe** — der finalen Assistant-Nachricht, sodass
+  `claude -p … --output-format json` es unverändert in `.result` liefert. **KEIN Fliesstext nach dem JSON**
+  (weder Erklärung noch Zusammenfassung):
+  - **Anstehendes Fragenkatalog-Gate** (≥1 offene Frage in der gerade erreichten Stufe) →
+    `{ "status": "needs-answers", "catalog": [ … ] }`, wobei `catalog` **exakt** die Liste der Frage-Objekte
+    gemäss `board/fragenkatalog.schema.json` ist (Feldmenge `stage`/`id`/`frage`/`quelle`/optional `optionen`
+    unverändert; `stage` = die anhaltende Stufe `a|b|c|sync`). Der Katalog wird vor der Ausgabe durch den
+    bestehenden Gate-Validator (`scripts/obsidian-fragenkatalog-validate.sh`) geprüft; nur ein `valid`-Katalog wird
+    als `needs-answers` ausgegeben.
+  - **Kein offenes Gate mehr / vollständiger Durchlauf** → `{ "status": "done" }`.
+  Ein **leerer** Katalog wird **nie** als `needs-answers` ausgegeben (Konsistenz mit AC8: leer → Auto-Durchlauf,
+  die Stufe läuft weiter, das Runden-Ende ist dann entweder das nächste anstehende Gate oder `done`).
+- **AC25** — **Fehlerpfad bleibt Fehler (kein künstliches Status-JSON):** Fehlerfälle — klarer Abbruch (E1/E2,
+  AC2/AC5), Aufruffehler oder eine Katalog-Vertragsverletzung — dürfen im `--gui`-Modus weiterhin mit
+  **exitCode ≠ 0** und/oder Freitext-Meldung enden; der Runner erkennt das ohnehin als „Lauf fehlgeschlagen".
+  Es wird **kein** `{status:…}`-JSON künstlich über einen echten Fehler gelegt (kein vorgetäuschtes `done`/
+  `needs-answers`). Der JSON-Endvertrag (AC24) gilt **ausschliesslich** für die regulären Runden-Enden
+  (Gate erreicht bzw. Durchlauf fertig).
+
 > **Traceability:** Jeder Test trägt das kanonische Trace-Tag `@trace obsidian-ingest#AC<n>`
 > gemäss `knowledge/<lang>.md` → `## Spec-Tagging`. Der `tester` rechnet das Coverage-Gate
 > (jede genannte AC ≥ 1 deckender Test). Details: `docs/architecture/traceability-subsystem.md`.
 
 ## Verträge
-- **Skill-Befehl:** `/agent-flow:from-notes <ordnerpfad>` (Ingest) · `--audit` (Integritätsprüfung, AC19–AC22).
-  Auslöser dünn (dev-gui POST `/api/command`), gesamte Logik in agent-flow. Der Re-Sync-Modus (`--sync`) ist in
-  `[[obsidian-sync]]` spezifiziert.
+- **Skill-Befehl:** `/agent-flow:from-notes [--gui] [--cost <mode>] [--sync|--audit] [<ordnerpfad>]` (Ingest) ·
+  `--audit` (Integritätsprüfung, AC19–AC22). Auslöser dünn (dev-gui POST `/api/command` bzw. der headless
+  `ObsidianIngestRunner`), gesamte Logik in agent-flow. Der Re-Sync-Modus (`--sync`) ist in `[[obsidian-sync]]`
+  spezifiziert. Die Tokens `--gui`/`--cost`/`--sync`/`--audit` werden **vor** der Ordnerpfad-Auswertung
+  herausgeparst und gehören **nicht** zum Ordnerpfad (AC23).
+- **Headless-Ausgabevertrag (`--gui`, AC23–AC25):** Mit `--gui` (dev-gui-`ObsidianIngestRunner`, Aufruf
+  `claude -p '/agent-flow:from-notes --gui <ordner>' --output-format json`) endet **jede Runde** mit **genau
+  einem** JSON-**Wrapper-Objekt** als finaler Assistant-Nachricht (`.result`):
+  - `{ "status": "needs-answers", "catalog": [ <Frage-Objekte gemäss board/fragenkatalog.schema.json> ] }` bei
+    anstehendem Gate (Stufe `a|b|c|sync`), bzw.
+  - `{ "status": "done" }` nach vollständigem Durchlauf.
+  Das **innere** `catalog[]` folgt unverändert dem AC9-Feldvertrag (`board/fragenkatalog.schema.json`); der
+  `{status,catalog}`-**Wrapper** ist der zusätzliche Headless-Rahmen. Die Antworten reicht der Runner im **Resume**
+  desselben Session-Kontexts zurück (`--resume`, Zuordnung je Frage über `id`); jeder Resume endet wieder nach
+  diesem Vertrag (nächstes Gate oder `done`). **Kein** Fliesstext nach dem JSON (AC24). Ohne `--gui` gilt dieser
+  Wrapper **nicht** — der interaktive Terminal-Pfad stellt denselben `catalog` via `AskUserQuestion` (AC23).
 - **Frontmatter-Sync-Felder (Vault-Schreibzone, AC17):** `idea_id` (`IDEA-NNN`) · `idea_status`
   (`draft | adopted | parked | rejected | superseded`) · `last_sync` · `sync_hash` · `C-NNN`-Referenz(en) —
   exakt die Felder aus Subsystem-Vertrag §4b; keine weiteren.
@@ -201,6 +246,21 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
 - Abbruch/Session-Ende **zwischen** Stufen → committete Stufen bleiben durable (AC12); der Lauf ist fortsetzbar.
 - Obsidian-Interna (`.obsidian/`, Anhänge) → ignoriert (AC5); ausser dem Frontmatter-Stempel (AC17) wird der
   Ordner nie beschrieben (AC6).
+- **Headless (`--gui`) — Fliesstext statt JSON** (reproduzierter Defekt, Pilot research-app, Session a69c8b13,
+  2026-07-19): der Lauf baute einen korrekten Stufe-a-Katalog auf, gab ihn aber als Fliesstext aus → Runner
+  klassifizierte „kein JSON-Ausgang". AC23–AC25 schliessen das: der Skill weiss über `--gui`, dass headless kein
+  `AskUserQuestion`-Adressat existiert, und muss das Gate als JSON-Wrapper ausgeben.
+- **Headless-Robustheit bei Sub-Agent-Stufen (b/c) — Vorsicht (Präzedenz `[[regression-define]]` AC12/AC13, S-059):**
+  Stufe a baut ihren Katalog **ohne** Sub-Agent und kann die JSON-Endnachricht zuverlässig selbst setzen (der
+  häufigste headless Runden-Fall). In den Stufen **b/c** dispatcht der Skill Sub-Agenten (`designer`/`requirement`);
+  eine orchestrierende `claude -p`-Session neigt dazu, ein Sub-Agent-Ergebnis konversationell **zu Prosa
+  zusammenzufassen** — genau das machte bei `regression-define` reine Instruktions-Härtung unzuverlässig, weshalb
+  dort auf einen **Datei-Vertrag** (`ergebnis_datei=<pfad>`) umgestellt wurde. Für from-notes bleibt hier der
+  stdout-JSON-Vertrag (AC24) — die von b/c erreichten Gates sind der **Skill-eigene** Katalog (nicht ein
+  verbatim durchgereichtes Sub-Agent-Result), sodass die finale Assistant-Nachricht steuerbar ist; die
+  SKILL.md-Anweisung ist entsprechend strikt zu formulieren. **Sollte** sich der stdout-Vertrag für b/c in der
+  Praxis dennoch als unzuverlässig erweisen, ist der bei `regression-define` bewährte `ergebnis_datei=`-Datei-Kanal
+  die dokumentierte Ausweichlösung (dann als Folge-Anforderung, Cross-Repo mit dev-gui abzustimmen).
 
 ## NFRs
 - **Präzision vor Tempo (Erst-Übersetzung):** Stufe a fragt im Zweifel lieber nach (AC10) — Fehlerfortpflanzung in
@@ -229,7 +289,11 @@ Ordner bleibt am Projekt vermerkt (`obsidian_source`), damit später erneut aus 
 - **Cross-Repo-Abhängigkeit (SR — Cross-Repo-Markierung):** Der **Auslöser-Button** + die **Anzeige/Beantwortung
   des Fragenkatalogs** (dritter Anlage-Weg „aus Obsidian-Notizen", Obsidian-Pfad in den Settings) leben im
   **`dev-gui`-Repo** und werden **dort** in eigenen Board-Items umgesetzt — **NICHT** in agent-flow. agent-flow
-  stellt nur den Befehl `/agent-flow:from-notes` **und** das Fragenkatalog-Rückgabeformat (AC9) bereit.
+  stellt nur den Befehl `/agent-flow:from-notes`, das Fragenkatalog-Rückgabeformat (AC9) **und** das
+  `--gui`-Signal + den `{status,catalog}`-Headless-Wrapper (AC23–AC25) bereit. Die dev-gui-Seite —
+  `ObsidianIngestRunner` **sendet** das `--gui`-Signal und **konsumiert/rendert** den Wrapper (dev-gui-Spec
+  `obsidian-question-catalog.md`, AC1/AC2/AC12) — ist die **Gegenstück-Story** und entsteht **im dev-gui-Repo,
+  NICHT hier**.
 - `[[reconcile]]` — Stufe 3 (Obsidian-Rückspielung) konsumiert `idea_id`/`C-NNN`/`last_sync`/`sync_hash`
   (AC15–AC17) als Anker; der `--audit` liefert ihr die Waisen-aufwärts-Liste (AC21).
 - Vertrag: `docs/architecture/obsidian-ingest-subsystem.md` (§4b Schreibzonen, §5a Audit). Kontext: CONCEPT §4a (Pipeline) / §4d (durable Docs);
