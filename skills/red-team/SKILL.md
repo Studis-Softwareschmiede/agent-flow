@@ -10,7 +10,7 @@ cwd = Ziel-Projekt-Repo (das eigene Org-Repo der zu testenden App).
 **Werkzeug für autorisiertes Testen EIGENER Infrastruktur.** Getestet werden ausschliesslich eigene,
 autorisierte Apps des Owners; die Fähigkeit ist als **Detection-Koordination** ausgelegt, **nicht** als
 Detection-Evasion (`docs/architecture/red-team-subsystem.md` §2). Dieser Skill ist **reines Dispatch**: er parst
-die Ziel-Kennung + den optionalen Messpunkt-`modus`, erzwingt das **Allowlist-Gate** (§2) und startet den
+die Ziel-Kennung + den optionalen Messpunkt-`modus`, erzwingt das **Allowlist-Gate** (Architektur §3) und startet den
 **red-team**-Agenten (`agents/red-team.md`, Task-Tool). Er enthält **keine eigene** Angriffs-, Triage- oder
 Auslieferungs-Logik — die gesamte Fachlogik (Pack lesen, Scanner steuern, Funde triagieren, die drei Ausgänge
 liefern, PR öffnen) liegt im Agenten (Muster `reconcile`: dünner Auslöser, Logik in der Fabrik).
@@ -74,7 +74,7 @@ Nur nach bestandenem Allowlist-Gate (§2). Dispatch (Task-Tool) an `agents/red-t
 ```
 ziel: <app-slug>
 modus: durch-cloudflare | direkt | beide
-headless: <true|false>            (aus HEADLESS_JSON, §0 — steuert die Ausgabe-Disziplin)
+headless: <true|false>            (aus HEADLESS_JSON, §0 — der AGENT emittiert dann das End-JSON, §5)
 default_branch: <aus profile>
 ```
 
@@ -108,7 +108,9 @@ Vertrag fest:
 
 Läuft der Skill mit **`HEADLESS_JSON=1`** (§0), steht **kein** interaktiver Adressat zur Verfügung — der Aufrufer ist
 ein Headless-Runner (`claude -p '/agent-flow:red-team ziel=…'`, `.result` = finale Assistant-Nachricht, Muster
-`from-notes` §Headless-Ausgabevertrag / `regression-define`). Dann endet der Lauf mit **genau EINEM**
+`from-notes` §Headless-Ausgabevertrag / `regression-define`). **Emitter ist der Agent** (genau EINER): weil der
+Agent die finale Assistant-Nachricht erzeugt, emittiert **er** das End-JSON (`agents/red-team.md` §Ausgabe) — der
+Skill reicht nur das `headless`-Signal durch und emittiert **kein** zweites JSON. Der Lauf endet mit **genau EINEM**
 maschinenlesbaren JSON-Objekt als **letzter Ausgabe** — **kein** Fliesstext danach:
 
 ```json
@@ -121,8 +123,8 @@ maschinenlesbaren JSON-Objekt als **letzter Ausgabe** — **kein** Fliesstext da
 - **`status`**:
   - `done` — Lauf durch, mind. ein Ausgang erzeugt (Board-Items/Lessons), als PR (oder Fallback-Branch) ausgeliefert.
   - `no-op` — Lauf durch, **keine** bestätigten Funde (Protokoll-Block trotzdem geschrieben, `findings_count: 0`).
-  - `blocked` — **Allowlist-Gate abgewiesen** (§2, Ziel ausserhalb der Schnittmenge) oder Aufruf-/Signaturfehler; `pr: null`.
-  - `needs-auth` — Lauf lief, aber PR-Auslieferung ohne Remote/Auth → Fallback-Branch (`pr: null`), Mensch zieht nach (§4).
+  - `blocked` — harter **Pre-Scan**-Abbruch: **Allowlist-Gate abgewiesen** (Architektur §3, Ziel ausserhalb der Schnittmenge), **fehlende Feuer-Freigabe/Cloudflare-Bestätigung** (Agent Schritt 3), oder Aufruf-/Signaturfehler; `pr: null`, `audit_block: false`.
+  - `needs-auth` — Lauf lief durch, aber **PR-Auslieferung** ohne Remote/Auth → Fallback-Branch (`pr: null`), Mensch zieht nach (§4).
 - **`pr`** — PR-URL bei erfolgreicher Auslieferung, sonst `null`.
 - **`findings_count`** — Anzahl bestätigter (triagierter) Lücken, die als Board-Items angelegt wurden.
 - **`audit_block`** — `true`, wenn dieser Lauf einen Block in `docs/red-team-audit.md` geschrieben hat (immer bei
