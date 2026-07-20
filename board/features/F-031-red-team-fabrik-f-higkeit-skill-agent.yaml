@@ -1,0 +1,22 @@
+id: F-031
+title: Red-Team-Fabrik-Fähigkeit (Skill + Agent)
+goal: 'Die Fabrik-Seite der Red-Team-Fähigkeit: sprach-neutraler Skill + Agent, der
+  autorisierte eigene Apps testet und den Sicherheits-Lernkreis schliesst (Protokoll
+  + Board-Items + Lessons → retro Einsatz-Lane). Sicherheits-Grenze: Fähigkeit, kein
+  Auto-Feuern. Rahmen: docs/architecture/red-team-subsystem.md.'
+status: Backlog
+priority: P1
+spec: docs/specs/red-team-capability.md
+definition_of_done: null
+labels:
+- security
+- rollen-agenten
+depends: null
+owner: null
+stories:
+- S-103
+- S-104
+- S-105
+progress: 0/3 done
+created_at: '2026-07-20T21:48:56Z'
+updated_at: '2026-07-20T21:49:12Z'
