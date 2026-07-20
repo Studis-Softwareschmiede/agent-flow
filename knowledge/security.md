@@ -1,10 +1,40 @@
 # Knowledge Pack: security  (Domäne — querschnittlich)
 
-> **last_trained:** 2026-06-15 — Frische-Signal für durable Sicherheits-Prinzipien. `train` setzt das Datum bei jedem `/train security` auf heute; `/flow` nudged, wenn es > 90 Tage her ist. (Tagesaktuelle CVEs/Exploits gehören NICHT hierher → Dependabot + geplanter Scan.)
+> **last_trained:** 2026-06-15 — Frische-Signal für durable Sicherheits-Prinzipien. `train` setzt das Datum bei jedem `/train security` auf heute; `/flow` nudged, wenn es > 90 Tage her ist.
 
-Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains: [security]`) für die *Tiefe*; die mit **⚑** markierten Punkte sind der **Security-Floor**, den der `reviewer` **IMMER** anwendet (auch ohne `domains:[security]`) und der `coder` immer befolgt. Regel-IDs: `security/R<NN>`. Orientierung: OWASP Top 10.
+> **3 Geschwindigkeiten (Speeds) — was gehört wohin:**
+> 1. **Durable Prinzipien** (langsam, dieser Pack) — Norm-Lane (`security/R<NN>`, train) + Einsatz-Lane (`security/E<NN>`, retro), siehe **Regel-Lanes** unten.
+> 2. **Tagesaktuelle CVEs/Exploits** (schnell) gehören **NICHT** hierher → Dependabot + geplanter Scan.
+> 3. **Live-Angriffs-Funde** der laufenden App (self-updating) → Scanner-Feeds (Nuclei/OWASP ZAP), frisch pro Lauf gezogen; wiederkehrende Muster fließen über `retro` in die Einsatz-Lane.
+>
+> Die Lane-/Speed-Aufteilung ist verbindlich beschrieben in `docs/architecture/red-team-subsystem.md` §5.
+
+## Quellen (train-verbindlich)
+
+`/train security` zieht ausschließlich aus den `primary_sources`; die `non_sources` sind als Quelle **verboten** (Sekundär-/Aggregator-Seiten, kein Primär-Standard). Format analog zu den Framework-Packs.
+
+> **primary_sources:**
+> - OWASP Top 10 — https://owasp.org/Top10/
+> - NIST CSRC (inkl. SP 800-63, SP 800-131) — https://csrc.nist.gov/
+> - IETF Datatracker / RFC — https://datatracker.ietf.org/
+> - PortSwigger Web Security Academy — https://portswigger.net/web-security
+>
+> **non_sources:**
+> - dev.to
+> - medium.com
+> - stackoverflow.com
+> - geeksforgeeks.org
+
+Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains: [security]`) für die *Tiefe*; die mit **⚑** markierten Punkte sind der **Security-Floor**, den der `reviewer` **IMMER** anwendet (auch ohne `domains:[security]`) und der `coder` immer befolgt. Orientierung: OWASP Top 10.
+
+**Regel-Lanes (zwei kollisionsfreie Namespaces).** Der Pack führt zwei getrennte Regel-Lanes — es gibt **keine** ID-Kollision zwischen ihnen (`R` vs. `E`):
+- **Norm-Lane** `security/R<NN>` — **train-Hoheit**, externe Standards (OWASP/NIST/RFC, feste `primary_sources` oben). Die Regeln der `## Coder-Guidance` (R01–R16) **sind** die Norm-Lane; nur `agent-flow:train` ändert sie.
+- **Einsatz-Lane** `security/E<NN>` — **retro-Hoheit**, Erfahrung aus echten Läufen (Red-Team-Funde, wiederkehrende Review-Muster). Siehe Sektion `## Einsatz-Erfahrung` unten; nur `agent-flow:retro` schreibt dort.
 
 ## Coder-Guidance
+
+> **Norm-Lane** (`security/R<NN>`, train-Hoheit). Die folgenden Regeln R01–R16 sind die von externen Standards getriebene Norm-Lane — nur `agent-flow:train` ändert sie. Erfahrungs-Regeln aus echten Läufen stehen getrennt in `## Einsatz-Erfahrung` (`security/E<NN>`).
+
 - `security/R01` ⚑ — **Keine Klartext-Secrets im Code/Repo** (Keys, Tokens, Passwörter, Connection-Strings — hartkodiert oder als unverschlüsselte Datei committed) → aus Env/Secret-Store laden; Secrets **nie loggen**. **Erlaubt (GE6):** eine committete `.env.gpg`-Datei (GPG-symmetrisch AES256, geteilte Fabrik-Passphrase) ist der **vorgesehene** Weg, App-Secrets versioniert mitzuführen — sie ist **kein** Befund. Klartext-`.env` oder hartkodierte Werte bleiben Critical.
 - `security/R02` ⚑ — **Jeden untrusted Input** (User, Netzwerk, Datei, URL-Param) validieren/normalisieren; **Output kontext-gerecht encoden** (HTML / Attribut / URL / SQL) → gegen XSS/Injection.
 - `security/R03` ⚑ — Datenzugriff **parametrisiert** (Prepared Statements / sicheres ORM); Befehle/Pfade/`eval` **nie** aus Roh-Input bauen (SQL-/Command-/Path-Injection).
@@ -21,6 +51,12 @@ Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains:
 - `security/R14` ⚑ — **Admin-Bereich-Session + CSRF:** die Admin-Sitzung läuft über ein **signiertes HttpOnly+SameSite-Cookie**; jeder state-ändernde Admin-Request (POST/PUT/PATCH/DELETE) ist **CSRF-geschützt** (Token oder Double-Submit-Cookie). → `docs/architecture/admin-bereich-subsystem.md` BR-010.
 - `security/R15` ⚑ — **Admin-Bereich-Secret-Maskierung:** als `secret`/`maskiert` deklarierte Manifest-Parameter (`config/admin-manifest.yaml`) werden im Admin-UI **immer maskiert** ausgeliefert — nie Klartext an den Browser, auch nicht als Vorbelegung eines Eingabefelds. → `docs/architecture/admin-bereich-subsystem.md` BR-008 (siehe auch `ui/R03`).
 - `security/R16` ⚑ — **Admin-Bereich-Setup nur von localhost:** ist beim Start kein `ADMIN_PASSWORD_HASH` gesetzt, ist die Erst-Setup-Seite **ausschließlich von localhost** erreichbar; jeder nicht-localhost-Request (insbesondere auf dem VPS) wird **immer** abgewiesen (Default deny, verschärft `security/R04` für den Setup-Fall). → `docs/architecture/admin-bereich-subsystem.md` BR-004.
+
+## Einsatz-Erfahrung (retro-Lane, `security/E<NN>`)
+
+> **Einsatz-Lane** (`security/E<NN>`, retro-Hoheit). Hier schreibt **ausschließlich** `agent-flow:retro` — **nie** `train`. Inhalt: verallgemeinerbare Sicherheits-Muster aus echten Läufen (Red-Team-Funde der laufenden App, wiederkehrende Review-Muster), destilliert aus projekt-lokalen Lessons. IDs laufen als eigener Namespace `security/E01`, `security/E02`, … — **keine** Kollision mit der Norm-Lane (`R<NN>`). Der Red-Team-Lauf erzeugt die Lessons, `retro` hebt sie hierher (siehe `docs/architecture/red-team-subsystem.md` §5).
+
+*Noch keine E-Regeln — die Lane ist anfangs leer und wird von `retro` befüllt.*
 
 ## Reviewer-Checklist
 - ⚑ Hartkodiertes Secret (Key/Token/Passwort/Connection-String) im Diff → **Critical** (`security/R01`).

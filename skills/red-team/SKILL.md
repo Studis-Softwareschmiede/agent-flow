@@ -1,0 +1,158 @@
+---
+name: red-team
+description: Startet den red-team-Agenten — testet eine AUTORISIERTE eigene App des Owners (Allowlist „läuft auf eigenem VPS" ∩ „eigenes Org-Repo") mit einem etablierten Scanner, triagiert die Funde agentisch und liefert die drei Ausgänge des Sicherheits-Lernkreises (Protokoll in docs/red-team-audit.md, Board-Items für /flow, retro-lesbare Lessons). Reines Dispatch — die gesamte Angriffs-/Triage-/Auslieferungs-Logik liegt im Agenten (agents/red-team.md, Task-Tool); der Skill ist der dünne Auslöser (Muster reconcile). Kein Freitext-Ziel: die Ziel-Kennung wird gegen die konstruktiv erzwungene Allowlist geprüft, ein Ziel ausserhalb → sofort STOPP (Default deny). Keine Detection-Evasion — Cloudflare-Koordination (Freischalten vor Lauf, Scharfstellen danach) ist ein menschlich bestätigter Schritt, kein stiller Automatismus. Liefert IMMER als EIN PR (kein Self-Merge, kein Auto-Feuern); ohne Remote/Auth committeter lokaler Branch als Fallback. Headless-konsumierbar (claude -p): läuft der Skill nicht-interaktiv, endet er mit genau EINEM maschinenlesbaren End-JSON (Muster from-notes/regression-define). Sicherheits-Grenze: diese Iteration baut Vertrag + Gerüst; das Scanner-Wiring gegen echte Ziele + Cloudflare-Koordination ist die dev-gui-Kachel-Folge (red-team-subsystem.md §6) — kein autonomer Live-Angriff. Im Ziel-Projekt-Repo ausführen. Aufruf: /agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide].
+---
+
+# /agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide]
+
+cwd = Ziel-Projekt-Repo (das eigene Org-Repo der zu testenden App).
+
+**Werkzeug für autorisiertes Testen EIGENER Infrastruktur.** Getestet werden ausschliesslich eigene,
+autorisierte Apps des Owners; die Fähigkeit ist als **Detection-Koordination** ausgelegt, **nicht** als
+Detection-Evasion (`docs/architecture/red-team-subsystem.md` §2). Dieser Skill ist **reines Dispatch**: er parst
+die Ziel-Kennung + den optionalen Messpunkt-`modus`, erzwingt das **Allowlist-Gate** (§2) und startet den
+**red-team**-Agenten (`agents/red-team.md`, Task-Tool). Er enthält **keine eigene** Angriffs-, Triage- oder
+Auslieferungs-Logik — die gesamte Fachlogik (Pack lesen, Scanner steuern, Funde triagieren, die drei Ausgänge
+liefern, PR öffnen) liegt im Agenten (Muster `reconcile`: dünner Auslöser, Logik in der Fabrik).
+
+Bindender Rahmen: `docs/architecture/red-team-subsystem.md` (§2 Grundhaltung, §3 Allowlist, §4 Ablauf, §6 Repo-Aufteilung) +
+`docs/specs/red-team-capability.md` (AC1–AC8). **Sicherheits-Grenze (Spec „Bewusst NICHT"):** in dieser Iteration
+entsteht der **Vertrag + das Gerüst**; die Live-Scanner-Integration gegen echte Ziele + die Cloudflare-Koordination
+sind die **dev-gui-Kachel-Folge** (§6). Der Skill löst **keinen** autonomen Live-Angriff aus — jeder Lauf gegen eine
+laufende App bleibt eine per-Lauf menschlich autorisierte Aktion.
+
+## 0. Setup
+
+- **`--cost`-Token** zuerst herausparsen (wie bei den anderen Skills, gehört NICHT zum Eingabe-Vertrag): Präzedenz
+  `--cost`-Argument > `profile.cost_mode` > `balanced` (`${CLAUDE_PLUGIN_ROOT}/knowledge/model-tiers.md`). Hat
+  `red-team` **keine eigene Zeile** in der Tier-Matrix, läuft der Agent in jedem Modus auf seinem Frontmatter-Wert —
+  dann beim Dispatch **kein** `model`-Override mitgeben.
+- **Headless-Signal auflösen:** Läuft der Skill nicht-interaktiv (GUI-/`-p`-getrieben, kein interaktiver
+  `AskUserQuestion`-Adressat) → **`HEADLESS_JSON=1`**. Aufrufform des Konsumenten:
+  `claude -p '/agent-flow:red-team ziel=<app-slug> [modus=…]'`. Dann gilt der **Headless-Ausgabevertrag** unten
+  (§5). Interaktiv (Terminal-Direktaufruf) bleibt die menschenlesbare Ausgabe unverändert.
+- `.claude/profile.md` lesen → `default_branch`, `merge_policy`. **`merge_policy` verzweigt die Freigabe NICHT** —
+  der Lauf landet **immer** als PR (AC7), analog `reconcile`.
+- Auth sicherstellen — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gh-auth.sh"` (immer, da immer ein PR folgt).
+  Schlägt das fehl: der Lauf läuft trotzdem; der Fallback greift erst beim PR-Öffnen (committeter lokaler Branch, §4).
+
+## 1. Aufruf-Signatur parsen (AC2)
+
+```
+/agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide]
+```
+
+- **`ziel=<app-slug>`** ist **Pflicht** und ist eine **Ziel-Kennung** (Slug/Identifikator), **KEIN Freitext-Ziel**
+  (keine URL, keine IP, kein Hostname aus freier Eingabe). Fehlt `ziel=` → klarer Abbruch „`ziel=<app-slug>` ist
+  Pflicht — eine Ziel-Kennung aus der Allowlist, kein Freitext-Ziel", **kein** Dispatch.
+- **`modus=`** ist optional, Default `durch-cloudflare`. Zulässig genau: `durch-cloudflare` (misst, was ein Angreifer
+  real erreicht), `direkt` (Origin, was ohne Schutz drin wäre), `beide` (beide Messpunkte + Differenz-Ausweis, §2 der
+  Architektur). Anderer Wert → klarer Abbruch, **kein** Dispatch. `modus=direkt|beide` setzt die **menschlich
+  bestätigte** Cloudflare-Koordination voraus (Freischalten/Scharfstellen) — der Skill **koordiniert**, er **tarnt
+  nicht** und schleicht sich an keinem Schutzsystem vorbei (§2, AC4).
+
+## 2. Allowlist-Gate — Default deny (AC3, HART)
+
+**Vor** jedem Dispatch. Die zulässigen Ziele sind **konstruktionsbedingt** die Schnittmenge
+(`red-team-subsystem.md` §3):
+
+> „läuft als Container auf dem eigenen VPS" **UND** „gehört zu einem eigenen Repo der Org".
+
+- Die `ziel`-Kennung wird gegen **diese zur Laufzeit ermittelte** Schnittmenge geprüft (Docker-Blick des VPS ∩
+  Org-Repos) — **nicht** gegen eine handgepflegte Liste und **nie** gegen einen freien String. Die eigentliche
+  Auflösung + Prüfung ist Sache des Agenten (er hat den Umgebungs-/Repo-Kontext); der Skill reicht die **Kennung**
+  durch und macht die Allowlist-Erzwingung zur **expliziten, nicht verhandelbaren** Vertragsbedingung des Dispatchs.
+- **Ziel ausserhalb der Schnittmenge → sofort STOPP** mit klarer Meldung („Ziel `<app-slug>` liegt nicht in der
+  Allowlist ‚eigener VPS ∩ eigenes Org-Repo' — Red-Team feuert konstruktiv nie gegen Fremdes. Abbruch."), **kein**
+  Dispatch, **kein** Scan. Das ist **Default deny**: im Zweifel (Kennung nicht eindeutig auflösbar) wird
+  **abgewiesen**, nicht geraten — dieselbe localhost-/Origin-Denkweise wie `security/R16` beim Admin-Setup.
+
+## 3. Dispatch an den red-team-Agenten
+
+Nur nach bestandenem Allowlist-Gate (§2). Dispatch (Task-Tool) an `agents/red-team.md` mit:
+
+```
+ziel: <app-slug>
+modus: durch-cloudflare | direkt | beide
+headless: <true|false>            (aus HEADLESS_JSON, §0 — steuert die Ausgabe-Disziplin)
+default_branch: <aus profile>
+```
+
+Der Agent liest `knowledge/security.md`, steuert den etablierten Scanner (Nuclei/OWASP ZAP; Angriffs-Vorlagen frisch
+aus dem offiziellen Feed), triagiert die Roh-Funde **ohne destruktives Ausnutzen** (Ausnutzbarkeit wird belegt, nicht
+ausgenutzt — kein Datenabfluss, keine Löschung) und liefert die **drei Ausgänge** (§4 der Architektur):
+
+- **Protokoll** — genau **ein** Block in `docs/red-team-audit.md` (ein Dokument pro Projekt, analog `spec-audit.md`):
+  „was versucht / hat gegriffen / wurde abgewehrt" (+ Cloudflare-Differenz bei `modus=beide`). Auch ein **No-Op-Lauf**
+  (keine Funde) wird protokolliert (AC5).
+- **Board-Items** — jede bestätigte Lücke als To-Do-Item, damit `/flow` sie behebt (finden → beheben → erneut testen).
+- **Lessons** — generalisierbare Muster als projekt-lokale, **`retro`-lesbare** Lesson (Format `.claude/lessons/`),
+  die `retro` in die Einsatz-Lane `security/E<NN>` heben kann (AC6, §5 der Architektur).
+
+Der Agent besitzt Auth/PR-Auslieferung selbst (§4). Dieser Skill ruft `ensure-gh-auth.sh` in §0 nur vorsorglich auf.
+
+## 4. Freigabe — IMMER ein PR (AC7)
+
+Wie `reconcile`: Protokoll + Board-Items + Lessons landen als **ein** PR zur Freigabe — **kein Self-Merge, kein
+Auto-Feuern**, unabhängig von `merge_policy`. Die eigentliche PR-Mechanik liegt im Agenten; der Skill hält den
+Vertrag fest:
+
+- **Ohne Remote/Auth (Fallback):** ist kein Remote konfiguriert bzw. die Auth aus §0 fehlgeschlagen, bleibt das
+  Ergebnis als **committeter lokaler Branch** erhalten (kein Rollback, kein stiller Datenverlust) — mit klarer
+  Meldung *warum* kein PR entstand und *wie der Mensch nachzieht* (Remote setzen / `bash scripts/ensure-gh-auth.sh`
+  prüfen, dann `git push` + `gh pr create`).
+- **Reiner No-Op** (Lauf lief, keine bestätigten Funde): der Protokoll-Block wird trotzdem geschrieben (AC5); ob
+  daraus ein PR entsteht, entscheidet der Agent nach dem `reconcile`-Muster (kein leerer No-Op-PR).
+
+## 5. Headless-Ausgabevertrag (AC2) — genau EIN End-JSON
+
+Läuft der Skill mit **`HEADLESS_JSON=1`** (§0), steht **kein** interaktiver Adressat zur Verfügung — der Aufrufer ist
+ein Headless-Runner (`claude -p '/agent-flow:red-team ziel=…'`, `.result` = finale Assistant-Nachricht, Muster
+`from-notes` §Headless-Ausgabevertrag / `regression-define`). Dann endet der Lauf mit **genau EINEM**
+maschinenlesbaren JSON-Objekt als **letzter Ausgabe** — **kein** Fliesstext danach:
+
+```json
+{ "status": "done" | "no-op" | "blocked" | "needs-auth",
+  "pr": "<url>" | null,
+  "findings_count": <int>,
+  "audit_block": <bool> }
+```
+
+- **`status`**:
+  - `done` — Lauf durch, mind. ein Ausgang erzeugt (Board-Items/Lessons), als PR (oder Fallback-Branch) ausgeliefert.
+  - `no-op` — Lauf durch, **keine** bestätigten Funde (Protokoll-Block trotzdem geschrieben, `findings_count: 0`).
+  - `blocked` — **Allowlist-Gate abgewiesen** (§2, Ziel ausserhalb der Schnittmenge) oder Aufruf-/Signaturfehler; `pr: null`.
+  - `needs-auth` — Lauf lief, aber PR-Auslieferung ohne Remote/Auth → Fallback-Branch (`pr: null`), Mensch zieht nach (§4).
+- **`pr`** — PR-URL bei erfolgreicher Auslieferung, sonst `null`.
+- **`findings_count`** — Anzahl bestätigter (triagierter) Lücken, die als Board-Items angelegt wurden.
+- **`audit_block`** — `true`, wenn dieser Lauf einen Block in `docs/red-team-audit.md` geschrieben hat (immer bei
+  durchgelaufenem Scan, auch No-Op; `false` bei `blocked` vor dem Scan).
+
+**Fehlerpfad:** ein echter Aufruf-/Ausführungsfehler darf weiterhin mit exitCode ≠ 0 / Freitext enden — **kein**
+künstliches Status-JSON über einen echten Fehler legen. Der JSON-Vertrag gilt für **reguläre** Lauf-Enden
+(inkl. `blocked` durch das Allowlist-Gate — das ist ein **definiertes** Ergebnis, kein Absturz). Ohne `HEADLESS_JSON`:
+menschenlesbare Ausgabe, unverändert.
+
+## Output (interaktiv)
+
+```
+Ziel: <app-slug> (Allowlist: <bestanden|ABGEWIESEN — Default deny>)
+Modus: <durch-cloudflare | direkt | beide>
+Funde: <N> bestätigt (Board-Items angelegt) | keine Funde (No-Op)
+Protokoll: docs/red-team-audit.md (1 Block: was versucht / hat gegriffen / wurde abgewehrt<, + Cloudflare-Differenz>)
+Lessons: <M> projekt-lokale Lesson(s) für retro (Einsatz-Lane security/E<NN>) | keine
+Freigabe: <PR-Link | "Kein PR — Fallback: committeter lokaler Branch (Grund: <kein Remote|Auth fehlgeschlagen>; Nachziehen: …)">
+```
+
+## Grenzen (HART)
+
+- **Reines Dispatch** — keine eigene Angriffs-/Scanner-/Triage-/PR-Logik; die liegt im Agenten (`agents/red-team.md`).
+- **Kein Freitext-Ziel** (AC3) — nur eine Ziel-**Kennung** gegen die Allowlist „eigener VPS ∩ eigenes Org-Repo";
+  Ziel ausserhalb → sofort STOPP, Default deny. Konstruktiv nie gegen Fremdes.
+- **Keine Detection-Evasion / Tarnung** (§2) — nur Koordination; die Cloudflare-Freischaltung ist ein **menschlich
+  bestätigter** Vor-/Nach-Schritt, kein stiller Automatismus.
+- **Kein destruktives Ausnutzen** — die Triage belegt Ausnutzbarkeit, ohne Schaden (kein Datenabfluss, keine Löschung).
+- **Kein Self-Merge, kein Auto-Feuern** (AC7) — immer ein PR zur menschlichen Freigabe (Fallback: committeter Branch).
+- **Kein Scanner-Wiring gegen echte Ziele in dieser Iteration** — die Live-Integration (echter Nuclei/ZAP-Lauf gegen
+  den VPS + Cloudflare-Koordination) ist die dev-gui-Kachel-Folge (§6); hier entsteht Vertrag + Gerüst.
+- **Kein** Board-**Status**-Schreiben — Items entstehen als **To Do** (Hoheit `/flow`).
