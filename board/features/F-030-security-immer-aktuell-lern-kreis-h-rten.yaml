@@ -3,7 +3,7 @@ title: Security immer aktuell — Lern-Kreis härten
 goal: 'Die drei Lücken schliessen, die den security-Pack am Frischbleiben hindern:
   feste Quellen-Verankerung, train/retro-Zuständigkeits-Trennung (zwei Lanes), geschärfter
   Frische-Nudge. Rahmen: docs/architecture/red-team-subsystem.md §5.'
-status: Backlog
+status: Done
 priority: P1
 spec: docs/specs/security-pack-freshness.md
 definition_of_done: null
@@ -18,6 +18,7 @@ stories:
 - S-100
 - S-101
 - S-102
-progress: 0/4 done
+progress: 4/4 done
 created_at: '2026-07-20T21:48:56Z'
-updated_at: '2026-07-20T21:49:11Z'
+updated_at: '2026-07-20T22:06:30Z'
+done_at: '2026-07-20T22:06:30Z'

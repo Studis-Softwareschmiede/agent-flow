@@ -2,7 +2,7 @@ id: S-099
 parent: F-030
 title: 'security.md: feste primary_sources/non_sources + Einsatz-Lane security/E<NN>
   + 3-Speed-Kopfnote'
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/security-pack-freshness.md
 implements:
@@ -24,5 +24,5 @@ branch: null
 pr: null
 blocked_reason: null
 created_at: '2026-07-20T21:49:09Z'
-updated_at: '2026-07-20T21:49:09Z'
-done_at: null
+updated_at: '2026-07-20T22:05:58Z'
+done_at: '2026-07-20T22:05:58Z'
