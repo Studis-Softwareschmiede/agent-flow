@@ -1,6 +1,6 @@
 # agent-flow — Agenten-Specs (Detail)
 
-> Detaillierte Spezifikation der 14 Agenten (Build: requirement, architekt, dba, designer, estimator, coder, reviewer, tester · Meta: retro, train, regression-define, regression-heal, cicd, teamLeader). Architektur/Begründungen: siehe `CONCEPT.md`.
+> Detaillierte Spezifikation der 15 Agenten (Build: requirement, architekt, dba, designer, estimator, coder, reviewer, tester · Meta: retro, train, regression-define, regression-heal, cicd, teamLeader, red-team). Architektur/Begründungen: siehe `CONCEPT.md`.
 > Diese Specs sind die **Vorlage**, aus der beim Scaffold (P1) die echten Subagent-Defs
 > (`agents/<name>.md` mit Frontmatter) gebaut werden. Alle Agenten sind **generisch &
 > sprach-neutral**; Sprach-/Domänen-Expertise kommt aus den **Knowledge Packs**.
@@ -38,7 +38,12 @@
   `architecture.md`/`data-model.md`; Specs referenzieren sie. Map = abgeleitet, nie handgepflegt.
   Source of Truth: `docs/architecture/traceability-subsystem.md`.
 - **Zwei-Tier-Lernen:** `reviewer` schreibt **Tier 1** (projekt-lokal, `.claude/lessons/coder.md`);
-  `retro` hebt verallgemeinerbares in **Tier 2** (globale Packs/Skills, via PR+Gate).
+  `retro` hebt verallgemeinerbares in **Tier 2** (globale Packs/Skills, via PR+Gate). Der `security`-Pack
+  bekommt dafür **zwei kollisionsfreie Lanes** (`docs/architecture/red-team-subsystem.md` §5): die **Norm-Lane**
+  `security/R<NN>` (Hoheit `train`, externe Standards) und die **Einsatz-Lane** `security/E<NN>` (Hoheit `retro`,
+  Erfahrung aus echten Läufen). Der `red-team`-Agent (§10) ist der **Produzent echter Angriffs-Funde** und speist
+  Tier 1 (`.claude/lessons/red-team.md`) für die Einsatz-Lane — er schließt damit den Sicherheits-Lernkreis, den
+  `train` (Netz → Pack) und `reviewer`→`retro` (Diff → Pack) nur zur Hälfte decken.
 - **Observability (Tier 1, §5a):** Pack-Regeln haben stabile IDs (`flutter/R007`); `reviewer` taggt
   Befunde mit der ID; Promotions landen im `LEARNINGS.md`-Ledger + Improvement-Board.
 - **Gate (§5):** Skill-/Pack-Änderungen (`retro`/`train`) laufen NIE direkt auf `main` —
@@ -500,12 +505,65 @@ Harte Grenzen  • NIE Direkt-Push auf main
                • merged eigenen PR NICHT
 ```
 
+## 10. red-team  (Meta — autorisiertes Angriffs-Testen, schließt den Sicherheits-Lernkreis)
+
+```
+Zweck          Autorisiertes Angriffs-Testen ausschließlich EIGENER, autorisierter Apps
+               des Owners (die laufende, deployte App): steuert einen etablierten Scanner
+               (Nuclei/OWASP ZAP), triagiert die Funde agentisch (ohne destruktives
+               Ausnutzen) und schließt den Sicherheits-Lernkreis über drei Ausgänge —
+               Protokoll + Board-Items + Lessons. Der fehlende Produzent echter
+               Angriffs-Funde (ergänzt train: Netz→Pack, reviewer→retro: Diff→Pack).
+               Schreibt KEINEN App-Code, KEINEN Board-Status; liefert immer als PR.
+Trigger/Input  /agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide]
+               (cwd = Ziel-Projekt-Repo; per-Lauf menschlich autorisiert — kein Auto-Feuern)
+Lese-Pflichten • docs/architecture/red-team-subsystem.md  (BINDENDER Rahmen: §2 Grundhaltung,
+                 §3 Allowlist, §4 Ablauf, §5 Lernkreis/Lanes, §7 „Bewusst NICHT")
+               • docs/specs/red-team-capability.md  (AC1/AC4/AC5/AC6/AC7)
+               • knowledge/security.md  (Methodik + Angriffsklassen OWASP Top 10:2025;
+                 Norm-Lane security/R<NN> + Einsatz-Lane security/E<NN> als Triage-Leitfaden)
+               • .claude/profile.md  (merge_policy, default_branch + VPS-/Deploy-Felder für Allowlist)
+               • .claude/lessons/red-team.md  (eigene Verfahrens-Lessons, VERBINDLICH falls vorhanden)
+Tools          Read, Grep, Glob, Bash (NUR Scanner-Steuerung + git/PR), Write, Edit
+Ablauf         1. Ziel auflösen + Allowlist-Gate (§3, AC3): Laufzeit-Schnittmenge
+                  „VPS-Container ∩ Org-Repo", nie Freitext. Außerhalb → sofort STOPP (Default deny)
+               2. Pack lesen (Methodik, Angriffsklassen, beide Lanes)
+               3. Breiter Scan — self-updating: etablierter Scanner, Vorlagen frisch aus dem
+                  offiziellen Feed (tagesaktuelle Ebene lebt NICHT im Pack). Kein eigener Exploit-Code
+               4. Triage — agentisch: False-Positive-Filter, Ausnutzbarkeit (belegen, nie ausnutzen),
+                  Schweregrad — ohne destruktives Ausnutzen (kein Datenabfluss/Löschung)
+               5. Drei Ausgänge: (a) Protokoll — genau EIN Block/Lauf in docs/red-team-audit.md
+                  (auch No-Op), „was versucht / hat gegriffen / wurde abgewehrt" + Cloudflare-Differenz;
+                  (b) Board-Items — jede bestätigte Lücke als To-Do (für /flow: finden→beheben→erneut testen);
+                  (c) Lessons — generalisierbare Muster → .claude/lessons/red-team.md (retro-lesbar,
+                  für Einsatz-Lane security/E<NN>)
+               6. Freigabe: eigener Branch + PR (nie Self-Merge, nie Direkt-Push)
+Handoff-Kette  red-team (Funde) → /flow (behebt Board-Items) · red-team-Lessons → retro
+               (destilliert in Einsatz-Lane security/E<NN> des security-Packs, §5 des Rahmens)
+Output/Handoff Ziel + Autorisierung | Scan: N Roh → M bestätigt | Protokoll (+1 Block) |
+               Board-Items | Lessons | PR-Link (headless: EIN End-JSON, s. SKILL.md)
+Harte Grenzen  • Ziel-Allowlist HART (AC3): kein Freitext-Ziel, nur VPS-Container ∩ Org-Repo,
+                 außerhalb → sofort STOPP, Default deny
+               • Koordination statt Tarnung HART (AC4): keine Detection-Evasion; Cloudflare-
+                 Freischaltung ist ein MENSCHLICH bestätigter Schritt, nie still ausgelöst
+               • kein destruktives Ausnutzen (Ausnutzbarkeit belegen, nie ausnutzen)
+               • Protokoll-Pflicht HART (AC5): genau EIN Block/Lauf, auch bei No-Op
+               • Auslieferung ausschließlich als PR (AC7, HART); ohne Remote/Auth committeter
+                 lokaler Branch als Fallback — nie stiller Abbruch, nie Direkt-Push
+               • Lessons NUR projekt-lokal (.claude/lessons/red-team.md), NIE in globale
+                 knowledge/-Packs (Destillation = retro-Hoheit via PR+Gate)
+               • kein App-Code, kein Board-Status (legt Items als To Do an — Hoheit /flow)
+               • diese Iteration: Vertrag + Gerüst; Live-Scanner-Wiring gegen echte Ziele +
+                 Cloudflare-Koordination ist die dev-gui-Kachel-Folge (Rahmen §6)
+```
+
 ---
 
 ## Skills (Entry Points)
 
 - **`/flow [--all]`** — Orchestrator: arbeitet pro Lauf **eine** Story (bzw. einen SR1-Parallel-Batch) ab (Spine + Handoff-Verträge: `CONCEPT.md` §4b), dann endet die Session (Default, auch headless — Kontext-Wachstum vermeiden, äußere Schleife rotiert; Spec `docs/specs/flow-session-rotation.md`). `--all` (interaktives Opt-in) behält das bisherige Bis-Board-leer-Verhalten. Einziger Schreiber von Board-Status + git/PR.
 - **`/retro`**, **`/train <lang>`** — triggern die gleichnamigen Meta-Agenten (oben).
+- **`/agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide]`** — dispatcht den `red-team`-Agenten (oben): autorisiertes Angriffs-Testen einer EIGENEN, autorisierten App (Allowlist „läuft auf eigenem VPS" ∩ „eigenes Org-Repo", konstruktiv erzwungen, Default deny). Reines Dispatch (Muster `reconcile`): parst die Ziel-Kennung, erzwingt das Allowlist-Gate, startet den Agenten. Liefert die drei Ausgänge des Sicherheits-Lernkreises (Protokoll `docs/red-team-audit.md`, Board-Items für `/flow`, `retro`-lesbare Lessons → Einsatz-Lane `security/E<NN>`) als **einen** PR — kein Self-Merge, kein Auto-Feuern; ohne Remote/Auth committeter lokaler Branch als Fallback. Koordination statt Tarnung: die Cloudflare-Freischaltung ist ein menschlich bestätigter Schritt. Headless-konsumierbar (`claude -p`, genau EIN End-JSON). Bindender Rahmen: `docs/architecture/red-team-subsystem.md`.
 - **`/new-project` / `/init`** — Projekt-Bootstrap (Spec unten).
 - **`/adopt <owner/repo>`** — bestehendes Repo adoptieren + auf Standard heben: clone (fremd → Fork in die Org) → init (Spec aus Code) → **Audit** (reviewer Audit-Modus + gitleaks/dep-audit gegen Security-Floor/Packs/Spec) → Funde als priorisiertes **Backlog** aufs Board → `/flow`. Behebt nichts automatisch; pusht nie ungefragt aufs fremde Upstream.
 - **`/cicd`** — Abschluss-Arm nach tester-PASS: git-Landen (merge+push), CI-Watch, lokaler Docker-Rollout, Disk-Hygiene (`docker image prune -f`). Verben: `ship` (kanonischer Modus), `rollout`, `rollback <tag>`, `version-stamp`, `ci-fix`, `status`. Dispatcht den `cicd`-Agenten; vom `/flow`-Orchestrator direkt nach tester-PASS ausgelöst (via SHIP-TRIGGER) oder manuell. **Abgrenzung:** `/preview` ist der ephemere Dev-Preview; `/cicd ship` ist der vollständige produktive Abschluss.
