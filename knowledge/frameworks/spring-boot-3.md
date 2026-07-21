@@ -1,8 +1,8 @@
 ---
 pack: frameworks/spring-boot-3
-pack_version: 1.1
+pack_version: 1.2
 framework_version_range: ">=3.0, <4.0"
-pack_date: 2026-06-02
+pack_date: 2026-07-21
 superseded_by: spring-boot-4
 requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A02
   java: ">=17"
@@ -31,6 +31,9 @@ Spring-Boot 3.x (Major-Range `>=3.0, <4.0`). Geladen bei `profile.frameworks` en
 - `spring-boot-3/A03` — **`@ConfigurationProperties` mit Java Records (since 3.0).** Records werden als immutable Konfigurations-Holder unterstützt; kein Setter-Boilerplate mehr. Beispiel: `@ConfigurationProperties("app") public record AppProps(String host, int port) {}`. [src: https://docs.spring.io/spring-boot/reference/features/external-config.html, since: 3.0]
 - `spring-boot-3/A04` — **Virtual Threads opt-in (since 3.2).** `spring.threads.virtual.enabled=true` aktiviert Virtual Threads für Tomcat/Jetty/RestClient/JdbcClient. JDK 21 Pflicht. [src: https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.virtual-threads, since: 3.2]
 - `spring-boot-3/A05` — **`RestClient` als bevorzugter HTTP-Client (since 3.2).** Synchroner Nachfolger des im Maintenance-Mode befindlichen `RestTemplate` (RestTemplate ist NICHT `@Deprecated`, wird aber laut Spring-Doku nur noch in Bug-Fix-Modus gepflegt — kein neuer Code mehr). [src: https://docs.spring.io/spring-boot/reference/io/rest-client.html, since: 3.2]
+- `spring-boot-3/A06` — **Actuator-`heapdump`-Endpunkt jetzt `access=NONE` per Default (since 3.5, Breaking Change).** Zitat: „The `heapdump` actuator endpoint now defaults to `access=NONE`. […] If you want to use it, you now need to both expose it, and configure access (previously, you only needed to expose it)." Wer den Endpoint nutzen will, muss ihn explizit exposen UND `management.endpoint.heapdump.access=unrestricted` (o.ä.) setzen — sonst bleibt er trotz `include: heapdump` gesperrt. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.5-Release-Notes#actuator-heapdump-endpoint, since: 3.5]
+- `spring-boot-3/A07` — **Auto-konfigurierter `TaskExecutor`-Bean-Name: nur noch `applicationTaskExecutor` (since 3.5, Breaking Change).** Zitat: „Previously Spring Boot auto-configured a `TaskExecutor` with the `taskExecutor` and `applicationTaskExecutor` bean names. As of this release, only the `applicationTaskExecutor` bean name is provided." Code, der den Bean per Namen `taskExecutor` anfordert (`@Qualifier("taskExecutor")`), muss auf `applicationTaskExecutor` umgestellt werden — oder per eigenem `BeanFactoryPostProcessor` einen Alias registrieren. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.5-Release-Notes#auto-configured-taskexecutor-names, since: 3.5]
+- `spring-boot-3/A08` — **Annotation-basierte Filter-/Servlet-Registrierung: `@ServletRegistration`/`@FilterRegistration` (since 3.5).** Zitat: „As an annotation-based alternative to `ServletRegistrationBean` and `FilterRegistrationBean` two new annotations have been added. `@ServletRegistration` can be used to register `Servlet`, while `@FilterRegistration` can be used to register `Filter`." Neuer Code sollte die Annotationen statt der `*RegistrationBean`-Klassen für einfache Registrierungs-Fälle nutzen (weniger Boilerplate, deklarativ). [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.5-Release-Notes#annotations-to-register-filter-and-servlet, since: 3.5]
 
 ## B. Anti-Patterns aus Einsatz
 
