@@ -19,7 +19,7 @@ labels:
 - automatisierung
 size_est: M
 dispo_est: '3.0'
-dispo_act: null
+dispo_act: '8.5'
 dispo_forecast: null
 estimate_note: 'S/M-Heuristik: n_ac=6, Skill-/Agent-Text + Merge-Mechanik + .gitattributes
   + CONCEPT-Nachzug => M. Baseline md|balanced|M (ep 3.0, n=34); tok_est aus baseline
@@ -31,5 +31,6 @@ branch: feat/S-119-train-auto-merge
 pr: null
 blocked_reason: null
 created_at: '2026-07-21T18:27:15Z'
-updated_at: '2026-07-21T21:20:44Z'
+updated_at: '2026-07-21T21:23:33Z'
 done_at: '2026-07-21T21:20:44Z'
+tok: '46465158'
