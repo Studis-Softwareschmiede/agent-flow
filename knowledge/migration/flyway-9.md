@@ -2,7 +2,7 @@
 pack: migration/flyway-9
 pack_version: 1.1
 framework_version_range: ">=9.0, <10.0"
-pack_date: 2026-06-02
+pack_date: 2026-07-21
 eol: "EOL/Maintenance — verify aktuelle Lifecycle-Page (documentation.red-gate.com/fd)"
 superseded_by: flyway-10
 requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01
@@ -33,6 +33,8 @@ Flyway 9.x — Java-Migration-Tool. Geladen bei `profile.db_migration_tool: flyw
 - `flyway-9/A03` — **Repeatable Migrations**: `R__<description>.sql` (R-Präfix) werden bei JEDEM Lauf re-applied, wenn die Datei-Checksum sich geändert hat. Nutzbar für Views, Stored Procedures, Seed-Daten — alles wo `CREATE OR REPLACE` Sinn macht.
 - `flyway-9/A04` — **Undo Migrations** (Enterprise-only seit 9.0): `U<version>__<description>.sql` als Rollback. **OSS-Edition unterstützt das NICHT** — wer Undo braucht, nutzt Liquibase-OSS oder Flyway-Enterprise.
 - `flyway-9/A05` — **`flyway_schema_history`-Tabelle** ist die Marker-Tabelle (NICHT `_schema_migrations` wie bei skeleton). Schema: `installed_rank`, `version`, `description`, `type`, `script`, `checksum`, `installed_by`, `installed_on`, `execution_time`, `success`. Spalten sind nicht direkt user-editierbar; Repair via `flyway repair`.
+- `flyway-9/A06` — **`clean` ist seit 9.0 standardmässig DEAKTIVIERT** (Breaking Change ggü. 8.x, Sicherheits-Default gegen versehentliches Prod-Data-Loss). Wortlaut der Quelle: „When you upgrade to Version 9, to carry on using `clean` … you'll need to set `-cleanDisabled` to 'false'." Wer `flyway clean` (CLI/Maven/Gradle) unter 9.x nutzen will, MUSS explizit `-cleanDisabled=false` setzen — ohne diesen Parameter schlägt der Aufruf fehl. [src: https://documentation.red-gate.com/fd/july-2022-version-9-is-coming-what-developers-need-to-know-212140919.html]
+- `flyway-9/A07` — **Community-Edition-DB-Versions-Untergrenze seit 9.0**: H2 1.4, Oracle 12.2, MariaDB 10.2 und HSQLDB 2.4 sind aus dem Community-Support herausgefallen (Wortlaut der Quelle: „This year the following database versions have turned 5 🎂: H2 version 1.4, Oracle 12.2, MariaDB 10.2, HSQLDB 2.4"). Projekte, die eine dieser (oder älteren) DB-Versionen brauchen, benötigen entweder eine neuere DB-Version oder Flyway Teams/Enterprise. [src: https://documentation.red-gate.com/fd/july-2022-version-9-is-coming-what-developers-need-to-know-212140919.html]
 
 ## B. Anti-Patterns aus Einsatz
 
