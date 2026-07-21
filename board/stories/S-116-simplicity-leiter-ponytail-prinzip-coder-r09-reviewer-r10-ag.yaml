@@ -1,0 +1,30 @@
+id: S-116
+parent: F-019
+title: 'Simplicity-Leiter (Ponytail-Prinzip): coder/R09 + reviewer/R10 + AGENTS.md-Nachzug'
+status: To Do
+priority: P2
+spec: docs/specs/coder-simplicity-ladder.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+depends: null
+labels:
+- agents
+- token-diaet
+size_est: M
+dispo_est: '3.0'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'S/M-Heuristik: n_ac=5, reine Agent-/Doku-Textaenderung (coder+reviewer+AGENTS.md)
+  => M. Baseline md|balanced|M (ep 3.0, n=34); tok_est aus baseline md|balanced|M.'
+confidence: medium
+tok_est: '5303333'
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T17:38:50Z'
+updated_at: '2026-07-21T17:39:13Z'
+done_at: null
