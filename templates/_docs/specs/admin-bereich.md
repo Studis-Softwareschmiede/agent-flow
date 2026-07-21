@@ -20,7 +20,7 @@ Ein passwortgeschützter Admin-Bereich mit deklarativem Konfig-Editor: Login nur
 
 ## Main Success Scenario
 
-1. Admin ruft den Admin-Bereich auf.
+1. Admin ruft den Admin-Bereich über das **dezente Icon oben rechts in der Haupt-App-Leiste** auf (trailing header/toolbar, Tooltip „Administration", kein Body-/Fusszeilen-Link — → BR-012/GE8).
 2. Ist noch kein `ADMIN_PASSWORD_HASH` gesetzt, zeigt die App die Einrichtungsseite (nur von localhost erreichbar) → Admin setzt initial ein Passwort.
 3. Admin loggt sich mit dem Passwort ein.
 4. Die Admin-UI rendert die Parameter generisch aus `config/admin-manifest.yaml`.
@@ -56,6 +56,7 @@ Ein passwortgeschützter Admin-Bereich mit deklarativem Konfig-Editor: Login nur
 - **AC9** — Der Login hat eine Fehlversuch-Sperre / ein Rate-Limit (→ BR-009, deckt E1, E2).
 - **AC10** — Die Sitzung läuft über ein signiertes HttpOnly+SameSite-Cookie; alle state-ändernden Admin-Requests sind CSRF-geschützt (→ BR-010).
 - **AC11** — Die Admin-UI rendert Parameter ausschließlich aus dem Manifest-Vertrag (`key`, `quelle`, `typ`, `editierbar`, `secret`, `validierung`) — keine hartkodierten Parameter-spezifischen UI-Zweige (→ BR-011).
+- **AC12** — Der Admin-Einstieg ist ein dezentes Icon oben rechts in der Haupt-App-Leiste (trailing header/toolbar, Tooltip „Administration", kein Text-Label), **nie** im Body und **nie** als Fusszeilen-Link (→ BR-012, GE8).
 
 > **Traceability:** Jeder Test trägt das kanonische Trace-Tag `@trace admin-bereich#AC<n>[,BR-NNN]`
 > gemäss `knowledge/<lang>.md` → `## Spec-Tagging`. Der `tester` rechnet das Coverage-Gate
