@@ -43,6 +43,15 @@ if grep -q '^ADMIN_PASSWORD_HASH=' .env; then
   grep -v '^ADMIN_PASSWORD_HASH=' .env > "$tmp_env" || true
   mv "$tmp_env" .env
 fi
+# Sicherstellen, dass .env mit einem Zeilenumbruch endet, BEVOR angehängt wird —
+# sonst verklebt die neue ADMIN_PASSWORD_HASH-Zeile mit der letzten bestehenden
+# Zeile (z.B. dem letzten API-Key) zu EINER Zeile. Beim Sourcen (`. .env`) würde
+# dann weder der API-Key noch der Hash korrekt gesetzt (beide Werte korrupt).
+# `tail -c1` liefert das letzte Byte; endet die Datei mit '\n', ist die
+# Command-Substitution leer -> kein zusätzlicher Umbruch (idempotent).
+if [[ -s .env && -n "$(tail -c1 .env)" ]]; then
+  printf '\n' >> .env
+fi
 # Der Hash enthält strukturell '$'-Zeichen (argon2id$v=19$...); einfach quoten,
 # damit ein `eval`-basierter Konsum (z.B. scripts/load-env.sh) den Wert nicht
 # als Variablen-Referenzen fehlinterpretiert (siehe .claude/lessons/coder.md).
