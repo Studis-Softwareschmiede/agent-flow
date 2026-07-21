@@ -171,9 +171,25 @@ Neuer Unterabschnitt `## Output-Contract` je Sprach-Pack (analog zur bestehenden
 
 ---
 
+## 7. Externe Token-Spar-Tools — Prüfung 2026-07-21 (Owner-Auftrag)
+
+Vier virale Community-Tools wurden auf Owner-Wunsch gegen die Doktrin dieses ADR (Fidelity vor Ersparnis, keine Interzeption im Hot-Path, RTK-Lehre §3.0) geprüft. Ergebnis:
+
+| Tool | Mechanik | Entscheid | Kernbegründung |
+|---|---|---|---|
+| `headroomlabs-ai/headroom` | Lokaler API-Proxy (`ANTHROPIC_BASE_URL`), komprimiert Tool-Outputs/Logs/JSON **lossy** vor dem Modell | **Abgelehnt** | Exakt die Weg-B-Fehlerklasse, verschärft: prozessweiter Interzeptor über **allen** Traffic — Review-/Test-Gates entschieden auf verändertem Material, Transkript ≠ Modell-Sicht (Muster von CVE-2026-45792). Dazu: Abo-OAuth-Token durch Dritt-Proxy (ToS/Sicherheit ungeklärt), reale Median-Kompression laut eigener Telemetrie nur ~4,8 %, P99-Latenz 4,2 s, Claude-Code-Feature-Verlust. |
+| `JuliusBrussee/caveman` | Skill/Systemprompt: Modell-Output im Telegrammstil | **Abgelehnt** | Wirkt nur auf Antwort-Stil; die Fabrik-Handoffs sind bereits knappe Fest-Formate + Weg C (`[[output-shaping-prompt-frugality]]`). Repo-eigene ehrliche Zahlen: Session-Ersparnis 14–21 %, bei knappen Antworten netto-negativ (~1–1,5k Tokens Skill-Overhead/Turn); Antwortqualität unevaluiert; Risiko verstümmelter Agent-Handoffs. |
+| `DietrichGebert/ponytail` | Prompt-Regelsatz „weniger Code bauen" (Simplicity-Leiter) | **Prinzip übernommen, Plugin abgelehnt** | Einziger Kandidat auf einem unbesetzten Hebel (weniger erzeugter Code spart auch downstream bei reviewer/tester; belegt −22 % Tokens/−54 % LOC ohne Safety-Verlust). Als Plugin abgelehnt: Hook-Injektion in alle Subagenten kollidiert mit den Handoff-Verträgen, „YAGNI gilt auch für Tests" mit dem Coverage-Gate. Destillat als eigene Regel: Spec [`coder-simplicity-ladder`](../specs/coder-simplicity-ladder.md) (`coder/R09`/`reviewer/R10`). |
+| `Graphify-Labs/graphify` | Lokaler AST-Knowledge-Graph (tree-sitter, ohne LLM) statt Roh-Exploration | **Pilot, eng begrenzt** | Spart nur Klasse-A-Explorations-Tokens (doktrin-konform), aber laut Hersteller-Messung erst ab größeren Korpora wirksam (~1× bei kleinen Repos — der Normalfall der Fabrik-Projekte). Pilot nur am nächsten großen `/adopt`-Fall, mit harter Gegenprobe analog §4: Spec [`graphify-adopt-pilot`](../specs/graphify-adopt-pilot.md). Ergebnis + Entscheid werden hier in §7 nachgetragen. |
+
+Recherche-Basis: README/Quellcode/Issues/Benchmarks der vier Repos (Stand 2026-07-21), je per Subagent primärquellen-geprüft. Die Ablehnungen sind **entschieden** (nicht „später wieder prüfen") — eine Neubewertung bräuchte eine substanzielle Änderung der Tool-Mechanik, nicht nur neue Versionen.
+
+---
+
 ## Zusammenfassung (Verweis)
 
 - **Denylist (Klasse C)** ist bindend und unabhängig vom gewählten Weg — s. Spec-Verträge.
 - **Empfehlung (messungs-belegt, 2026-07-14):** C sofort + A mittelfristig (Pack-Verankerung); **B (RTK produktiv) abgelehnt** — Pilot-Fidelity auf Tests durchgefallen + Supply-Chain untauglich (§3.0/§3.2).
 - **Weg-A-Design (S-067):** die mechanische Umsetzung von Weg A ist in [`output-shaping-classA-filter.md`](output-shaping-classA-filter.md) entworfen — Empfehlung: **expliziter opt-in Wrapper-Befehl** (kein prozessweiter Hook), interne Allowlist, fail-open, mit hartem Fidelity-Gate vor Aktivierung.
 - **~~Offene Lücke~~ geschlossen:** gemessene Ersparnis liegt vor (dev-gui S-345, `docs/rtk-output-shaping-pilot-report.md`): Klasse A ~65–80 %, Klasse B marginal/fidelity-untauglich.
+- **Externe Tools (2026-07-21, §7):** Headroom + Caveman **abgelehnt**; Ponytail-Prinzip als [`coder-simplicity-ladder`](../specs/coder-simplicity-ladder.md) übernommen; Graphify-Pilot via [`graphify-adopt-pilot`](../specs/graphify-adopt-pilot.md).
