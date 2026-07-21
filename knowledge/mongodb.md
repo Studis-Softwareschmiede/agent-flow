@@ -26,6 +26,8 @@ Regel-IDs: `mongo/R<NN>`. (Modell-DESIGN macht `dba`, Migrationen schreibt `code
 
 - `mongo/R08` — **Index Filters deprecated seit MongoDB 8.0 — Query Settings verwenden**: `planCacheSetFilter` (Index Filters) sind in MongoDB 8.0 deprecated; Ersatz ist `setQuerySettings`. Index Filters hatten zwei kritische Einschränkungen: sie sind nicht persistent (gehen bei Server-Neustart verloren) und gelten nur für den verbundenen Node, nicht cluster-weit. Query Settings via `setQuerySettings` sind persistent, cluster-weit anwendbar und decken `find`, `distinct` und `aggregate` ab. Migration: bestehende Filter per `planCacheListFilters` auslesen, als `setQuerySettings`-Calls neu anlegen, alte Filter per `planCacheClearFilters` löschen. Quelle: [MongoDB Manual — planCacheSetFilter Deprecation](https://www.mongodb.com/docs/manual/reference/command/planCacheSetFilter/) · [setQuerySettings](https://www.mongodb.com/docs/manual/reference/command/setquerysettings/)
 
+- `mongo/R09` — **BSONObjectTooLarge-Error-Code für Upserts geändert seit MongoDB 8.3**: Erzeugt ein Upsert (`updateOne`/`updateMany`/`replaceOne` mit `{upsert: true}`) ein BSON-Dokument > 16 MB, liefert der Server ab MongoDB 8.3 den Error-Code `10334` (`BSONObjectTooLarge`) — vor 8.3 wurde stattdessen `17419` bzw. `17420` zurückgegeben. Relevant für Idempotenz-Guards in Seed-/Migrations-Skripten (siehe `replaceOne({_id: ...}, doc, {upsert: true})`-Pattern unten): Code, der auf den alten numerischen Fehlercode prüft, muss auf `10334` migriert werden — sonst greift der Error-Handler auf 8.3+-Clustern nicht mehr. Quelle: [MongoDB 8.3 Release Notes — BSONObjectTooLarge Code for Upsert Errors](https://www.mongodb.com/docs/manual/release-notes/8.3/#bsonobjecttoolarge-code-for-upsert-errors) · [Error Codes Reference — 10334](https://www.mongodb.com/docs/manual/reference/error-codes/#mongodb-error-10334)
+
 ---
 
 ## Migrations-Konvention (Spec §4)
@@ -111,6 +113,7 @@ print('Migration ' + VERSION + ' applied.');
 - `{field: null}`-Query auf einem MongoDB-8.0+-Cluster ohne vorherige `undefined`-Bereinigung → **Important** (stilles Verhaltensdelta; `db.col.find({field: {$type: 6}})` zur Prüfung) (`mongo/R06`).
 - `$function`, `$accumulator` oder `$where` in Aggregation-Pipeline oder Query → **Important** (deprecated seit MongoDB 8.0, Warnung im Server-Log; native Operatoren verwenden) (`mongo/R07`).
 - `planCacheSetFilter` (Index Filters) statt `setQuerySettings` verwendet → **Important** (deprecated seit MongoDB 8.0; nicht persistent, nicht cluster-weit) (`mongo/R08`).
+- Error-Handling in Migrations-/Seed-Skripten prüft Upsert-Fehler auf den harten numerischen Code `17419`/`17420` statt `10334` → **Important** (bricht auf MongoDB 8.3+-Clustern; `mongo/R09`).
 - Bereits angewandte Migration editiert / umnummeriert → **Critical**.
 - `insertOne` in Migration ohne Idempotenz-Guard (kein `upsert`, kein `findOne`-Check) → **Important**.
 - Migrations-Code darf `db._collname.*` (Dot-Notation auf Underscore-Prefix-Collections) NICHT verwenden — stets `db.getCollection('_collname')`. → **Important** (mongosh-Parser-Falle: Property-Access bricht still bei Collections mit '_'-Präfix).

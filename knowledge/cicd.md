@@ -178,6 +178,30 @@ Die Zuordnung erfolgt **ausschliesslich** über `headSha == eigene SHA`. Ob übe
 
 ---
 
+### cicd/F10 — Node20-Actions laufen im Herbst 2026 nicht mehr (GitHub-Runner-Abkündigung)
+**Problem:** GitHub kündigt die Node20-Laufzeit für Actions ab: ab 16. Juni 2026 nutzen Runner standardmässig **Node24**; Node20-Actions laufen dann nur noch mit explizitem Opt-out (`ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true`), bevor Node20 im Herbst 2026 endgültig entfernt wird. Betrifft **jede Node20-gebaute Action**, die dieses Pack bisher als Beispiel zeigt:
+- `actions/checkout@v4` läuft auf Node20 → auf **`actions/checkout@v5`** (Node24) heben.
+- `gitleaks/gitleaks-action@v2` läuft auf Node20 → auf **`gitleaks/gitleaks-action@v3`** heben (laut Maintainer drop-in, „no changes to inputs, outputs, or behavior").
+
+**Symptom (Übergangsfenster):** gelbe Warnung im Actions-Log „Node.js 20 actions are deprecated"; nach der Runner-Migration harter Fehlschlag, wenn kein Opt-out gesetzt ist.
+
+**Fix:** betroffene `uses:`-Pins in `build.yml`/`security.yml` auf die Node24-fähige Major-Version anheben, sobald verfügbar; Major-Pin-Disziplin (`cicd/P04`) bleibt bestehen — nur der Ziel-Major ändert sich.
+
+Quelle: [Deprecation of Node 20 on GitHub Actions runners](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/) · [gitleaks-action Releases (v3.0.0)](https://github.com/gitleaks/gitleaks-action/releases)
+
+---
+
+### cicd/F11 — `actions/checkout` blockiert seit 20. Juli 2026 Fork-PR-Checkout in `pull_request_target`/`workflow_run` standardmässig
+**Problem:** `actions/checkout` v7 (18. Juni 2026) verweigert per Default das Auschecken von Fork-PR-Code in `pull_request_target`- und `workflow_run`-Workflows (Schutz vor „Pwn Request"-Angriffen: `refs/pull/<n>/head`, `refs/pull/<n>/merge`, Fork-HEAD-SHA). Seit **20. Juli 2026** ist dieses Verhalten auch auf **fliessende Major-Tags zurückportiert** (`actions/checkout@v4`, `@v3`, …) — ein Workflow, der bewusst Fork-Code in `pull_request_target`/`workflow_run` auscheckt (z.B. für Preview-Builds), bricht damit **ohne eigene Versionsänderung** um.
+
+**Betrifft nicht** Workflows, die nur auf `push`/`pull_request` (nicht `_target`) triggern (Softwareschmiede-Standard-`build.yml`/`security.yml` sind nicht betroffen) — relevant für jeden CI-Workflow mit `pull_request_target`/`workflow_run` + Fork-Checkout, u.a. Preview-/Fork-basierte Pipelines.
+
+**Fix, falls Fork-Checkout dort bewusst gewollt ist:** `allow-unsafe-pr-checkout: true` explizit setzen — nur nach Prüfung, dass kein Secret-Zugriff/Build-Schritt mit dem Fork-Code kompromittierbar ist.
+
+Quelle: [Safer pull_request_target defaults for GitHub Actions checkout](https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/)
+
+---
+
 ## Patterns / Best-Practices (P-Regeln)
 
 ### cicd/P01 — Rollout-Verifikation via Versions-Endpunkt
@@ -227,9 +251,10 @@ jobs:
 ---
 
 ### cicd/P04 — CI-Workflow-Hygiene (Action-Versionen)
-- Actions immer auf eine stabile **Major-Tag** pinnen (z.B. `actions/checkout@v4`, nicht `@main`).
+- Actions immer auf eine stabile **Major-Tag** pinnen (z.B. `actions/checkout@v5`, nicht `@main`) — Node20-Majors (`checkout@v4`, `gitleaks-action@v2`) sind Auslaufmodelle, siehe `cicd/F10`.
 - Bei `docker/build-push-action` und `docker/login-action` denselben Major-Stand halten (Kompatibilität der Outputs/Inputs).
 - `fetch-depth: 0` bei Verwendung von gitleaks (History-Scan).
+- Nutzt ein Workflow `pull_request_target`/`workflow_run` mit Fork-Checkout, siehe `cicd/F11` (Default-Verhalten von `actions/checkout` hat sich rückwirkend geändert).
 
 ---
 
@@ -319,6 +344,8 @@ Löst die frühere `build.version`-Label-/`/api/version`-Praxis (`cicd/P01`/`cic
 - CI-Gate-Skripte: wird `.github/workflows/*` (oder ein anderes strukturiertes Format) in Bash mit `grep`/`sed`/`awk`/Eigenbau-Parser interpretiert, um eine sicherheitskritische Entscheidung zu treffen? → **Critical** — empirisch beobachten statt parsen (`cicd/F08`)
 - CI-Gate-Entscheidung: führt jede Unsicherheit auf dem `default_branch` zum scharfen Watch/`die` (nie Skip)? Skip nur auf Nicht-`default_branch`? Kein Schalter, der den Watch auf `main` abschaltet? Fehlt → **Critical** (`cicd/F09`)
 - gitleaks-Allowlist-Änderungen: jeder neue Entry mit Begründung + bewiesener Nicht-Secret-Nachweis? (`cicd/F03`)
+- CI-Workflow-Änderungen: Node20-Actions (`actions/checkout@v4`, `gitleaks/gitleaks-action@v2`) noch gepinnt, obwohl Node24-fähige Major existiert? → **Important** (`cicd/F10`)
+- Workflows mit `pull_request_target`/`workflow_run` + Fork-Checkout: ist das neue Default-Blockverhalten von `actions/checkout` (seit 20.07.2026 auch auf fliessenden Majors) berücksichtigt bzw. `allow-unsafe-pr-checkout` bewusst + begründet gesetzt? → **Critical**, falls unbemerkt (`cicd/F11`)
 
 ## Test-Approach (für den `tester`-Agenten)
 - Nach einem Rollout: Smoke `curl -fsS http://localhost:<port>/` → HTTP 200.
