@@ -2,35 +2,40 @@
 > Kuratiert von /flow am Ende jeder Session. Max. 60 Zeilen.
 
 ## Aktueller Stand
-Board leer — pm-import komplett gelandet (19.07.2026, PRs #389–#391):
-`/from-notes` erkennt pm-skills-Artefakte frontmatter-first (`artifact:`),
-mappt sie feldgenau (11 Mapping-Zeilen: 8→Stufe b, 1 launch-checklist→Stufe c,
-2→Stufe a) und garantiert Idempotenz/ID-Kette/Drift über die bestehende
-obsidian-ingest-Mechanik (PM-Version-Vergleichsanker im jeweils schreibenden
-Commit). Vorgelagert existiert `scripts/pm-intake-gate.py` (PR #388): prüft
-einen Vault-Ordner nach einem pm-skills-Lauf gegen den pm-import-Kontrakt
-(--fix stempelt Frontmatter mechanisch nach, --json für headless). Erster
-Realtest: Ordner «Last30Days und PM» (Research-App-PRD) → GRÜN.
+Board fast leer (21.07.2026): 3 To-Do-Storys waren ready (S-098, S-118, S-119).
+S-118 (gpg-pass Single-Flight-Lock) ist in dieser Session gelandet (PR #433).
+S-098 wurde von einer parallelen `/flow`-Session (Worktree `flow-run`) parallel
+bearbeitet — diese Session hat sich bewusst zurückgezogen, um Duplikat-Arbeit
+zu vermeiden (kein Vertrags-Mechanismus verhindert das Race auf `board next`
+zwischen zwei gleichzeitig gestarteten Sessions; erkannt nur durch manuelle
+Worktree-Inspektion). S-119 (train-Auto-Merge) ist noch offen.
 
 ## Letzte Arbeiten
-- S-095/S-096/S-097 (pm-import AC1–AC10): Klassifikation §0c, Mapping-
-  Dispatch, Idempotenz §0d in skills/from-notes/SKILL.md. Befunde: Blanket-
-  Exclusion drohte stillem Content-Verlust (coder/L1), Versions-Protokoll
-  musste an den tatsächlich schreibenden Commit je Stufe (coder/L2).
-- pm-intake-gate.py (PR #388) + Spec pm-import (PR #362) gemerged; Spec auf
-  active gestempelt.
-- S-084–S-094 (Vorsession): Admin-Bereich-Standard + Build-Versionierung
-  (Details in docs/specs/admin-bereich-*.md, build-version-stamping.md).
+- S-118 (AC1–AC6): `provision-gpg-pass.sh` Single-Flight-Lock + sessions-
+  übergreifender Cache (mkdir-Lock+trap, Poll-Wartepfad, Stale-Lock-Übernahme,
+  `GPG_BW_CACHE_DIR` statt `$TMPDIR`). Reviewer-PASS, Tester-PASS (15/15 grün,
+  Flaky-Check 2x). Gelandet PR #433. `board-ship.sh`s `gh pr merge`-Schritt
+  scheiterte erneut am main-Worktree-Konflikt (Hauptordner hält `main`
+  ausgecheckt) — PR war remote bereits MERGED, Restschritte (Board-Flip via
+  temp detached Worktree) manuell nachgezogen (s. `.claude/lessons/flow.md`).
+- Duplikat-Dispatch-Risiko entdeckt: zwei `/flow`-Sessions können denselben
+  `board next`-Treffer (S-098) parallel als „In Progress" markieren, weil
+  Board-Status pro Worktree nur lokal (uncommittet) sichtbar ist, bis er
+  gepusht wird. Kein bestehender Lock-Mechanismus dagegen.
+- pm-import (S-095–S-097) + pm-intake-gate.py (PR #388) gelandet, Spec active.
 
 ## Offene Fäden
-- dev-gui S-383/S-384 (angelegt 19.07.): Obsidian-Ingest startete from-notes
-  im Vault-Ordner statt im Ziel-Projekt-Repo → Runner-Fix + GUI-Ziel-Projekt-
-  Auswahl offen; bis dahin schlägt der GUI-Ingest fehl («Fragenkatalog konnte
-  nicht gelesen werden» ist dieses Symptom).
-- pm-intake-gate läuft noch manuell (kein /research-Skill); Verankerung in
-  from-notes bräuchte einen expliziten AC (requirement-Eskalation 19.07.).
-- board-ship.sh: `gh pr merge` scheitert lokal weiter (main im Hauptordner
-  ausgecheckt) — PRs remote sauber gemerged, Restschritte manuell.
-- dev-gui: VPS-Rollout Settings-Volume + Wellen-Plan-Konsum-Story offen.
+- board-ship.sh: `gh pr merge --delete-branch` scheitert weiterhin lokal,
+  wenn `main` im Hauptordner ausgecheckt ist (PR landet remote trotzdem) —
+  jetzt 3x wiederholt (S-074/S-075/S-118); Skript-Fix erwägen (Merge ohne
+  `--delete-branch` + separates `git push origin --delete`).
+- Race zwischen parallelen `/flow`-Sessions auf denselben `board next`-Treffer
+  (s.o., S-098-Fall) — kein Claim-/Lock-Mechanismus vor dem ersten `board set
+  status In Progress`; bislang nur durch Zufall bemerkt.
+- `.claude/lessons/orchestrator.md` (5 Lessons L01–L05) wird von der aktuellen
+  `retro.md`-Kette nicht mehr gelesen (die zeigt auf `lessons/flow.md`, neu
+  angelegt diese Session) — Migration/Ablöse-Markierung offen.
+- dev-gui S-383/S-384: Obsidian-Ingest-Runner-Fix + GUI-Ziel-Projekt-Auswahl
+  offen.
 - AGENTS.md §1c (designer) beschreibt noch den alten Ablauf ohne Freigabe-
   Modus — Doku-Nachzug offen.
