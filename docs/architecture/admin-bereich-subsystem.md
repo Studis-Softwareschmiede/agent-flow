@@ -39,6 +39,7 @@ Vorab getroffene Invarianten (Owner-Diskussion abgeschlossen) — **keine** offe
 - **GE5 — Boot-kritische Werte sind read-only.** Werte, die nur beim Start greifen (PORT, DB_URL …), sind `editierbar: false` und werden nur **maskiert angezeigt** (BR-007). Alles andere wirkt zur Laufzeit ohne Neustart.
 - **GE6 — Fabrik liefert Vorlage + Scaffold + Story, nicht die Implementierung.** `/new-project`/`/init`/`/adopt` scaffolden Manifest-Vorlage + `set-admin-password.sh` + legen **idempotent** eine Board-Story „Admin-Bereich" an. Die stack-spezifische Umsetzung macht `coder` via `/flow` im Ziel-Projekt.
 - **GE7 — Nur UI-Projekte.** Der Admin-Bereich wird **nur** bei UI-Projekten gescaffoldet (Profil-Signal `ui`/vorhandene Oberfläche). Nicht-UI-Projekte (reine CLIs/Libs/Bots) erhalten ihn nicht.
+- **GE8 — Einstiegspunkt: Icon oben rechts (Owner-Vorgabe 2026-07-21).** Der Admin-Bereich wird über ein **dezentes Icon in der oberen rechten Ecke der Haupt-App-Leiste** erreicht (trailing header/toolbar-Actions — in Flutter `AppBar.actions`, in Angular/HTML das äquivalente trailing-Toolbar-Element). Ein Zahnrad-/`admin_panel_settings`-Outline-Icon mit Tooltip „Administration", **kein** Text-Label, **kein** Eintrag im Body und **kein** Fusszeilen-Link. Grund: eine Body-/Fusszeilen-Platzierung wirkt deplatziert und musste projekt-lokal wiederholt korrigiert werden; der trailing-App-Leisten-Platz ist die konventionelle Stelle für Betreiber-/Kontobereiche. Dezent gehalten (nur Icon), damit der Kundenfluss im Body unberührt bleibt. Der `designer`/`coder` setzt diese Platzierung als Default, ohne dass der Owner sie je erneut vorgeben muss (BR-012).
 
 ---
 
@@ -57,6 +58,7 @@ Die verbindlichen Regeln, die jede Admin-Bereich-Implementierung erfüllt. Die S
 - **BR-009 — Login-Härtung.** Der Login hat eine **Fehlversuch-Sperre / Rate-Limit** (Brute-Force-Schutz).
 - **BR-010 — Session + CSRF.** Die Sitzung läuft über ein **signiertes HttpOnly+SameSite-Cookie**; alle state-ändernden Admin-Requests sind **CSRF-geschützt**.
 - **BR-011 — Manifest-Vertrag.** Jeder Manifest-Parameter deklariert: `key`, `quelle` (`env` | `config.yaml` | `settings`), `typ`, `editierbar` (bool), `secret`/`maskiert` (bool), `validierung`. Die generische Admin-UI rendert ausschließlich aus diesen Feldern (GE3).
+- **BR-012 — Einstiegspunkt-Platzierung.** Der Admin-Einstieg ist ein **dezentes Icon oben rechts in der Haupt-App-Leiste** (trailing header/toolbar-Actions), mit Tooltip „Administration", ohne Text-Label; **nie** im Body und **nie** als Fusszeilen-Link (GE8). Die generische Umsetzung setzt diese Platzierung als Default (kein projekt-lokaler Owner-Eingriff nötig).
 
 ---
 
