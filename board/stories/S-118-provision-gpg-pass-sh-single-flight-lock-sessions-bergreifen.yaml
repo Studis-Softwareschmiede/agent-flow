@@ -2,7 +2,7 @@ id: S-118
 parent: F-025
 title: 'provision-gpg-pass.sh: Single-Flight-Lock + sessions-übergreifender Cache
   — genau 1 Bitwarden-Login bei N parallelen Aufrufern'
-status: In Progress
+status: Done
 priority: P2
 spec: docs/specs/gpg-pass-single-flight.md
 implements:
@@ -27,8 +27,8 @@ estimate_note: 'S/M-Heuristik: n_ac=6, Shell-Skript (Lock+Cache-Umbau) + Paralle
 confidence: medium
 tok_est: '5303333'
 branch: feat/S-118-gpg-pass-single-flight
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/433
 blocked_reason: null
 created_at: '2026-07-21T18:09:29Z'
-updated_at: '2026-07-21T20:19:53Z'
-done_at: null
+updated_at: '2026-07-21T20:47:33Z'
+done_at: '2026-07-21T20:47:22Z'
