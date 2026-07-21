@@ -1,8 +1,8 @@
 # Red-Team-Subsystem — autorisiertes Angriffs-Testen der eigenen Apps, das den Sicherheits-Lernkreis schließt
 
-> **Status:** akzeptiert — Fabrik-Seite (Skill + Agent-Verträge, Security-Pack-Härtung) **in Bau** (F-030, F-031).
-> **Offen (Cross-Repo, SR-Folge):** die Red-Team-Kachel im dev-gui-„Fabrik"-Panel (§6). Sprach-**neutral**.
-> Quer-Achse wie `reconcile-subsystem.md`. Skill (Arbeitstitel) `/agent-flow:red-team`.
+> **Status:** akzeptiert + **gebaut**. Fabrik-Seite (F-030/F-031) inkl. **scharfem Betrieb** (echter, nicht-destruktiver
+> Nuclei-Lauf hinter dem Feuer-Freigabe-Gate, **F-032**). Die Red-Team-Kachel im dev-gui-„Fabrik"-Panel ist **gebaut**
+> (**F-090**, §6). Sprach-**neutral**. Quer-Achse wie `reconcile-subsystem.md`. Skill `/agent-flow:red-team`.
 
 ## 1. Zweck & Problem
 

@@ -54,9 +54,12 @@ Allowlist bleiben unverändert HART.
 - **AC11 — Funde parsen → Triage.** Die Nuclei-**JSONL**-Ausgabe wird geparst (`template-id`, `info.name`, `info.severity`,
   `matched-at`) und an die agentische Triage übergeben (False-Positive-Filter, Ausnutzbarkeit **belegen** ohne auszunutzen,
   Schweregrad). Ergebnis → Protokoll (`docs/red-team-audit.md`) + Board-Items + Lessons (AC5/AC6).
-- **AC12 — Ziel-URL als Eingabe.** Skill/Agent nehmen die Ziel-URL(s) als Argument entgegen: `url=<origin-url>`
-  (+ `url_edge=<public-url>` bei `modus=beide`). **Ohne URL für einen scharfen Lauf → blockiert** (`status: blocked`,
-  kein Raten). Die dev-gui-Kachel liefert die URL aus der Allowlist-Auflösung (VPS-Host:hostPort bzw. öffentliche Hostname).
+- **AC12 — Ziel-URL als Eingabe + URL↔Ziel-Bindung (HART).** Skill/Agent nehmen die Ziel-URL(s) als Argument entgegen:
+  `url=<origin-url>` (+ `url_edge=<public-url>` bei `modus=beide`). **KEIN Client-Freitext:** die URL wird
+  **server-seitig aus dem autorisierten Allowlist-Eintrag abgeleitet** (der Client sendet nur `ziel`; VPS-Host:hostPort
+  bzw. öffentliche Hostname). Der **Agent verifiziert**, dass der URL-**Host** zum in Schritt 1 aufgelösten Ziel gehört
+  (URL↔Ziel-Bindung) — gehört sie nicht oder fehlt sie für einen scharfen Lauf → **blockiert** (`status: blocked`, kein
+  Raten, nie ein Scan gegen eine fremde Adresse). So bleibt die konstruktive Allowlist auch über die URL gewahrt.
 - **AC13 — Modus-Semantik + Cloudflare NUR-prüfen (HART).** `direkt` = gegen den **Origin** (sicherer Default, **keine**
   Cloudflare-Änderung nötig). `durch-cloudflare` = gegen die **öffentliche** URL; verlangt eine **vorab** gesetzte
   Ausnahme — der Lauf **PRÜFT** deren Vorhandensein, **SETZT sie NIE selbst**. `beide` = beide Läufe + Differenz-Ausweis.
