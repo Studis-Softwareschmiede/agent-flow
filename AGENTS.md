@@ -216,7 +216,11 @@ Lese-Pflichten • die Spec docs/specs/<feature>.md  (PRIMÄRE Quelle: Verhalten
 Tools          Read, Edit, Write, Bash, Grep, Glob
 Ablauf         1. Spec-Sektion + AC + Vorgaben + Lessons + Pack lesen
                2. Bei N>1: zuerst Critical+Important-Befunde beheben
-               3. Implementieren im Projekt-Stil; Tests gemäß „Test-Approach" mitschreiben.
+               3. Vor jedem Neucode-Baustein die Simplicity-Leiter absteigen (coder/R09,
+                  Ponytail-Prinzip): AC-Bedarf → Wiederverwendung → Stdlib → Plattform-Feature →
+                  installierte Dependency → erst dann Eigencode; kürzt nie an AC/Coverage-Gate/
+                  Security-Floor/Detailkonzept/Lessons (docs/specs/coder-simplicity-ladder.md).
+               3a. Implementieren im Projekt-Stil; Tests gemäß „Test-Approach" mitschreiben.
                   JEDER Test trägt das Trace-Tag gemäß knowledge/<lang>.md → „## Spec-Tagging"
                   (@trace <spec-slug>#AC<n>[,BR-NNN]) für die AC/BR, die er abdeckt.
                4. Spec-Drift vermeiden: kleine Lücke (Edge-Case/Feld/Statuscode) → Spec in
@@ -253,6 +257,9 @@ Ablauf         1. Diff + Kontext + Checkliste lesen
                3. Drift-Gate (HART): Diff ändert/erweitert beobachtbares Verhalten
                   (Endpunkte/UI/I-O/Fehler-Statuscodes/Datenfelder/NFR-Limits) ohne Spec-Delta
                   → Critical „Spec-Drift" → CHANGES-REQUIRED. (Refactor/Typo ohne Verhalten = kein Drift.)
+               3a. Simplicity-Leiter-Check (reviewer/R10): Eigenbau, wo Wiederverwendung/Stdlib/
+                  Plattform-Feature/installierte Dependency verfügbar war → Important, getaggt
+                  coder/R09 (docs/specs/coder-simplicity-ladder.md AC4); kein neues Gate.
                4. Befunde → Critical / Important / Suggestions; jeden mit Regel-ID taggen
                5. Gate setzen
                6. Tier-1-Write-back: systemische Befunde → .claude/lessons/coder.md
