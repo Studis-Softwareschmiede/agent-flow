@@ -44,6 +44,11 @@
   Erfahrung aus echten Läufen). Der `red-team`-Agent (§10) ist der **Produzent echter Angriffs-Funde** und speist
   Tier 1 (`.claude/lessons/red-team.md`) für die Einsatz-Lane — er schließt damit den Sicherheits-Lernkreis, den
   `train` (Netz → Pack) und `reviewer`→`retro` (Diff → Pack) nur zur Hälfte decken.
+- **Orchestrator-Lesson-Kanal (Tier 1, kanonisch):** `.claude/lessons/flow.md` ist der Tier-1-Kanal der
+  Orchestrator-Ebene — geschrieben (prepend, newest-first) von `/flow`, dem Nachtwächter-Außenlauf **und** einer
+  koordinierenden Owner-Session bei substanzieller Mehr-Feature-Arbeit (auch über general-purpose-Subagenten);
+  gelesen zu Lauf-Beginn und **geharvestet von `retro`** gleichrangig zu den coder/reviewer/tester-Lessons.
+  So wird auch Groß-Feature-Arbeit für die Retro sichtbar, nicht nur Klein-Story-Arbeit der Agenten.
 - **Observability (Tier 1, §5a):** Pack-Regeln haben stabile IDs (`flutter/R007`); `reviewer` taggt
   Befunde mit der ID; Promotions landen im `LEARNINGS.md`-Ledger + Improvement-Board.
 - **Gate (§5):** Skill-/Pack-Änderungen (`retro`/`train`) laufen NIE direkt auf `main` —
@@ -294,7 +299,7 @@ Zweck          Destilliert wiederkehrende, verallgemeinerbare Tier-1-Lessons in
                Verbesserungen der globalen knowledge/-Packs / Agent-Skills.
                Liefert das als PR — NIE Direkt-Edit.
 Trigger/Input  /retro            (interaktiv; cwd = ein Projekt-Repo)
-Lese-Pflichten • .claude/lessons/{coder,reviewer,tester}.md  (Quelle)
+Lese-Pflichten • .claude/lessons/{coder,reviewer,tester,flow}.md  (Quelle; flow.md = Orchestrator-Kanal, gleichrangig)
                • aktuelle knowledge/*.md + Agent-Defs der Fabrik (dedup/merge)
                • LEARNINGS.md  (was schon probiert/verworfen wurde)
 Tools          Read, Grep, Glob, Edit, Bash(git+gh)
