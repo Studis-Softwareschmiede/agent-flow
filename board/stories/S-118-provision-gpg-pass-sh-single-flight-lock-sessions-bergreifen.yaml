@@ -1,0 +1,34 @@
+id: S-118
+parent: F-025
+title: 'provision-gpg-pass.sh: Single-Flight-Lock + sessions-übergreifender Cache
+  — genau 1 Bitwarden-Login bei N parallelen Aufrufern'
+status: To Do
+priority: P2
+spec: docs/specs/gpg-pass-single-flight.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+- AC6
+depends: null
+labels:
+- scripts
+- secrets
+- parallelbetrieb
+size_est: M
+dispo_est: '3.0'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'S/M-Heuristik: n_ac=6, Shell-Skript (Lock+Cache-Umbau) + Parallel-Testsuite
+  => M. Baseline md|balanced|M (ep 3.0, n=34); tok_est aus baseline md|balanced|M.
+  Herkunft: Vorfall 2026-07-21 (30x paralleler train-Fan-out => Bitwarden-Login-Schwall).'
+confidence: medium
+tok_est: '5303333'
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T18:09:29Z'
+updated_at: '2026-07-21T18:09:50Z'
+done_at: null
