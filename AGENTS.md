@@ -299,7 +299,7 @@ Zweck          Destilliert wiederkehrende, verallgemeinerbare Tier-1-Lessons in
                Verbesserungen der globalen knowledge/-Packs / Agent-Skills.
                Liefert das als PR — NIE Direkt-Edit.
 Trigger/Input  /retro            (interaktiv; cwd = ein Projekt-Repo)
-Lese-Pflichten • .claude/lessons/{coder,reviewer,tester}.md  (Quelle)
+Lese-Pflichten • .claude/lessons/{coder,reviewer,tester,flow}.md  (Quelle; flow.md = Orchestrator-Kanal, gleichrangig)
                • aktuelle knowledge/*.md + Agent-Defs der Fabrik (dedup/merge)
                • LEARNINGS.md  (was schon probiert/verworfen wurde)
 Tools          Read, Grep, Glob, Edit, Bash(git+gh)
