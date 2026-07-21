@@ -1,0 +1,5 @@
+# Append-only Ledger: parallele train-Pack-PRs haengen je eine Zeile an.
+# union verhindert Merge-Konflikte bei disjunkten Zeilen-Anhaengen
+# (Owner-Entscheid 2026-07-21, docs/specs/train-auto-merge.md AC5 —
+# Vorfall 2026-07-21: 23 von 27 train-Pack-PRs mit LEARNINGS.md-Append-Konflikt).
+LEARNINGS.md merge=union

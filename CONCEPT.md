@@ -181,7 +181,9 @@ Retro/Train ändern **nie** direkt die Live-Skills. Ablauf:
 
 **Entschiedene Default-Gate-Stufe:** (a) `reviewer`-Check **+** (c) menschliches Approve vor Merge. Der Beispielprojekt-Test (b) kommt später dazu.
 
-**Erweitert (Owner-Entscheid 2026-07-18, retro-Ausnahme):** für `retro`-PRs (Modus A/B/D/E inkl. Estimator-PRs E2) entfällt (c) — `reviewer`-`PASS` merged den PR automatisch (squash), kein menschliches Approve mehr nötig. (a) bleibt zwingend (kein Merge ohne `PASS`). `train`- und `teamLeader`-PRs bleiben bei der Default-Gate-Stufe `(a) + (c)`. Details/Verträge: `docs/specs/retro-auto-merge.md`.
+**Erweitert (Owner-Entscheid 2026-07-18, retro-Ausnahme):** für `retro`-PRs (Modus A/B/D/E inkl. Estimator-PRs E2) entfällt (c) — `reviewer`-`PASS` merged den PR automatisch (squash), kein menschliches Approve mehr nötig. (a) bleibt zwingend (kein Merge ohne `PASS`). `teamLeader`-PRs bleiben bei der Default-Gate-Stufe `(a) + (c)`. Details/Verträge: `docs/specs/retro-auto-merge.md`.
+
+**Erweitert (Owner-Entscheid 2026-07-21, train-Ausnahme, analog retro):** für reguläre train-Pack-Update-PRs (Einzel- wie Mehr-Pack-Pfad) entfällt (c) ebenfalls — `reviewer`-`PASS` merged den PR automatisch (squash, Branch löschen), kein menschliches Approve mehr nötig. (a) bleibt zwingend (kein Merge ohne `PASS`); bei `CHANGES-REQUIRED` Fix-Loop (max. 3 Iterationen), danach bleibt der PR offen + Meldung an den Owner. Anlass: der Sammel-Lauf vom 2026-07-21 (27 Pack-PRs) blieb bis zur manuellen Einzel-Freigabe liegen, zusätzlich mussten 23/27 PRs wegen `LEARNINGS.md`-Append-Konflikten manuell nachgemergt werden (behoben durch `union`-Merge-Strategie, `.gitattributes`). **Ausgenommen von der train-Ausnahme:** `model-tiers`- und `--bootstrap`-Läufe bleiben bei der Default-Gate-Stufe `(a) + (c)` (Sondermodi, siehe `docs/specs/model-tier-curator.md` bzw. `docs/specs/train-bootstrap-new-pack.md`). `teamLeader`-PRs bleiben unverändert bei `(a) + (c)`. Details/Verträge: `docs/specs/train-auto-merge.md`.
 
 → Selbst-*Verbesserung* statt Selbst-*Degradation*: jede Änderung prüfbar, versioniert, zurückrollbar.
 

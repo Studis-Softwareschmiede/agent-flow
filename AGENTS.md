@@ -351,8 +351,12 @@ Ablauf         1. aktuellen Pack lesen
 Mechanik       NICHT ${CLAUDE_PLUGIN_ROOT} editieren (read-only Cache) → agent-flow-Source
                temp-klonen, Branch, edit, push, gh pr create. Details: agents/train.md.
 Output         PR-Link + Pack-Änderungen, je mit Quelle
-Gate           §5: reviewer-Check + Mensch-Approve → merge → neue Fabrik-Version
-Harte Grenzen  • NIE Direkt-Push auf main (nur PR); merged eigenen PR NICHT
+Gate           §5, train-Ausnahme seit 2026-07-21: reviewer-Check → PASS → Auto-Merge
+               (squash, kein Mensch-Approve, ausgeführt von der Skill); CHANGES-REQUIRED →
+               Fix-Loop (max. 3 Iterationen) → offen + Meldung. Ausgenommen: model-tiers/
+               --bootstrap bleiben bei reviewer-Check + Mensch-Approve (kein Auto-Merge).
+               (docs/specs/train-auto-merge.md)
+Harte Grenzen  • NIE Direkt-Push auf main (nur PR); merged eigenen PR NICHT (Skill mergt)
                • JEDE Regel mit autoritativer Quelle (Link) belegt — keine halluzinierten
                  APIs/Versionen, keine Blog-Meinung als „Best-Practice"
                • MAX. 3 Regeln/Lauf, im Zweifel weniger; nur allgemeingültiges Wissen
