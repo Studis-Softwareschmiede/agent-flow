@@ -28,12 +28,12 @@
 Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains: [security]`) für die *Tiefe*; die mit **⚑** markierten Punkte sind der **Security-Floor**, den der `reviewer` **IMMER** anwendet (auch ohne `domains:[security]`) und der `coder` immer befolgt. Orientierung: OWASP Top 10.
 
 **Regel-Lanes (zwei kollisionsfreie Namespaces).** Der Pack führt zwei getrennte Regel-Lanes — es gibt **keine** ID-Kollision zwischen ihnen (`R` vs. `E`):
-- **Norm-Lane** `security/R<NN>` — **train-Hoheit**, externe Standards (OWASP/NIST/RFC, feste `primary_sources` oben). Die Regeln der `## Coder-Guidance` (R01–R16) **sind** die Norm-Lane; nur `agent-flow:train` ändert sie.
+- **Norm-Lane** `security/R<NN>` — **train-Hoheit**, externe Standards (OWASP/NIST/RFC, feste `primary_sources` oben). Die Regeln der `## Coder-Guidance` (R01–R18) **sind** die Norm-Lane; nur `agent-flow:train` ändert sie.
 - **Einsatz-Lane** `security/E<NN>` — **retro-Hoheit**, Erfahrung aus echten Läufen (Red-Team-Funde, wiederkehrende Review-Muster). Siehe Sektion `## Einsatz-Erfahrung` unten; nur `agent-flow:retro` schreibt dort.
 
 ## Coder-Guidance
 
-> **Norm-Lane** (`security/R<NN>`, train-Hoheit). Die folgenden Regeln R01–R16 sind die von externen Standards getriebene Norm-Lane — nur `agent-flow:train` ändert sie. Erfahrungs-Regeln aus echten Läufen stehen getrennt in `## Einsatz-Erfahrung` (`security/E<NN>`).
+> **Norm-Lane** (`security/R<NN>`, train-Hoheit). Die folgenden Regeln R01–R18 sind die von externen Standards getriebene Norm-Lane — nur `agent-flow:train` ändert sie. Erfahrungs-Regeln aus echten Läufen stehen getrennt in `## Einsatz-Erfahrung` (`security/E<NN>`).
 
 - `security/R01` ⚑ — **Keine Klartext-Secrets im Code/Repo** (Keys, Tokens, Passwörter, Connection-Strings — hartkodiert oder als unverschlüsselte Datei committed) → aus Env/Secret-Store laden; Secrets **nie loggen**. **Erlaubt (GE6):** eine committete `.env.gpg`-Datei (GPG-symmetrisch AES256, geteilte Fabrik-Passphrase) ist der **vorgesehene** Weg, App-Secrets versioniert mitzuführen — sie ist **kein** Befund. Klartext-`.env` oder hartkodierte Werte bleiben Critical.
 - `security/R02` ⚑ — **Jeden untrusted Input** (User, Netzwerk, Datei, URL-Param) validieren/normalisieren; **Output kontext-gerecht encoden** (HTML / Attribut / URL / SQL) → gegen XSS/Injection.

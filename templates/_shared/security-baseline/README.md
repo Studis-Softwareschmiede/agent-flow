@@ -21,7 +21,7 @@ Jede Antwort eines web-fassenden Origins setzt die OWASP-Standard-Header:
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Begrenzt Referrer-Leak über Origin-Grenzen. |
 | `Permissions-Policy` | `geolocation=(), camera=(), microphone=()` | Schaltet nicht benötigte Browser-Features ab. |
 | `Cross-Origin-Opener-Policy` (COOP) | `same-origin` | Prozess-Isolation vom Opener. |
-| `Cross-Origin-Embedder-Policy` (COEP) | `require-corp` | Cross-Origin-Isolation (nötig für `SharedArrayBuffer`). Ggf. lockern, wenn Drittressourcen eingebettet werden. |
+| `Cross-Origin-Embedder-Policy` (COEP) | **OPT-IN (Default aus)** | In den Middleware-Vorlagen **auskommentiert** — `require-corp` blockiert cross-origin eingebettete Ressourcen ohne CORP/CORS (wahrscheinlichster stiller App-Brecher). Nur einschalten, wenn du echte Cross-Origin-Isolation brauchst (z.B. `SharedArrayBuffer`). |
 | `Cross-Origin-Resource-Policy` (CORP) | `same-origin` | Schützt Ressourcen vor Cross-Origin-Einbettung. |
 
 Startwerte sind **konservativ**: sie härten maximal und werden pro App gelockert (dokumentiert im Kommentar der jeweiligen Middleware), nicht umgekehrt. CSP, COEP und `Permissions-Policy` sind die üblichen Anpass-Kandidaten.

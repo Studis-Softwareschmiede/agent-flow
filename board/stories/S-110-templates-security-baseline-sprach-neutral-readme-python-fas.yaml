@@ -2,7 +2,7 @@ id: S-110
 parent: F-033
 title: 'templates: Security-Baseline (sprach-neutral README + Python-FastAPI/Flask-Middleware
   + JS/Node-Express-Middleware, Docs-off-in-Prod via ENV)'
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/security-baseline-scaffold.md
 implements:
@@ -25,5 +25,5 @@ branch: null
 pr: null
 blocked_reason: null
 created_at: '2026-07-21T06:46:59Z'
-updated_at: '2026-07-21T06:46:59Z'
-done_at: null
+updated_at: '2026-07-21T06:57:40Z'
+done_at: '2026-07-21T06:57:40Z'

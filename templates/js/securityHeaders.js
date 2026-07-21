@@ -39,11 +39,14 @@ export const SECURITY_HEADERS = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   // Schaltet nicht benoetigte Browser-Features ab; benoetigte gezielt freigeben.
   'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
-  // Cross-Origin-Isolation. COEP `require-corp` ggf. lockern, wenn Drittressourcen
-  // eingebettet werden, die kein CORP/CORS mitliefern.
+  // Cross-Origin-Isolation. COOP/CORP `same-origin` sind sichere Defaults.
   'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Embedder-Policy': 'require-corp',
   'Cross-Origin-Resource-Policy': 'same-origin',
+  // COEP `require-corp` ist bewusst OPT-IN (auskommentiert): blockiert cross-origin
+  // eingebettete Ressourcen (Bilder/Skripte/Fonts) ohne CORP/CORS — wahrscheinlichster
+  // stiller App-Brecher. Nur einschalten, wenn du echte Cross-Origin-Isolation brauchst
+  // (z.B. SharedArrayBuffer) UND alle Drittressourcen CORP/CORS liefern:
+  // 'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
 /**
