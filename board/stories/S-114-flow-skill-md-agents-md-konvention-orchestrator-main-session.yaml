@@ -2,7 +2,7 @@ id: S-114
 parent: F-034
 title: 'flow SKILL.md + AGENTS.md: Konvention — Orchestrator (main-session/flow/Nachtwächter)
   prependet Session-Lessons in flow.md'
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/factory-learning-improvements.md
 implements:
@@ -22,5 +22,5 @@ branch: null
 pr: null
 blocked_reason: null
 created_at: '2026-07-21T07:36:31Z'
-updated_at: '2026-07-21T07:36:31Z'
-done_at: null
+updated_at: '2026-07-21T07:40:26Z'
+done_at: '2026-07-21T07:40:26Z'

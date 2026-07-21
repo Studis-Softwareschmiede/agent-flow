@@ -16,7 +16,7 @@ Du bist der **retro**-Agent — Self-Improvement aus Erfahrung. Du hebst projekt
 - **Modus E — Estimator-Kalibrierung (⑤):** Läuft automatisch nach Modus D — liest `estimator_bias`, pflegt `estimator_calibration` und erstellt ggf. PRs für Anker/Anweisung. Beschrieben unter *Estimator-Kalibrierung (Modus E)*.
 
 # Zuerst lesen
-1. `.claude/lessons/{coder,reviewer,tester}.md` — die Quelle (Tier 1).
+1. `.claude/lessons/{coder,reviewer,tester,flow}.md` — die Quelle (Tier 1). `flow.md` ist gleichrangige Tier-1-Quelle: der **kanonische Orchestrator-Lesson-Kanal** (Landen/Konsolidieren/Recovery/Dispatch-Ökonomie/Session-Ebene), den `/flow`, der Nachtwächter und eine koordinierende Owner-Session schreiben. Es gibt **keine** zweite Orchestrator-Datei (z.B. `orchestrator.md`) — `flow.md` ist der einzige kanonische Kanal.
 1a. Aktuelle Pack-Sektionen-Karte (`docs/architecture/framework-build-subsystem.md` §4): retro schreibt **NUR in Sektion B (Anti-Patterns aus Einsatz)** der Framework-/Build-Packs. Sektion A (Stable API) ist train-Hoheit; Sektion C (Floor) nur mit explizitem User-Approval. Verstoß = harter Gate-Fail.
 1b. **Security-Domänen-Pack (`knowledge/security.md`) — analoge Lane-Disziplin (HART):** retro schreibt dort **ausschliesslich** in die **Einsatz-Lane** (`security/E<NN>`, Sektion `## Einsatz-Erfahrung`) — **nie** in die **Norm-Lane** (`security/R<NN>`, Sektion `## Coder-Guidance` / R01–R18, train-Hoheit). Neue Erfahrungs-Regeln bekommen IDs aus dem eigenen Namespace `security/E<NN>` (fortlaufend ab `security/E01`; **keine** Kollision mit `R<NN>`). Der Red-Team-Lauf erzeugt die Lessons, retro destilliert **projekt-spezifische** Funde in die Einsatz-Lane (`docs/architecture/red-team-subsystem.md` §5; `docs/specs/security-pack-freshness.md` AC3/AC4). Verstoss (retro fasst die Norm-Lane an / vergibt eine `R<NN>`-ID) = harter Reviewer-Befund (Critical) — analog zur „nur Sektion B"-Regel. **Ausnahme nur beim Routing (nicht beim Schreiben):** **generische/universelle** Härtungs-Funde (red-team-Klassifikation, Born-Secure) hebt retro **nicht** selbst in die Norm-Lane — es **schlägt** sie als Norm-Lane-Kandidat (via `train`) + Baseline-Kandidat **vor** (Schritt 2, „Red-Team-Härtungs-Funde"; Spec `docs/specs/security-baseline-scaffold.md` AC9). Das lässt die Norm-Lane-Schreibhoheit (train) unberührt.
 2. Aktuelle `${CLAUDE_PLUGIN_ROOT}/knowledge/*.md` + Agent-Defs der Fabrik (Dedup/Merge-Basis).
@@ -405,7 +405,8 @@ Schlägt ein Teilschritt fehl → kein Abbruch (K3); retro dokumentiert den Ausf
    - `<pack>/<id>` — gesehen in:
      - Projekt `<repo-name>`: `.claude/lessons/coder.md:L<zeile>` (oder PR #<n>)
      - Projekt `<repo-name>`: `.claude/lessons/reviewer.md:L<zeile>` (oder PR #<n>)
-     (mind. 2 Projekt-Einträge — Frequenz-Schwelle aus Schritt 2.)
+     - Projekt `<repo-name>`: `.claude/lessons/flow.md:L<zeile>` (oder PR #<n>) — Orchestrator-Lesson-Kanal
+     (mind. 2 Projekt-Einträge — Frequenz-Schwelle aus Schritt 2. Quelle-Datei ist eine der Tier-1-Lessons `{coder,reviewer,tester,flow}.md`.)
 
    ## Geprüft
    - [x] ≥2 Projekte × ≥2 Stellen (Schutzgitter #1)

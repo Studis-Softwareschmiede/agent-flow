@@ -57,6 +57,7 @@ wie `security/R16` beim Admin-Setup.)*
    - **Board-Items** — jede bestätigte Lücke wird als To-Do-Item angelegt, damit `/flow` sie behebt (finden → beheben → erneut testen).
    - **Lessons** — wiederkehrende, generalisierbare Muster werden als projekt-lokale Lesson abgelegt (Format wie `.claude/lessons/`), damit **`retro`** sie in die Einsatz-Lane des `security`-Packs (`security/E<NN>`, §5) heben kann.
 6. **Freigabe — immer ein PR.** Wie `reconcile`: kein Self-Merge, kein Auto-Feuern. Der Lauf liefert Protokoll + Board-Items als **einen PR** zur Freigabe.
+7. **Folge-Schritt — Retro-Auslöser bei generischen Funden (AC3).** Enthält der Lauf mindestens einen **generisch/universell** klassifizierten Fund, **empfiehlt** der Agent nach dem Landen des PRs einen **`/retro`-Lauf im selben Konsum-Repo** — der Cross-Repo-Transport (§5) in Norm-Lane + Baseline. Kein generischer Fund → keine Empfehlung. Kein erzwungener Auto-Spawn (§7); der Vermerk steht im Protokoll-Block und der headless-Ausgabe (`retro_recommended`).
 
 ## 5. Lernkreis — wie es an `train`/`retro` andockt
 
@@ -70,6 +71,19 @@ Der `security`-Pack bekommt **zwei kollisionsfreie Lanes** (F-030):
 So schreibt `train` nie in die Erfahrungs-Regeln und `retro` nie in die Norm-Regeln — analog zur A/B-Trennung der
 Framework-Packs. Der Red-Team-Lauf **erzeugt** die Lessons, die `retro` in die Einsatz-Lane destilliert — die dann
 den nächsten Lauf schärfen.
+
+### Cross-Repo-Transport generischer Funde (Konsum-Repo → zentrale Fabrik)
+
+Der Red-Team-Lauf klassifiziert jeden bestätigten Fund bereits **generisch/universell vs. projekt-spezifisch**
+(F-033 Teil C). Ein Lauf findet aber in einem **Konsum-Repo** statt, während die Fabrik-Regeln (Norm-Lane +
+Baseline) in **agent-flow** leben. `retro` liest **nur** das cwd-Repo — der Transport der **generischen** Härtungen
+in die Fabrik geschieht deshalb über einen **empfohlenen `/retro`-Lauf im selben Konsum-Repo**: Enthält der Lauf
+mindestens einen generischen Fund, **empfiehlt** der Red-Team-Agent nach dem Landen seines PRs genau dort eine Retro
+(kein erzwungener Auto-Spawn, §7). `retro` promotet die generischen Funde dann in die **Norm-Lane**
+(`security/R<NN>`, via `train`) **und** die **Security-Baseline** (`docs/architecture/born-secure-baseline.md`
+Teil B) — so schließt sich der Kreis Konsum-Repo → zentrale Fabrik. Der Vermerk ist im Protokoll-Block und der
+headless-Ausgabe sichtbar (`retro_recommended`), damit auch ein GUI-/Nachtwächter-Konsument den Folge-Schritt kennt.
+Bindend: Spec `docs/specs/factory-learning-improvements.md` AC3.
 
 ## 6. Architektur-Aufteilung (zwei Repos)
 

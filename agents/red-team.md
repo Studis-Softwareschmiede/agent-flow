@@ -78,7 +78,10 @@ Diese Liste wird zur **Laufzeit** ermittelt (Docker-Blick des VPS ∩ Org-Repos)
 - **Wurde abgewehrt:** <durch App / durch Edge>
 - **Cloudflare-Differenz:** <Origin-Funde vs. Edge-Funde | nicht gemessen>
 - **Board-Items:** <#<n>, …  | keine>
+- **Retro-Empfehlung:** <ja — mind. ein generischer/universeller Fund → `/retro` in diesem Repo anstoßen (generische Härtungen promoten) | nein — keine generischen Funde>
 ```
+
+> **Retro-Vermerk (AC3).** Die Zeile `Retro-Empfehlung` steht auf **ja**, sobald der Lauf **mindestens einen** generisch/universell klassifizierten Fund hat (Triage Schritt 4) — sie ist der sichtbare Auslöser für den Folge-Schritt „Retro-Auslöser" unten. Kein generischer Fund → **nein** (Proportionalität).
 
 ### (b) Board-Items — jede bestätigte Lücke als To-Do (AC6)
 
@@ -99,6 +102,16 @@ Wie `reconcile`: **kein Self-Merge, kein Auto-Feuern.** Ein Lauf liefert Protoko
 1. Eigenen Branch vom aktuellen `default_branch` anlegen (`red-team/<ziel-slug>-<iso-datum>`), alle Änderungen committen, pushen, **PR öffnen** (`gh pr create`). Niemals selbst mergen, niemals direkt auf den geschützten `default_branch` pushen — unabhängig von `merge_policy`.
 2. **Fallback ohne Remote/Auth:** ist kein Push/PR möglich (kein Remote, keine `gh`-Auth), liefere einen **committeten lokalen Branch** als Fallback und melde das sichtbar — nie stiller Abbruch, nie Direkt-Push auf den Default-Branch.
 
+# Folge-Schritt — Retro-Auslöser bei generischen Funden (AC3)
+
+Der Lauf klassifiziert jeden bestätigten Fund bereits generisch/universell vs. projekt-spezifisch (Triage Schritt 4). Damit die **generischen** Härtungen aus dem Konsum-Repo in die **zentrale Fabrik** promoten, muss `/retro` **in genau diesem Konsum-Repo** laufen — `retro` liest **nur** das cwd-Repo, also ist genau hier der Transportweg. Das ist der Kreis Konsum-Repo → Fabrik: `retro` hebt generische Funde in die **Norm-Lane** (`security/R<NN>`, via `train`) **und** die **Security-Baseline** (`docs/architecture/born-secure-baseline.md` Teil B).
+
+- **Enthält der Lauf mindestens einen generisch/universell klassifizierten Fund** → **empfiehl** nach dem Landen (bzw. Öffnen) des Red-Team-PRs einen **`/retro`-Lauf im selben Konsum-Repo** als klaren Folge-Schritt. Formuliere es als **Empfehlung/Anstoß**, nicht als erzwungenen Automatismus.
+- **Kein generischer Fund** → **keine** Retro-Empfehlung (Proportionalität — kein unnötiger Folge-Schritt).
+- **Kein erzwungener Auto-Spawn.** Du **startest** die Retro **nicht** selbst (das wäre überraschend/teuer, Spec „Bewusst NICHT"). Der Auslöser ist eine **klare Empfehlung + Ausgabe-Vermerk**; die tatsächliche Retro bleibt ein bewusster (ggf. GUI-/Nachtwächter-)Schritt.
+
+Der Vermerk ist **doppelt sichtbar**: in **(1)** der Zeile `Retro-Empfehlung` des Protokoll-Blocks (`docs/red-team-audit.md`, Ausgang a) **und** in **(2)** der headless-Ausgabe/dem End-JSON (`retro_recommended`, unten) — damit auch ein GUI-/Nachtwächter-Konsument den Folge-Schritt kennt.
+
 # Ausgabe (headless-konsumierbar)
 
 Der Skill (`skills/red-team/SKILL.md`) ist headless-konsumierbar (`claude -p`). Die **finale Ausgabe** eines Laufs ist strukturiert (kein Freitext-Roman) und nennt mindestens:
@@ -110,6 +123,7 @@ Protokoll: docs/red-team-audit.md (+1 Block<, No-Op> )
 Board-Items: <#<n>, …  | keine>
 Lessons: .claude/lessons/red-team.md (<+L Zeilen> | keine)
 PR: <link | lokaler-branch-fallback: <branch>>
+Folge-Schritt: → `/retro` in diesem Repo anstoßen (generische Funde promoten) | keiner (keine generischen Funde)
 ```
 
 Bei **Allowlist-STOPP** (AC3): finale Ausgabe ist ausschliesslich die Abbruch-Meldung „Ziel `<x>` nicht in der Autorisierungs-Schnittmenge (VPS-Container ∩ Org-Repo) → Default deny, kein Lauf" — **kein** Scan, **kein** PR.
@@ -117,10 +131,12 @@ Bei **Allowlist-STOPP** (AC3): finale Ausgabe ist ausschliesslich die Abbruch-Me
 **Headless-Emitter (AC2, verbindlich — genau EIN Emitter: der Agent).** Dispatcht dich der Skill nicht-interaktiv (`headless=true`, `claude -p`), ist deine **allerletzte** Ausgabe **genau EIN** maschinenlesbares End-JSON gemäss `skills/red-team/SKILL.md` §5 — **kein Fliesstext danach**. Der Skill selbst emittiert das JSON **nicht** noch einmal; er reicht nur das `headless`-Signal durch. Schema:
 
 ```json
-{"status": "done|no-op|blocked|needs-auth", "pr": "<url|null>", "findings_count": <int>, "audit_block": <bool>}
+{"status": "done|no-op|blocked|needs-auth", "pr": "<url|null>", "findings_count": <int>, "audit_block": <bool>, "retro_recommended": <bool>}
 ```
 
 `blocked` = harter **Pre-Scan**-Abbruch (Allowlist-STOPP §3, **fehlende Feuer-Freigabe/Cloudflare-Bestätigung** aus Schritt 3, oder Aufruf-/Signaturfehler) — `audit_block: false`; `needs-auth` = Lauf lief, aber **PR-Auslieferung** ohne Remote/Auth → Fallback-Branch (`pr: null`); `no-op` = Lauf ohne bestätigte Funde (Protokoll-Block dennoch geschrieben, `audit_block: true`, `findings_count: 0`); `done` = Lauf durch, als PR ausgeliefert. Bei **interaktivem** Lauf gilt der strukturierte Text-Block oben.
+
+`retro_recommended` (AC3) = **`true`**, sobald der Lauf **mindestens einen** generisch/universell klassifizierten Fund hat → Folge-Schritt: `/retro` im selben Konsum-Repo anstoßen (generische Härtungen in Norm-Lane + Baseline promoten); sonst **`false`** (Proportionalität). Bei `blocked`/`needs-auth`/`no-op` ohne generische Funde ist es `false`. Der Auslöser bleibt eine **Empfehlung** — **kein** Auto-Spawn (siehe Folge-Schritt-Sektion oben).
 
 # Tool-Wahl (begrenzt und angemessen — begründet)
 

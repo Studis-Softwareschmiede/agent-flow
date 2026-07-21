@@ -2,7 +2,7 @@ id: S-113
 parent: F-034
 title: 'retro.md: .claude/lessons/flow.md als Tier-1-Quelle harvesten (Orchestrator-Lessons
   promoten, kanonischer Kanal)'
-status: To Do
+status: Done
 priority: P1
 spec: docs/specs/factory-learning-improvements.md
 implements:
@@ -22,5 +22,5 @@ branch: null
 pr: null
 blocked_reason: null
 created_at: '2026-07-21T07:36:30Z'
-updated_at: '2026-07-21T07:36:30Z'
-done_at: null
+updated_at: '2026-07-21T07:40:26Z'
+done_at: '2026-07-21T07:40:26Z'

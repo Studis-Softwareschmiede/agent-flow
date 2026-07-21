@@ -126,7 +126,8 @@ maschinenlesbaren JSON-Objekt als **letzter Ausgabe** — **kein** Fliesstext da
 { "status": "done" | "no-op" | "blocked" | "needs-auth",
   "pr": "<url>" | null,
   "findings_count": <int>,
-  "audit_block": <bool> }
+  "audit_block": <bool>,
+  "retro_recommended": <bool> }
 ```
 
 - **`status`**:
@@ -138,6 +139,9 @@ maschinenlesbaren JSON-Objekt als **letzter Ausgabe** — **kein** Fliesstext da
 - **`findings_count`** — Anzahl bestätigter (triagierter) Lücken, die als Board-Items angelegt wurden.
 - **`audit_block`** — `true`, wenn dieser Lauf einen Block in `docs/red-team-audit.md` geschrieben hat (immer bei
   durchgelaufenem Scan, auch No-Op; `false` bei `blocked` vor dem Scan).
+- **`retro_recommended`** (AC3, `factory-learning-improvements`) — `true`, sobald der Lauf **mindestens einen**
+  generisch/universell klassifizierten Fund hat → Folge-Schritt: `/retro` im selben Konsum-Repo anstoßen (generische
+  Härtungen in Norm-Lane + Baseline promoten); sonst `false`. Bleibt eine **Empfehlung**, kein Auto-Spawn.
 
 **Fehlerpfad:** ein echter Aufruf-/Ausführungsfehler darf weiterhin mit exitCode ≠ 0 / Freitext enden — **kein**
 künstliches Status-JSON über einen echten Fehler legen. Der JSON-Vertrag gilt für **reguläre** Lauf-Enden
