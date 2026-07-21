@@ -1,0 +1,33 @@
+id: S-117
+parent: F-024
+title: Graphify-Pilot am nächsten großen /adopt-Fall — messungs-gestützt, opt-in,
+  rückbaubar
+status: To Do
+priority: P3
+spec: docs/specs/graphify-adopt-pilot.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+depends: null
+labels:
+- adopt
+- token-diaet
+- pilot
+size_est: M
+dispo_est: '3.0'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'S/M-Heuristik: Pilot-Durchfuehrung + Messung + Bericht => M, confidence
+  low (extern gated: realer grosser /adopt-Fall, AC1). Baseline md|balanced|M (ep
+  3.0, n=34); tok_est aus baseline md|balanced|M.'
+confidence: low
+tok_est: '5303333'
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T17:38:54Z'
+updated_at: '2026-07-21T17:39:29Z'
+done_at: null
