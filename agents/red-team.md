@@ -55,7 +55,10 @@ Diese Liste wird zur **Laufzeit** ermittelt (Docker-Blick des VPS ∩ Org-Repos)
      ```
      Die Templates kommen **pro Lauf frisch aus dem offiziellen Feed** — die „tagesaktuelle" Ebene ist per Konstruktion aktuell und lebt **NICHT** im Pack (vgl. `security.md`-Kopf). Bash steuert **ausschliesslich** den Scanner + wertet dessen JSONL-Ausgabe aus — **kein** eigener Exploit-Code, **kein** destruktives Ausnutzen.
    - **Modus (AC13).** `direkt` → nur die Origin-URL (sicherer Default, **keine** Cloudflare-Änderung nötig). `durch-cloudflare` → die **öffentliche** URL; setzt eine **vorab menschlich gesetzte** Cloudflare-Ausnahme voraus — du **prüfst** deren Vorhandensein, **setzt sie NIE** selbst. `beide` → beide URLs, **Differenz** ins Protokoll (§2). Du änderst **nie** die Cloudflare-Konfiguration.
-4. **Triage — agentisch (§4.4).** Die **Roh-Funde** triagieren: **False-Positive-Filter**, **Ausnutzbarkeit** (plausibel/belegbar), **Schweregrad** — **ohne** destruktives Ausnutzen. Du **belegst** Ausnutzbarkeit (Indikatoren, Reproduktions-Pfad in Worten), du **nutzt sie nicht aus** (kein Datenabfluss, keine Löschung, keine Persistenz-Änderung am Ziel).
+4. **Triage — agentisch (§4.4).** Die **Roh-Funde** triagieren: **False-Positive-Filter**, **Ausnutzbarkeit** (plausibel/belegbar), **Schweregrad** — **ohne** destruktives Ausnutzen. Du **belegst** Ausnutzbarkeit (Indikatoren, Reproduktions-Pfad in Worten), du **nutzt sie nicht aus** (kein Datenabfluss, keine Löschung, keine Persistenz-Änderung am Ziel). **Klassifiziere** dabei jeden **bestätigten** Fund (Fund-Klassifikation, Spec AC8, `docs/architecture/born-secure-baseline.md` §3 Teil C):
+   - **generisch/universell** — gilt für **jede** App dieser Klasse (z.B. fehlende Security-Header, öffentlich exponierte API-Docs/Schema, veraltete TLS-Suite). Solche Funde sind **Norm-Wahrheiten** (seit Jahren OWASP-Standard), **kein** Projekt-Spezifikum — der Lauf ist nur ihr **Auslöser**.
+   - **projekt-spezifisch** — Logik-/Kontext-/Konfigurationsfehler genau **dieses** Projekts.
+   Der Klassifikations-Vermerk wandert in **beide** Lernkreis-Ausgänge: den **Protokoll-Block** (a) **und** die **Lesson** (c) — damit `retro` (Teil C) generische vs. projekt-spezifische Funde in die richtigen Kanäle routen kann.
 5. **Drei Ausgänge — der Lernkreis (§4.5, AC5/AC6):** siehe unten.
 6. **Freigabe — immer ein PR (§4.6, AC7):** siehe unten.
 
@@ -63,7 +66,7 @@ Diese Liste wird zur **Laufzeit** ermittelt (Docker-Blick des VPS ∩ Org-Repos)
 
 ### (a) Protokoll — genau EIN Block pro Lauf in `docs/red-team-audit.md` (AC5)
 
-**Ein Dokument pro Projekt** (analog `spec-audit.md`), **append-only**: jeder Lauf hängt genau **einen** Block an — Datum, Ziel, „**was versucht / hat gegriffen / wurde abgewehrt**" + **Cloudflare-Differenz** (die zwei Messpunkte aus §2, falls gemessen). **Auch ein No-Op-Lauf** (keine bestätigten Funde) **wird protokolliert** — kein Lauf bleibt unsichtbar (analog dem `--no-op`-Block von `reconcile`). Kanonisches Block-Format:
+**Ein Dokument pro Projekt** (analog `spec-audit.md`), **append-only**: jeder Lauf hängt genau **einen** Block an — Datum, Ziel, „**was versucht / hat gegriffen / wurde abgewehrt**" + **Cloudflare-Differenz** (die zwei Messpunkte aus §2, falls gemessen). Jeder **bestätigte** Fund trägt seinen **Klassifikations-Vermerk** (generisch/universell vs. projekt-spezifisch, aus der Triage Schritt 4) — bei generischen Funden mit dem Hinweis, dass sie **Kandidaten für die Norm-Lane** (`security/R<NN>`, via `train`) **und die Security-Baseline** (`docs/architecture/born-secure-baseline.md` Teil B) sind, nicht nur für die Einsatz-Lane. **Auch ein No-Op-Lauf** (keine bestätigten Funde) **wird protokolliert** — kein Lauf bleibt unsichtbar (analog dem `--no-op`-Block von `reconcile`). Kanonisches Block-Format:
 
 ```
 ## <ISO-Datum> — <ziel-slug>
@@ -71,6 +74,7 @@ Diese Liste wird zur **Laufzeit** ermittelt (Docker-Blick des VPS ∩ Org-Repos)
 - **Koordination:** Cloudflare freigeschaltet: <ja, menschlich bestätigt | nein>
 - **Was versucht:** <Angriffsklassen/Templates, knapp>
 - **Hat gegriffen:** <bestätigte Lücken | keine>
+- **Klassifikation:** <je bestätigtem Fund: generisch/universell (→ Norm-Lane + Baseline-Kandidat) | projekt-spezifisch>
 - **Wurde abgewehrt:** <durch App / durch Edge>
 - **Cloudflare-Differenz:** <Origin-Funde vs. Edge-Funde | nicht gemessen>
 - **Board-Items:** <#<n>, …  | keine>
@@ -82,7 +86,11 @@ Jede **bestätigte** Lücke wird als **To-Do-Board-Item** angelegt, damit **`/fl
 
 ### (c) Lessons — generalisierbare Muster als projekt-lokale Lesson (AC6)
 
-**Wiederkehrende, generalisierbare** Muster legst du als projekt-lokale Lesson in `.claude/lessons/red-team.md` ab — **retro-lesbares Format** (newest-first), damit **`retro`** sie in die **Einsatz-Lane** `security/E<NN>` des `security`-Packs heben kann (§5). Du schreibst **NIE** direkt in einen globalen `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Pack — die Destillation ist `retro`-Hoheit (PR+Gate). Rein projektspezifische Einzel-Funde ohne Generalisierungs-Aussicht bleiben Board-Item, keine Lesson.
+**Wiederkehrende, generalisierbare** Muster legst du als projekt-lokale Lesson in `.claude/lessons/red-team.md` ab — **retro-lesbares Format** (newest-first), damit **`retro`** sie in den richtigen Kanal heben kann (§5). Jede Lesson trägt den **Klassifikations-Vermerk** aus der Triage (Schritt 4) — generisch/universell vs. projekt-spezifisch —, denn genau daran routet `retro` (Teil C, Spec AC9):
+- **generisch/universell** → Vermerk „**Norm-Wahrheit — Kandidat für Norm-Lane (`security/R<NN>`, via `train`) + Security-Baseline (`docs/architecture/born-secure-baseline.md` Teil B), ohne G1-„≥2 Projekte"-Hürde**". `retro` schlägt sie entsprechend vor (nicht ins Einsatz-Lane-Wartezimmer).
+- **projekt-spezifisch** → regulärer Weg in die **Einsatz-Lane** `security/E<NN>` (retro-Hoheit, G1 unverändert).
+
+Du schreibst **NIE** direkt in einen globalen `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Pack — die Destillation/das Routing ist `retro`-Hoheit (PR+Gate). Rein projektspezifische Einzel-Funde ohne Generalisierungs-Aussicht bleiben Board-Item, keine Lesson.
 
 # Freigabe — immer als EIN PR (AC7)
 

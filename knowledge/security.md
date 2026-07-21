@@ -51,6 +51,8 @@ Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains:
 - `security/R14` ⚑ — **Admin-Bereich-Session + CSRF:** die Admin-Sitzung läuft über ein **signiertes HttpOnly+SameSite-Cookie**; jeder state-ändernde Admin-Request (POST/PUT/PATCH/DELETE) ist **CSRF-geschützt** (Token oder Double-Submit-Cookie). → `docs/architecture/admin-bereich-subsystem.md` BR-010.
 - `security/R15` ⚑ — **Admin-Bereich-Secret-Maskierung:** als `secret`/`maskiert` deklarierte Manifest-Parameter (`config/admin-manifest.yaml`) werden im Admin-UI **immer maskiert** ausgeliefert — nie Klartext an den Browser, auch nicht als Vorbelegung eines Eingabefelds. → `docs/architecture/admin-bereich-subsystem.md` BR-008 (siehe auch `ui/R03`).
 - `security/R16` ⚑ — **Admin-Bereich-Setup nur von localhost:** ist beim Start kein `ADMIN_PASSWORD_HASH` gesetzt, ist die Erst-Setup-Seite **ausschließlich von localhost** erreichbar; jeder nicht-localhost-Request (insbesondere auf dem VPS) wird **immer** abgewiesen (Default deny, verschärft `security/R04` für den Setup-Fall). → `docs/architecture/admin-bereich-subsystem.md` BR-004.
+- `security/R17` — **HTTP-Security-Response-Header:** Web-/HTTP-fassende Apps setzen die Standard-Security-Header — **HSTS** (`Strict-Transport-Security`), **CSP** (`Content-Security-Policy`), **`X-Content-Type-Options: nosniff`**, **`X-Frame-Options`** bzw. CSP `frame-ancestors`, **`Referrer-Policy`**, **`Permissions-Policy`** sowie die Isolations-Header **COEP/COOP/CORP** (`Cross-Origin-Embedder-Policy` / `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy`). *Hinweis: die **proaktive** Umsetzung ist die Security-Baseline im Gerüst (`docs/architecture/born-secure-baseline.md` Teil B); R17 ist die **reaktive** Norm-Absicherung im Review.* → [OWASP Secure Headers Project](https://owasp.org/www-project-secure-headers/) · [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
+- `security/R18` — **Keine öffentliche API-Docs/Schema-Exposition in Produktion:** interaktive API-Docs + Schema (Swagger-UI, `/docs`, `/redoc`, `/openapi.json`, GraphQL-Introspection) sind in **Produktion** deaktiviert oder authentifiziert (Schutz vor Information Disclosure). Steuerung per ENV-Schalter, **Default Prod = aus**. → [OWASP API Security Top 10](https://owasp.org/API-Security/)
 
 ## Einsatz-Erfahrung (retro-Lane, `security/E<NN>`)
 
@@ -83,6 +85,8 @@ Sprach-agnostische Sicherheits-Expertise. Geladen als Domäne (`profile.domains:
 - ⚑ Admin-Bereich ohne CSRF-Schutz auf state-ändernden Requests oder ohne HttpOnly+SameSite-Session-Cookie → **Important** (`security/R14`, BR-010).
 - ⚑ Admin-Setup-Seite ohne localhost-Beschränkung (auf dem VPS erreichbar) → **Critical** (`security/R16`, BR-004).
 - ⚑ Als `secret`/`maskiert` deklarierter Manifest-Parameter unmaskiert an den Browser ausgeliefert (auch als Vorbelegung eines Eingabefelds) → **Important** (`security/R15`, BR-008).
+- Web-/HTTP-fassender Origin ohne die R17-Security-Header (HSTS/CSP/`X-Content-Type-Options`/`X-Frame-Options` bzw. `frame-ancestors`/`Referrer-Policy`/`Permissions-Policy`/COEP/COOP/CORP) → **Important** (`security/R17`).
+- API-Docs/Schema (Swagger / `/docs` / `/redoc` / `/openapi.json` / GraphQL-Introspection) in Prod öffentlich exponiert → **Important** (`security/R18`, Info-Disclosure).
 
 ## Test-Approach
 - **Secret-Scan** (gitleaks o. ä.) über Diff/Repo — Treffer = **Fail** (deckt `security/R01`).
