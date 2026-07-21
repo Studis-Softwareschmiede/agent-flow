@@ -2,8 +2,8 @@
 pack: frameworks/angular-21
 pack_version: 1.2
 framework_version_range: ">=21.0, <22.0"
-pack_date: 2026-06-15
-eol: "v21 aktiv bis ~2026-05-19, danach LTS (verify gegen angular.dev/reference/releases)"
+pack_date: 2026-07-21
+eol: "v21 Active-Support endete 2026-06-03, seither LTS (LTS-Ende: TBA). Aktuelle Latest-Major ist v22 (seit 2026-06-03), ausserhalb des Pack-Ranges. [src: https://angular.dev/reference/releases]"
 requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01/A02
   node: "^20.19.0 || ^22.12.0 || ^24.0.0"
   typescript: ">=5.9 <6.0"
@@ -46,6 +46,9 @@ Angular 21.x (Major-Range `>=21.0, <22.0`). Aktuelle, supportete Major (Release 
 - `angular-21/A09` — **`NgModuleFactory` und `ngModuleFactory`-Input entfernt (Breaking, since 21).** `NgModuleFactory` ist in v21 vollständig entfernt — Code, der `NgModuleFactory` direkt instanziiert oder referenziert, bricht beim Build. Migrationspfad: `NgModule` direkt verwenden (kein Factory-Pattern mehr nötig). Häufig betroffen: ältere Lazy-Loading-Patterns und custom Compiler-Setups, die `NgModuleFactory`-Typen trugen. Zusätzlich: das `ngModuleFactory`-Input von `NgComponentOutlet` wurde entfernt (Template-Binding `[ngModuleFactory]=…` auf `<ng-component-outlet>` bricht). Migration: `ngComponentOutlet` ohne Factory-Input verwenden. [src: https://github.com/angular/angular/releases/tag/21.0.0, since: 21.0]
 - `angular-21/A10` — **`emitDeclarationOnly: true` in tsconfig verursacht Angular-Compiler-Fehler (Breaking, since 21).** Der Angular-Compiler produziert jetzt explizit einen Fehler, wenn `emitDeclarationOnly` in der TypeScript-Compiler-Option gesetzt ist — dieser Modus ist inkompatibel mit dem Angular-Compiler. Betroffen: Library-Build-Setups (z.B. benutzerdefinierte `ng-packagr`-Konfigurationen), die dieses Flag nutzten. Abhilfe: Flag entfernen; Angular-Library-Builds laufen über den normalen Compiler-Pfad. [src: https://github.com/angular/angular/releases/tag/21.0.0, since: 21.0]
 - `angular-21/A11` — **`lastSuccessfulNavigation` auf Signal umgestellt (Breaking, since 21).** `Router.lastSuccessfulNavigation` ist in v21 ein `Signal<Navigation | null>` statt einer direkten Property — Zugriff erfordert jetzt einen Funktionsaufruf (Invocation). `ng update` liefert eine automatische Migration für bestehenden Code. Betroffen: Code, der `router.lastSuccessfulNavigation` direkt als Wert liest (z.B. `router.lastSuccessfulNavigation?.extras`). [src: https://github.com/angular/angular/releases/tag/21.0.0, since: 21.0]
+- `angular-21/A12` — **`VERSION`-Export aus `@angular/upgrade` deprecated (since 21.1.0).** Release-Notes wörtlich: „`VERSION` from `@angular/upgrade` is deprecated. Please use the entry from `@angular/upgrade/static` instead." Betrifft Hybrid-AngularJS-Interop-Code, der `VERSION` aus dem Haupt-`@angular/upgrade`-Entry-Point importiert — Umstieg auf den `@angular/upgrade/static`-Export. [src: https://github.com/angular/angular/releases/tag/v21.1.0, since: 21.1.0]
+- `angular-21/A13` — **XHR-Support in `@angular/platform-server` deprecated (since 21.2.17).** Release-Notes wörtlich: „XHR support in `@angular/platform-server` is deprecated. Use standard `fetch` APIs instead." Betrifft SSR-Setups, die noch auf `ServerXhr`/XHR-basiertes HTTP im Server-Rendering-Kontext setzen — Migration auf Standard-`fetch`. [src: https://github.com/angular/angular/releases/tag/v21.2.17, since: 21.2.17]
+- `angular-21/A14` — **ICU-übersetzter Content: unbekannte HTML-Attribute werden verworfen (Breaking, Security-Hardening, since 21.1.6).** Release-Notes wörtlich: „Angular now only applies known attributes from HTML in translated ICU content. Unknown attributes are dropped and not rendered." Betrifft i18n-Setups mit ICU-Message-Content, der bislang beliebige HTML-Attribute in übersetzten Strings transportierte (z.B. custom Data-Attribute) — diese werden seit 21.1.6 beim Rendering stillschweigend entfernt, nicht mehr nur bekannte/Standard-Attribute. [src: https://github.com/angular/angular/releases/tag/v21.1.6, since: 21.1.6]
 
 ## B. Anti-Patterns aus Einsatz
 
