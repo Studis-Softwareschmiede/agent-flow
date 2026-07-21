@@ -2,7 +2,7 @@
 pack: frameworks/spring-boot-2
 pack_version: 1.0
 framework_version_range: ">=2.0, <3.0"
-pack_date: 2026-05-31
+pack_date: 2026-07-21
 eol: 2023-11-18 (OSS — kommerzieller Support via VMware Tanzu bis 2026-08-25)
 superseded_by: spring-boot-3
 primary_sources:
@@ -32,6 +32,8 @@ Spring-Boot 2.x (Major-Range `>=2.0, <3.0`). **EOL für OSS seit 2023-11-18; aus
 - `spring-boot-2/A03` — **`RestTemplate` als Standard-HTTP-Client.** Synchroner Client (NICHT `@Deprecated` in 2.x, aber laut Spring-Doku in Maintenance-Mode). `WebClient` (reactive) ist die Alternative für asynchrone Calls. `RestClient` (in 3.2 neu) existiert in 2.x NICHT. [src: https://docs.spring.io/spring-boot/docs/2.7.x/reference/htmlsingle/#io.rest-client, since: 2.0]
 - `spring-boot-2/A04` — **Spring-Boot 2.7 ist die letzte 2.x-Version.** Danach kommt nur Spring-Boot 3.0 — kein 2.8. OSS-Support für 2.7 ist beendet; kommerzieller Support (Tanzu Spring Runtime) läuft noch — **die genauen Datumsangaben bitte aus der Support-Seite live verifizieren** (Support-Pläne werden gelegentlich aktualisiert). [src: https://spring.io/projects/spring-boot/#support — verify date]
 - `spring-boot-2/A05` — **Kein Virtual-Threads-Support.** Spring-Boot 2.x kennt keine `spring.threads.virtual.enabled`-Property (since 3.2 in 3.x). Virtual Threads sind 2.x prinzipiell nicht zugänglich (Tomcat 9 in 2.x ist nicht Virtual-Thread-aware). Migration auf 3.x nötig, um Java-21-Skalierungs-Pattern zu nutzen. [src: https://docs.spring.io/spring-boot/docs/2.7.x/reference/htmlsingle/, since: 2.0]
+- `spring-boot-2/A06` — **Java 21 als Runtime kompatibel (ohne Virtual Threads, siehe A05).** Laut System-Requirements-Sektion der Referenz-Doku: „Spring Boot 2.7.18 requires Java 8 and is compatible up to and including Java 21." D.h. ein 2.7.18-Projekt darf auf JDK 21 laufen (reine Runtime-Kompatibilität), OHNE dass dadurch Java-21-Features wie Virtual Threads oder Pattern-Matching-for-switch produktiv nutzbar würden (A05) — Framework-API bleibt auf Java-8/11-Sprachniveau ausgelegt. [src: https://docs.spring.io/spring-boot/docs/2.7.x/reference/htmlsingle/#getting-started.system-requirements, since: 2.7.18]
+- `spring-boot-2/A07` — **`spring.factories`-Auto-Configuration seit 2.7 deprecated — Migration zu `AutoConfiguration.imports`.** Die Registrierung von Auto-Configurations über den `org.springframework.boot.autoconfigure.EnableAutoConfiguration`-Key in `META-INF/spring.factories` ist seit 2.7 deprecated (aus Kompatibilitätsgründen weiterhin honoriert). Neuer Ort: `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` — pro Zeile ein vollqualifizierter Klassenname (kein CSV-Format), Klassen mit `@AutoConfiguration` statt reinem `@Configuration` annotieren. Beide Dateien dürfen parallel existieren (Einträge werden dedupliziert) — Übergangsstrategie für Libraries, die mehrere Spring-Boot-Versionen unterstützen müssen. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-2.7-Release-Notes, since: 2.7.0]
 
 ## B. Anti-Patterns aus Einsatz
 
