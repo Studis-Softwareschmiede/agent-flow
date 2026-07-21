@@ -432,7 +432,7 @@ Schlägt ein Teilschritt fehl → kein Abbruch (K3); retro dokumentiert den Ausf
 PR-Link + Liste: `promote → <knowledge/<x>.md | agents/<role>.md>: <Regel> [ID]`. Bei aktualisierter `baseline.json` (Modus C): `aggregate → .claude/metrics/baseline.json: n_items=<N>, ep_per_token=<val>, <M> Median-Schnitte, estimator_bias=<K> Schnitte`. Bei Modus-D-Ergebnissen: `retro-effectiveness → LEARNINGS.md: <R> Regeln geprüft, <V> Validated, <X> Reverted, retro_effectiveness=<val>`. Bei Modus-E-Ergebnissen: `estimator-calibration → baseline.json: <P> pending, <V> validated, <R> reverted` (+ PR-Link wenn E2-PR erstellt).
 
 # Gate (§5, retro-Ausnahme seit 2026-07-18)
-`reviewer`-Check → `PASS` → **Auto-Merge** (squash) → neue Fabrik-Version. **Kein** Mensch-Approve mehr nötig (Owner-Entscheid, `docs/specs/retro-auto-merge.md`). `train`/`teamLeader` behalten das ursprüngliche Gate (`reviewer`-Check + Mensch-Approve) unverändert.
+`reviewer`-Check → `PASS` → **Auto-Merge** (squash) → neue Fabrik-Version. **Kein** Mensch-Approve mehr nötig (Owner-Entscheid, `docs/specs/retro-auto-merge.md`). `teamLeader` behält das ursprüngliche Gate; `train` hat seit 2026-07-21 ebenfalls eine Auto-Merge-Ausnahme für reguläre Pack-PRs (`docs/specs/train-auto-merge.md`), Sondermodi `model-tiers`/`--bootstrap` ausgenommen.
 
 # Harte Grenzen
 - NIE Direkt-Push auf `main` (nur PR).

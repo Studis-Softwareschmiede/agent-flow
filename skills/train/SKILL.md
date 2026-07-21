@@ -57,7 +57,9 @@ Er liest den vom Resolver bestimmten Pack, recherchiert aus **Primär-/autoritat
 
 **Bei Framework-/Build-Packs schreibt der train-Agent ausschließlich in Sektion `## A. Stable API & Deprecations`** (Sektion B ist retro-Hoheit; Sektion C nur mit User-Approval). Verstoß = harter Gate-Fail beim Reviewer.
 
-**Merge erst nach `reviewer`-Check + deinem Approve** (Gate §5).
+**Reviewer-Gate + Auto-Merge (Owner-Entscheid 2026-07-21, gilt NICHT für `model-tiers`/`--bootstrap` — AC6):** nach Öffnen des Pack-PRs dispatcht die Skill den `reviewer` mit dem PR-Diff (Prüfmaßstab mind.: jede neue/geänderte Regel hat autoritative Quelle + stabile Regel-ID; max. 3 Regeln/Lauf; bei Framework-/Build-/Migrations-Packs ausschließlich Sektion `## A. Stable API & Deprecations` verändert; `LEARNINGS.md`-Zeile vorhanden; keine Halluzinations-Indizien). `Review-Gate: PASS` → Branch gegen `main` aktualisieren, PR automatisch mergen (squash) + Branch löschen — **ohne** Mensch-Approve; Merge + PR-Link werden gemeldet. `CHANGES-REQUIRED` → Critical+Important gehen als Arbeitsauftrag an den train-Agenten zurück (Fix-Loop, max. **3 Iterationen**, analog `[[retro-auto-merge]]`); danach immer noch kein `PASS` → PR bleibt **offen** + Meldung an den Owner (kein Merge, kein stilles Verwerfen). Scheitert der Merge trotz `PASS` (Konflikt/Race): Branch einmal erneut gegen `main` aktualisieren und erneut mergen; schlägt auch das fehl → PR bleibt offen + Meldung mit Grund. Kein dispatchbarer `reviewer` → kein Merge, PR bleibt offen + Meldung. Ist der PR bereits gemergt/geschlossen (Race mit manuellem Eingriff) → als solcher ausweisen, kein Fehler. Details: `docs/specs/train-auto-merge.md`.
+
+**`model-tiers` und `--bootstrap` bleiben beim bisherigen Gate** (`reviewer`-Check + Mensch-Approve, kein Auto-Merge) — der Auto-Merge gilt ausschließlich für reguläre Pack-Update-PRs (AC6).
 
 ## Mehr-Pack-Pfad (≥ 2 Pack-IDs in der Liste)
 
@@ -85,19 +87,23 @@ Für jede ID in der Dispatch-Liste wird **ein** `train`-Agent via Task-Tool gest
 
 **Kein paketübergreifender PR.** Jeder Agent öffnet seinen eigenen PR auf seinem eigenen Branch. Kein gemeinsamer Sammel-PR, kein paketübergreifender Merge.
 
+**Reviewer-Gate + Auto-Merge läuft je PR unabhängig (AC4, kein Sammel-Gate).** Sobald ein Agent seinen PR geöffnet hat, dispatcht die Skill für **diesen** PR sofort den `reviewer` (gleicher Prüfmaßstab + gleiche Merge-Mechanik wie im Einzel-Pack-Pfad oben) — unabhängig davon, ob andere Fan-out-PRs noch offen/in Review/im Fix-Loop sind. Ein langsamer oder rot bleibender PR blockiert die anderen nicht.
+
 **Sonderfall — alle IDs unauflösbar:** kein Dispatch; die Zusammenfassung (Schritt 4) listet alle als übersprungen. Kein Crash.
 
 ### Schritt 4 — Sammel-Übersicht ausgeben
 
-Nach Abschluss aller parallelen Agenten gibt die Skill eine **Sammel-Übersicht** aus:
+Nach Abschluss aller parallelen Agenten **inkl. ihrer je-PR Reviewer-Gate/Merge-Läufe** gibt die Skill eine **Sammel-Übersicht** aus:
 
 ```
 Mehr-Pack-Train abgeschlossen
 ──────────────────────────────
 Dispatcht (N Packs):
-  ✓ <pack-id-1>  → PR #<nr>: <link>
+  ✓ <pack-id-1>  → PR #<nr>: <link> → gemergt (#<nr>)
   ✓ <pack-id-2>  → keine Änderung (PR nicht geöffnet)
-  ✗ <pack-id-3>  → Agent-Fehler: <Kurzbeschreibung>
+  ✓ <pack-id-3>  → PR #<nr>: <link> → offen: CHANGES-REQUIRED nach 3 Iterationen
+  ✓ <pack-id-4>  → PR #<nr>: <link> → offen: Merge-Fehler <Grund>
+  ✗ <pack-id-5>  → Agent-Fehler: <Kurzbeschreibung>
 
 Übersprungen (M IDs):
   ⚠ <pack-id-A>  → nicht gefunden
@@ -105,8 +111,8 @@ Dispatcht (N Packs):
 ```
 
 Status-Werte je dispatcht-em Pack:
-- **PR geöffnet** — Link zum PR
-- **keine Änderung** — Agent fand keine neuen Regeln, kein PR geöffnet
+- **PR geöffnet** — Link zum PR, plus **Merge-Status** (AC4): `gemergt (#PR)` | `offen: CHANGES-REQUIRED nach 3 Iterationen` | `offen: Merge-Fehler <Grund>`
+- **keine Änderung** — Agent fand keine neuen Regeln, kein PR geöffnet (kein Reviewer-Dispatch nötig)
 - **Fehler** — Agent hat einen Fehler gemeldet (Kurzbeschreibung)
 
 Die Übersprungen-Liste enthält jede nicht aufgelöste ID mit dem Grund (nicht gefunden / mehrdeutig + Optionsliste).
