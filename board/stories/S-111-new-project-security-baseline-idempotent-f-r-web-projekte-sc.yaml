@@ -1,0 +1,27 @@
+id: S-111
+parent: F-033
+title: 'new-project: Security-Baseline idempotent für Web-Projekte scaffolden (nur
+  Web, Nicht-Web unberührt)'
+status: To Do
+priority: P1
+spec: docs/specs/security-baseline-scaffold.md
+implements:
+- AC6
+depends:
+- S-110
+labels:
+- security
+- scaffold
+size_est: null
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T06:47:00Z'
+updated_at: '2026-07-21T06:47:00Z'
+done_at: null

@@ -1,0 +1,27 @@
+id: F-033
+title: Born-Secure — Web-Sicherheit von Geburt an (Norm-Regeln + Baseline-Scaffold
+  + Lernkreis-Klammer)
+goal: 'A+B+C aus docs/architecture/born-secure-baseline.md: (A) fehlende Norm-Regeln
+  in security.md (Security-Header, keine öffentlichen API-Docs in Prod); (B) Security-Baseline
+  im Gerüst — neues Web-Projekt wird geboren mit Header-Middleware + Docs-off-in-Prod
+  (Python + JS), idempotent von new-project scaffolded; (C) red-team/retro routen
+  generische Härtungs-Funde in Norm-Lane + Baseline statt ins E-Lane-Wartezimmer.
+  Auslöser: Red-Team-Funde S-134/S-135 bei flashrescue.'
+status: Backlog
+priority: P1
+spec: docs/specs/security-baseline-scaffold.md
+definition_of_done: null
+labels:
+- security
+- wissen-packs
+- vorlagen-scaffolding
+depends: null
+owner: null
+stories:
+- S-109
+- S-110
+- S-111
+- S-112
+progress: 0/4 done
+created_at: '2026-07-21T06:46:58Z'
+updated_at: '2026-07-21T06:47:02Z'

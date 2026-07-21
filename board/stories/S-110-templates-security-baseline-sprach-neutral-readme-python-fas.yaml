@@ -1,0 +1,29 @@
+id: S-110
+parent: F-033
+title: 'templates: Security-Baseline (sprach-neutral README + Python-FastAPI/Flask-Middleware
+  + JS/Node-Express-Middleware, Docs-off-in-Prod via ENV)'
+status: To Do
+priority: P1
+spec: docs/specs/security-baseline-scaffold.md
+implements:
+- AC3
+- AC4
+- AC5
+- AC7
+depends: null
+labels:
+- security
+- vorlagen
+size_est: null
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T06:46:59Z'
+updated_at: '2026-07-21T06:46:59Z'
+done_at: null
