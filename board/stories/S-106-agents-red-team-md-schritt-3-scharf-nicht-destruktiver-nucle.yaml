@@ -6,9 +6,9 @@ status: Done
 priority: P1
 spec: docs/specs/red-team-capability.md
 implements:
-- R1
-- R2
-- R3
+- AC9
+- AC10
+- AC11
 depends: null
 labels:
 - security

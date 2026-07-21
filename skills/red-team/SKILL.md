@@ -16,10 +16,10 @@ Auslieferungs-Logik — die gesamte Fachlogik (Pack lesen, Scanner steuern, Fund
 liefern, PR öffnen) liegt im Agenten (Muster `reconcile`: dünner Auslöser, Logik in der Fabrik).
 
 Bindender Rahmen: `docs/architecture/red-team-subsystem.md` (§2 Grundhaltung, §3 Allowlist, §4 Ablauf, §6 Repo-Aufteilung) +
-`docs/specs/red-team-capability.md` (AC1–AC8). **Sicherheits-Grenze (Spec „Bewusst NICHT"):** in dieser Iteration
-entsteht der **Vertrag + das Gerüst**; die Live-Scanner-Integration gegen echte Ziele + die Cloudflare-Koordination
-sind die **dev-gui-Kachel-Folge** (§6). Der Skill löst **keinen** autonomen Live-Angriff aus — jeder Lauf gegen eine
-laufende App bleibt eine per-Lauf menschlich autorisierte Aktion.
+`docs/specs/red-team-capability.md` (AC1–AC14). **Sicherheits-Grenze (Spec „Bewusst NICHT"):** der Betrieb ist
+**scharf** (echter, nicht-destruktiver Nuclei-Lauf, F-032/AC9–AC14) — aber **hinter dem Feuer-Freigabe-Gate**, nie
+**Auto-Feuern**. Der Skill/Agent ändert **nie** die Cloudflare-Konfiguration (Standard-Modus `direkt` braucht keine);
+jeder Lauf gegen eine laufende App bleibt eine per-Lauf menschlich autorisierte Aktion.
 
 ## 0. Setup
 
@@ -50,12 +50,12 @@ laufende App bleibt eine per-Lauf menschlich autorisierte Aktion.
   `beide` (beide Messpunkte + Differenz-Ausweis, §2 der Architektur). Anderer Wert → klarer Abbruch, **kein** Dispatch.
   **Nur** `durch-cloudflare|beide` setzen eine **vorab menschlich gesetzte** Cloudflare-Ausnahme voraus — der Lauf
   **prüft** deren Vorhandensein, **setzt sie NIE** selbst; `direkt` braucht **keine** Cloudflare-Koordination. Der Skill
-  **koordiniert**, er **tarnt nicht** (§2, AC4, Spec R5).
+  **koordiniert**, er **tarnt nicht** (§2, AC4, Spec AC13).
 - **`url=<origin-url>`** (+ **`url_edge=<public-url>`** bei `modus=beide`) ist die **aufgelöste Ziel-Adresse** des
   Allowlist-Ziels. **KEIN Client-Freitext:** die dev-gui-Kachel leitet sie **server-seitig aus dem autorisierten
   Allowlist-Eintrag ab** (VPS-Host:hostPort bzw. öffentliche Hostname) und reicht sie durch; der Client sendet **nur**
   `ziel`. So bleibt die konstruktive Allowlist gewahrt — die URL gehört **immer** zum geprüften Ziel. Für einen
-  **scharfen** Lauf ist `url=` **Pflicht**; fehlt sie → `status: blocked` (kein Raten, Spec R4). Im Standalone-CLI
+  **scharfen** Lauf ist `url=` **Pflicht**; fehlt sie → `status: blocked` (kein Raten, Spec AC12). Im Standalone-CLI
   liefert der (vertrauenswürdige) Owner die zum Ziel gehörende URL.
 
 ## 2. Allowlist-Gate — Default deny (AC3, HART)
@@ -81,7 +81,7 @@ Nur nach bestandenem Allowlist-Gate (§2). Dispatch (Task-Tool) an `agents/red-t
 ```
 ziel: <app-slug>
 modus: direkt | durch-cloudflare | beide     (Default direkt)
-url: <origin-url>                            (server-seitig aus dem Allowlist-Eintrag abgeleitet, R4)
+url: <origin-url>                            (server-seitig aus dem Allowlist-Eintrag abgeleitet, AC12)
 url_edge: <public-url>                        (nur bei modus=beide)
 headless: <true|false>            (aus HEADLESS_JSON, §0 — der AGENT emittiert dann das End-JSON, §5)
 default_branch: <aus profile>
@@ -164,8 +164,8 @@ Freigabe: <PR-Link | "Kein PR — Fallback: committeter lokaler Branch (Grund: <
   bestätigter** Vor-/Nach-Schritt, kein stiller Automatismus.
 - **Kein destruktives Ausnutzen** — die Triage belegt Ausnutzbarkeit, ohne Schaden (kein Datenabfluss, keine Löschung).
 - **Kein Self-Merge, kein Auto-Feuern** (AC7) — immer ein PR zur menschlichen Freigabe (Fallback: committeter Branch).
-- **Scharfer Nuclei-Lauf ist gebaut (F-032, Spec R1–R6)** — der Agent feuert echt (nicht-destruktiv, frische Templates)
+- **Scharfer Nuclei-Lauf ist gebaut (F-032, Spec AC9–AC14)** — der Agent feuert echt (nicht-destruktiv, frische Templates)
   **hinter dem Feuer-Freigabe-Gate**; kein Trockenlauf mehr. `direkt` (Origin) ist der Cloudflare-freie Default.
-- **Keine automatische Cloudflare-Umkonfiguration (R5)** — `durch-cloudflare|beide` setzen eine **vorab menschlich
+- **Keine automatische Cloudflare-Umkonfiguration (AC13)** — `durch-cloudflare|beide` setzen eine **vorab menschlich
   gesetzte** Ausnahme voraus; der Lauf **prüft** sie, **setzt sie nie** selbst.
 - **Kein** Board-**Status**-Schreiben — Items entstehen als **To Do** (Hoheit `/flow`).

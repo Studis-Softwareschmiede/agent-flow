@@ -6,7 +6,7 @@ status: Done
 priority: P2
 spec: docs/specs/red-team-capability.md
 implements:
-- R6
+- AC14
 depends:
 - S-106
 - S-107

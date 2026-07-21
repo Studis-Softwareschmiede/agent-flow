@@ -6,8 +6,8 @@ status: Done
 priority: P1
 spec: docs/specs/red-team-capability.md
 implements:
-- R4
-- R5
+- AC12
+- AC13
 depends:
 - S-106
 labels:

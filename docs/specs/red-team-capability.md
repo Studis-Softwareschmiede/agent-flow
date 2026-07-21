@@ -45,23 +45,23 @@ Protokoll + Board-Items + Lessons und dockt so an `retro` an (Einsatz-Lane `secu
 Ersetzt den Trockenlauf durch einen **echten, nicht-destruktiven** Scanner-Lauf. Das Feuer-Freigabe-Gate + die
 Allowlist bleiben unverändert HART.
 
-- **R1 — Echter Nuclei-Lauf.** Nach bestandenem **Feuer-Freigabe-Gate** (AC4/Agent Schritt 3) führt der Agent einen
+- **AC9 — Echter Nuclei-Lauf.** Nach bestandenem **Feuer-Freigabe-Gate** (AC4/Agent Schritt 3) führt der Agent einen
   **echten** Nuclei-Lauf gegen die Ziel-URL aus (kein Trockenlauf mehr). Die Angriffs-**Templates** werden **pro Lauf
   frisch** gezogen (self-updating Feed) — die tagesaktuelle Ebene ist damit per Konstruktion aktuell und lebt NICHT im Pack.
-- **R2 — Nicht-destruktiv (HART).** Der Lauf ist auf **Detektion** beschränkt: destruktive/intrusive Template-Klassen
+- **AC10 — Nicht-destruktiv (HART).** Der Lauf ist auf **Detektion** beschränkt: destruktive/intrusive Template-Klassen
   werden ausgeschlossen (`-exclude-tags dos,intrusive,fuzz`), der Lauf ist **rate-limitiert** und **timeout-begrenzt**.
   Kein eigener Exploit-Code, kein Datenabfluss, keine Persistenz-Änderung am Ziel.
-- **R3 — Funde parsen → Triage.** Die Nuclei-**JSONL**-Ausgabe wird geparst (`template-id`, `info.name`, `info.severity`,
+- **AC11 — Funde parsen → Triage.** Die Nuclei-**JSONL**-Ausgabe wird geparst (`template-id`, `info.name`, `info.severity`,
   `matched-at`) und an die agentische Triage übergeben (False-Positive-Filter, Ausnutzbarkeit **belegen** ohne auszunutzen,
   Schweregrad). Ergebnis → Protokoll (`docs/red-team-audit.md`) + Board-Items + Lessons (AC5/AC6).
-- **R4 — Ziel-URL als Eingabe.** Skill/Agent nehmen die Ziel-URL(s) als Argument entgegen: `url=<origin-url>`
+- **AC12 — Ziel-URL als Eingabe.** Skill/Agent nehmen die Ziel-URL(s) als Argument entgegen: `url=<origin-url>`
   (+ `url_edge=<public-url>` bei `modus=beide`). **Ohne URL für einen scharfen Lauf → blockiert** (`status: blocked`,
   kein Raten). Die dev-gui-Kachel liefert die URL aus der Allowlist-Auflösung (VPS-Host:hostPort bzw. öffentliche Hostname).
-- **R5 — Modus-Semantik + Cloudflare NUR-prüfen (HART).** `direkt` = gegen den **Origin** (sicherer Default, **keine**
+- **AC13 — Modus-Semantik + Cloudflare NUR-prüfen (HART).** `direkt` = gegen den **Origin** (sicherer Default, **keine**
   Cloudflare-Änderung nötig). `durch-cloudflare` = gegen die **öffentliche** URL; verlangt eine **vorab** gesetzte
   Ausnahme — der Lauf **PRÜFT** deren Vorhandensein, **SETZT sie NIE selbst**. `beide` = beide Läufe + Differenz-Ausweis.
   Weder Agent noch Kachel ändern jemals die Cloudflare-Konfiguration (Koordination statt Tarnung, menschlich gesetzt).
-- **R6 — Grenzen unverändert.** Feuer-Freigabe-Gate, Allowlist (Default deny), kein destruktives Ausnutzen, immer PR —
+- **AC14 — Grenzen unverändert.** Feuer-Freigabe-Gate, Allowlist (Default deny), kein destruktives Ausnutzen, immer PR —
   alles bleibt hart. **Kein Auto-Feuern:** jeder scharfe Lauf braucht die per-Lauf-Freigabe.
 
 ## Bewusst NICHT (Sicherheits-Grenze)
@@ -70,5 +70,5 @@ Allowlist bleiben unverändert HART.
   (Freigabe-Gate in der Kachel/CLI) — der Lauf ist real, aber nie ungefragt/automatisch.
 - **Keine Detection-Evasion / Tarnung** — nur Koordination (§AC4).
 - **Keine fremden Ziele** — konstruktiv ausgeschlossen (§AC3).
-- **Kein destruktives Ausnutzen** — Ausnutzbarkeit wird belegt, nicht ausgenutzt (R2).
-- **Keine automatische Cloudflare-Umkonfiguration** — die Ausnahme setzt der Mensch, der Lauf prüft sie nur (R5).
+- **Kein destruktives Ausnutzen** — Ausnutzbarkeit wird belegt, nicht ausgenutzt (AC10).
+- **Keine automatische Cloudflare-Umkonfiguration** — die Ausnahme setzt der Mensch, der Lauf prüft sie nur (AC13).
