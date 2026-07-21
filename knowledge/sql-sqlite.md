@@ -44,6 +44,8 @@ Items mit Deployment-Pattern Multi-Replica (Compose `scale:`, Kubernetes `replic
 
 - `sqlite/R09` — **ALTER TABLE: NOT NULL-Constraint ohne Table-Rebuild seit SQLite 3.53.0 (April 2026) änderbar.** Neuer Syntax: `ALTER TABLE t ALTER col SET NOT NULL` / `ALTER TABLE t ALTER col DROP NOT NULL`. Ergänzt R05: der Table-Rebuild ist **nur noch nötig** für Typ-Änderungen, DEFAULT-Änderungen, CHECK-Constraints, Umbenennung von Constraints und alle anderen Schema-Änderungen. `SET NOT NULL` ist idempotent (no-op falls bereits gesetzt). Quelle: [sqlite.org/lang_altertable.html#alter_table_alter_column](https://www.sqlite.org/lang_altertable.html#alter_table_alter_column) · [sqlite.org/releaselog/3_53_0.html](https://www.sqlite.org/releaselog/3_53_0.html)
 
+- `sqlite/R10` — **WAL-Reset-Data-Race-Bug (Korruptionsrisiko in ALLEN SQLite-Versionen 3.7.0–3.51.2, behoben in 3.51.3, März 2026) — schärft R03.** Ein am 2026-03-03 gefundener Data-Race im Checkpoint-Pfad kann bei **≥2 gleichzeitigen Verbindungen** (separate Threads/Prozesse) auf dieselbe Datei, die gleichzeitig schreiben/checkpointen, dazu führen, dass eine spätere Checkpoint-Runde Transaktionsinhalte überspringt → **Datenkorruption**. Betroffen: „likely present in all version of SQLite from 3.7.0 (2010-07-21) through 3.51.2 (2026-01-09)". Behoben in 3.51.3 (2026-03-13)+; Backports für 3.44.6 und 3.50.7 verfügbar. Da `sqlite/R03` WAL-Modus für gleichzeitige Reader empfiehlt: vor Produktiv-Einsatz mit **mehreren schreibenden Verbindungen** die tatsächlich gebundene SQLite-Library-Version des Sprach-Treibers verifizieren (z.B. Python `sqlite3.sqlite_version`, nicht die System-CLI) — muss ≥ 3.51.3 sein bzw. einen der genannten Backports nutzen. Quelle: [sqlite.org/wal.html#the_wal_reset_bug](https://www.sqlite.org/wal.html#the_wal_reset_bug) — „The bug is likely present in all version of SQLite from 3.7.0 (2010-07-21) through 3.51.2 (2026-01-09). It is fixed in version 3.51.3 (2026-03-13) and later."
+
 ---
 
 ## Beispiel-Migration (`db_scripts/001_init.sql`)
@@ -94,6 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 - Backup via `cp` auf laufende DB (statt `sqlite3 .backup` oder WAL-Checkpoint) → **Important** (Datenverlust bei gleichzeitigem Write möglich).
 - `->` / `->>` verwechselt: `->` liefert JSON-Darstellung (mit Anführungszeichen bei Strings), `->>` liefert SQL-Wert → **Important** (Typ-Fehler in Verarbeitung, `sqlite/R08`).
 - `ALTER COLUMN SET NOT NULL` auf SQLite < 3.53.0 → `sqlite/R05` Table-Rebuild-Pattern verwenden; auf ≥ 3.53.0 neue Syntax nutzbar (`sqlite/R09`).
+- WAL-Modus (`sqlite/R03`) + mehrere schreibende Verbindungen ohne verifizierte Treiber-SQLite-Version ≥ 3.51.3 (bzw. Backport 3.44.6/3.50.7) → **Important** (WAL-Reset-Korruptionsrisiko, `sqlite/R10`).
 
 ---
 
@@ -103,6 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 - Smoke-Query (`SELECT 1 FROM users LIMIT 1`) gegen appliziertes Schema.
 - `PRAGMA foreign_keys;` → muss `1` zurückgeben (Verbindungssetup prüfen).
 - `PRAGMA journal_mode;` → muss `wal` zurückgeben.
+- Bei Multi-Writer-Setups (WAL): gebundene SQLite-Library-Version des Treibers gegen ≥ 3.51.3 prüfen (`sqlite/R10`).
 - Table-Rebuild-Migrationen: Zeilencount vor und nach dem Rebuild vergleichen (kein Datenverlust).
 
 ## Spec-Tagging
