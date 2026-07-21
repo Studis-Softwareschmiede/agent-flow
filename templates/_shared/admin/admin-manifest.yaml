@@ -1,0 +1,23 @@
+# config/admin-manifest.yaml — deklaratives Admin-Manifest (Fabrik-Standard)
+#
+# Manifest-Vertrag (→ BR-011, docs/architecture/admin-bereich-subsystem.md §4):
+# jeder Parameter deklariert genau diese Felder — die generische Admin-UI rendert
+# AUSSCHLIESSLICH daraus, kein hartkodierter Parameter-spezifischer UI-Code.
+#
+#   key:         eindeutiger Parameter-Schlüssel
+#   quelle:      env | config.yaml | settings   (Herkunft des Defaults)
+#   typ:         bool | int | string | enum | secret
+#   editierbar:  true|false — false = boot-kritisch, nur maskiert anzeigen (BR-007)
+#   secret:      true|false — true = im UI maskiert, nie Klartext an den Browser (BR-008)
+#   validierung: Validierungsregel (Typ/Range/Regex/Enum), als String
+#
+# Auflösungs-Präzedenz zur Laufzeit (BR-005): Settings-Ablage[key] falls gesetzt,
+# sonst Default aus `quelle`.
+#
+# Startbestand (Scaffold, docs/architecture/admin-bereich-subsystem.md §7):
+# die vorhandenen .env-Keys des Projekts, konservativ zunächst editierbar: false;
+# bei Secret-Namensmuster (*_KEY, *_TOKEN, *_SECRET, *_PASSWORD*, *_URL) secret: true.
+# Verfeinerung (welche Parameter editierbar werden, echte Validierungsregeln) erfolgt
+# projekt-lokal über /flow (GE6) bzw. die requirement-Frage bei App-Erstellung.
+
+parameters: []

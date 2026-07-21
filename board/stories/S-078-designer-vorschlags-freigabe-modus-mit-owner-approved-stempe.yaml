@@ -1,0 +1,27 @@
+id: S-078
+parent: F-019
+title: 'designer: Vorschlags-/Freigabe-Modus mit owner_approved-Stempel in design.md'
+status: Done
+priority: P1
+spec: docs/specs/design-owner-approval.md
+implements:
+- AC1
+- AC2
+- AC7
+depends: null
+labels:
+- designer
+size_est: M
+dispo_est: '3.0'
+dispo_act: '5.5'
+dispo_forecast: '-0.4545'
+estimate_note: M-Heuristik; dispo_est aus baseline md|balanced|M (n=19); keine Baseline-Tokens
+confidence: medium
+tok_est: null
+branch: feat/S-078-designer-freigabe-modus
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/367
+blocked_reason: null
+created_at: '2026-07-18T13:51:17Z'
+updated_at: '2026-07-18T15:30:37Z'
+done_at: '2026-07-18T15:29:21Z'
+tok: '56673412'

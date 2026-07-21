@@ -11,6 +11,12 @@ owner: null
 area: vorlagen-scaffolding
 stories:
 - S-050
-progress: 0/1 done
+- S-084
+- S-085
+- S-089
+- S-090
+- S-091
+- S-092
+progress: 2/7 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-04T07:54:22Z'
+updated_at: '2026-07-19T14:30:37Z'

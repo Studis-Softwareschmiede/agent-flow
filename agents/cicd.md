@@ -39,8 +39,8 @@ Oder: `/cicd <verb> [<args>]` direkt (z.B. `/cicd ship`, `/cicd rollback <tag>`,
 | Produktiver Docker-Rollout (pull + rm + run, NICHT restart) | **cicd** |
 | Disk-Hygiene nach Rollout (`docker image prune -f`) | **cicd** — Pflichtschritt |
 | Rollback auf vorheriges Image/Tag | **cicd** |
-| Build-Zeit-Versionsstempel ins Image einbacken (`ARG`/`ENV` in Dockerfile) | **cicd** |
-| Versions-Endpunkt/-Dashboard (`GET /api/version`) planen + verifizieren | **cicd** |
+| Build-Zeit-Versionsstempel datei-/label-basiert ins Image einbacken (`ARG` → Datei + OCI-Labels in Dockerfile) | **cicd** |
+| Versions-Endpunkt/-Dashboard (`GET /version`) planen + Datei-/Label-Abgleich verifizieren | **cicd** |
 | Laufende `build.yml`-Pflege: rote Pipelines diagnostizieren + fixen | **cicd** |
 | Secret-Scan-Gate (gitleaks) in `build.yml` pflegen/härten | **cicd** |
 | Ephemerer Preview-Deploy (Dev/PR-Loop) | **`/preview`** — NICHT cicd |
@@ -93,14 +93,16 @@ Dies ist der Haupt-Modus: ein lokal geprüfter Stand wird gelandet, der CI-Lauf 
 
 Repo-versionierte Meta-Dateien `.claude/lessons/*.md` sind **immer-Teil-der-Landung** — analog zum retro-Cooldown-Stempel `.claude/lessons/.retro-last-run` (`agents/retro.md` 3a). coder/reviewer/tester prependen ihre Lessons in den Worktree; ohne diesen Floor gingen sie beim `git worktree remove --force` spurlos verloren (belegt: dev-gui S-225). Der Floor liegt **in cicd** (Defense-in-Depth gegen eine SHIP-TRIGGER-Dateiliste, die die Lessons nicht aufzählt) — er hängt **nicht** am Gedächtnis des Orchestrators.
 
-1. **Geänderte, getrackte Lessons-Dateien ermitteln** (Working-Tree des Story-Branches/Worktrees):
+**`.claude/memory.md` — Ausnahmefall, nicht Regelweg (Spec `docs/specs/project-memory.md` AC6):** Der **Regelweg** für `.claude/memory.md` ist **nicht** dieser cicd-Floor, sondern der Session-Ende-Board-Meta-Commit, den `/flow` selbst **nach** der Landung fährt (`skills/flow/SKILL.md` §7, „Projekt-Memory kuratieren"): die Kuration verarbeitet das Landungsergebnis und kann strukturell erst **nach** A1 stattfinden, nicht davor. Liegt **ausnahmsweise** bereits ein `.claude/memory.md`-Delta **vor** der Landung im Story-Worktree vor (untypisch — z. B. ein manuell vorbereitetes Delta), behandelt dieser Floor `.claude/memory.md` als Defense-in-Depth-Backstop mit demselben Mechanismus wie Lessons (Schritte 1–4 unten). Im Regelfall findet dieser Floor für `.claude/memory.md` **nichts** (die Datei ist zu diesem Zeitpunkt noch unverändert) — das ist erwartetes Verhalten, kein Fehler.
+
+1. **Geänderte, getrackte Lessons-Dateien ermitteln** (Working-Tree des Story-Branches/Worktrees; derselbe Check läuft defensiv auch über `.claude/memory.md` mit, s.o. Ausnahmefall):
    ```bash
-   # Nur GETRACKTE Lessons-*.md mit Änderungen ggü. HEAD (staged + unstaged, inkl. neuer getrackter):
-   LESSON_FILES=$(git diff --name-only HEAD -- '.claude/lessons/*.md'; \
-                  git diff --name-only --cached -- '.claude/lessons/*.md')
+   # Nur GETRACKTE Lessons-*.md (+ ggf. memory.md im Ausnahmefall) mit Änderungen ggü. HEAD (staged + unstaged, inkl. neuer getrackter):
+   LESSON_FILES=$(git diff --name-only HEAD -- '.claude/lessons/*.md' '.claude/memory.md'; \
+                  git diff --name-only --cached -- '.claude/lessons/*.md' '.claude/memory.md')
    LESSON_FILES=$(printf '%s\n' $LESSON_FILES | sort -u | sed '/^$/d')
    ```
-2. **Guard — nur getrackt, kein Zwangs-Add (AC6, deckt E1):** Für jeden Kandidaten prüfen, ob er **getrackt und nicht gitignored** ist. Ist `.claude/lessons/` im Ziel-Repo **gitignored** (bewusste Ephemer-Entscheidung — so **auch in agent-flow selbst**, `.gitignore` Zeile `.claude/lessons/`), taucht keine Datei in `git diff` auf → **kein** `git add -f`, **kein** Fehler, kein Leer-Commit. Zusätzlicher expliziter Check:
+2. **Guard — nur getrackt, kein Zwangs-Add (AC6, deckt E1):** Für jeden Kandidaten prüfen, ob er **getrackt und nicht gitignored** ist. Ist `.claude/lessons/` im Ziel-Repo **gitignored** (bewusste Ephemer-Entscheidung — so **auch in agent-flow selbst**, `.gitignore` Zeile `.claude/lessons/`), taucht keine Lessons-Datei in `git diff` auf → **kein** `git add -f`, **kein** Fehler, kein Leer-Commit. Zusätzlicher expliziter Check:
    ```bash
    for f in $LESSON_FILES; do
      git ls-files --error-unmatch "$f" >/dev/null 2>&1 || continue   # nicht getrackt → überspringen
@@ -108,11 +110,11 @@ Repo-versionierte Meta-Dateien `.claude/lessons/*.md` sind **immer-Teil-der-Land
      TRACKED_LESSONS="$TRACKED_LESSONS $f"
    done
    ```
-   `TRACKED_LESSONS` (getrimmt) ist die **immer-mitzunehmende** Menge. Leer → Alternative A1-Fall (A1: keine Lessons-Änderung → kein zusätzlicher Datei-Anteil, kein Leer-Commit; A0 verläuft ergebnislos, aber **ohne** Fehler).
+   `TRACKED_LESSONS` (getrimmt) ist die **immer-mitzunehmende** Menge (Lessons; `.claude/memory.md` nur im o.g. Ausnahmefall). Leer → Alternative A1-Fall (A1: keine Lessons-Änderung → kein zusätzlicher Datei-Anteil, kein Leer-Commit; A0 verläuft ergebnislos, aber **ohne** Fehler).
 3. **Als Teil des Landungs-Commits/PR führen (AC1/AC4):** Die Lessons-Delta fährt als **Commit auf dem Story-Branch** durch die normale Merge-/Rebase-Maschinerie von A1 — sie wird **zusammen** mit den Story-Dateien committet (`git add $TRACKED_LESSONS` vor dem Commit in A1). Eine **überschreibende Datei-Kopie** des Worktree-Standes direkt auf `<default_branch>` ist **verboten** (`cp`/`git checkout <branch> -- <datei>` auf die Zieldatei), weil sie bereits gelandete Fremd-Lessons einer parallelen Story klobbern würde (AC4).
 4. **Zähler merken:** `LESSONS_LANDED=$(printf '%s\n' $TRACKED_LESSONS | sed '/^$/d' | wc -l)` — für die Handoff-Zeile `Lessons:` (AC8).
 
-Die Konfliktauflösung dieser Lessons-Delta beim Rebase/Merge regelt A1a (newest-first-Union, AC5).
+Die Konfliktauflösung dieser Lessons-Delta beim Rebase/Merge regelt A1a (newest-first-Union, AC5) — greift der Ausnahmefall oben (`.claude/memory.md`-Vorab-Delta), gilt für dessen Konflikt die abweichende Regel am Ende von A1a (jüngere Kurations-Fassung gewinnt).
 
 ### A1. Git-Operationen: Landen (merge + push)
 
@@ -155,6 +157,8 @@ Erzeugt das Landen (Rebase auf den aktuellen `<default_branch>`-Stand oder der P
 - Danach `git add <datei>` und Rebase/Merge fortsetzen. Eine optionale Helfer-Mechanik (deterministischer Union-Merger, z.B. `scripts/lessons-merge.sh`) ist zulässig, aber Implementierungs-Detail — der **Vertrag ist das Verhalten** (kein Eintrag verloren/dupliziert, newest-first).
 - Bei **echter inhaltlicher** Kollision, die sich nicht als reine additive Union auflösen lässt (z.B. derselbe Block mit divergierendem Inhalt), **nicht raten** → `NEEDS-HUMAN` melden statt einen Eintrag stumm zu verwerfen (kein stiller Datenverlust — Kern-NFR).
 
+**`.claude/memory.md` (Ausnahmefall aus A0 — kuratiertes Voll-Dokument, keine Block-Liste):** Tritt der A0-Ausnahmefall ein (Vorab-Delta im Story-Worktree) und erzeugt das Landen einen Konflikt in `.claude/memory.md`, gilt die newest-first-Union-Regel oben **nicht 1:1**, da `.claude/memory.md` bei jeder Kuration komplett neu geschrieben (nicht nur ergänzt) wird (Spec `docs/specs/project-memory.md` AC3). Stattdessen gewinnt die **jüngere** Kurations-Fassung — sie berücksichtigt bereits den aktuelleren Board-/Spec-Stand; kein automatisches Zusammenführen von Prosa-Absätzen. Ist nicht eindeutig erkennbar, welche Fassung jünger ist → `NEEDS-HUMAN`, nie raten. Dieselbe Tie-Break-Regel gilt sinngemäß, falls `/flow` selbst beim regulären Session-Ende-Push (Spec `project-memory.md` AC6) auf einen Remote-Vorsprung stösst (Push-Reject) — Pull/Rebase des frischen Standes und erneute Kuration statt Force-Push.
+
 ### A2. GitHub-Workflow beobachten (CI-Watch)
 
 Nach dem Push auf `$default_branch` (bei `direct`) oder nach dem Merge (bei `pr`). Den Run **über die eigene Commit-SHA** zuordnen (nicht blind den neuesten Run — `cicd/F08`; Webhook-Verzögerung liefert sonst den Vorgänger-Run):
@@ -187,13 +191,18 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
    ```bash
    docker pull "${image}:latest"
    ```
-3. **Versions-Stempel auslesen** (aus dem frisch gepullten Image):
+3. **Versions-Stempel auslesen** (Label-first, kanonische Reihenfolge — `cicd/P08`, `docs/specs/build-version-verification.md` AC2; aus dem frisch gepullten Image, noch kein neuer Container gestartet — der Datei-Read via `/version` folgt nach dem Recreate in Schritt 8):
    ```bash
-   BUILD_VERSION=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "${image}:latest" 2>/dev/null \
-     || docker inspect --format '{{index .Config.Labels "build.version"}}' "${image}:latest" 2>/dev/null \
-     || docker run --rm --entrypoint="" "${image}:latest" printenv BUILD_VERSION 2>/dev/null \
-     || echo "unknown")
+   BUILD_VERSION=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "${image}:latest" 2>/dev/null)
+   if [ -z "$BUILD_VERSION" ] || [ "$BUILD_VERSION" = "<no value>" ]; then
+     BUILD_VERSION=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${image}:latest" 2>/dev/null \
+       | sed -n 's/^APP_VERSION=//p')
+   fi
+   BUILD_VERSION="${BUILD_VERSION:-unknown}"
    ```
+   1. `org.opencontainers.image.version`-Label (aus der EINEN Build-Zeit-Quelle, [[build-version-stamping]] AC1/AC4) — primär.
+   2. ENV `APP_VERSION` des Images — **nur letzter Fallback** (recreate-überschreibbar, `cicd/F02`-Amendment), kein eigenes `build.version`-Label mehr (historisches Schema, abgelöst durch `cicd/P08`).
+   3. `"unknown"` wenn beides fehlt.
 4. **Alten Container-Tag merken (für Rollback):**
    ```bash
    PREV_TAG=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$app" 2>/dev/null || echo "")
@@ -204,6 +213,19 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
    ```
    **Invariante:** Das Image enthält **keine** App-Secrets — Secret-Injektion ist eine Laufzeit-Eigenschaft des Containers, nicht des Images. `build.yml` enthält **keinen** decrypt-Schritt und **kein** App-Secret (GE3, §8 Build-Time-Pfad inaktiv).
 
+5b. **Settings-Daten-Volume ermitteln** (Admin-Bereich-Fabrik-Standard, Spec [`docs/specs/admin-bereich-settings-rollout.md`](../../docs/specs/admin-bereich-settings-rollout.md) AC1, BR-006 — nur wenn das Projekt einen Admin-Bereich hat):
+   ```bash
+   SETTINGS_VOLARG=""
+   if [ -f config/admin-manifest.yaml ]; then
+     db_dialect="$(yq -r '.db_dialect // "none"' .claude/profile.md 2>/dev/null || echo none)"
+     if [ "$db_dialect" = "none" ]; then
+       settings_volume="${app}-settings-data"
+       SETTINGS_VOLARG="-v ${settings_volume}:/data"
+     fi   # DB-Projekt: Settings-Tabelle liegt bereits im DB-Volume — kein separates Mount nötig (A1)
+   fi
+   ```
+   Existence-Guard analog zu `db-subsystem.md` §14-Amendment: kein `config/admin-manifest.yaml` → kein Admin-Bereich in diesem Projekt → kein Mount, kein Fehler.
+
 6. **Container recreaten** (`--force-recreate`-Semantik — NIEMALS `docker restart`):
    ```bash
    docker rm -f "$app" 2>/dev/null || true
@@ -212,23 +234,34 @@ Standard dieser Sequenz: `DEPLOY_ROLE=local` (der Docker-Host, auf dem `/flow` l
      --label agent-flow.build-version="$BUILD_VERSION" \
      --restart unless-stopped \
      -p "${preview_port}:${container_port}" \
+     $SETTINGS_VOLARG \
      --env-file .env \
      "${image}:latest"
    ```
-   **Warum nicht `docker restart`:** `restart` startet denselben Container mit demselben alten Image-Layer neu — es zieht NICHT das neue Image. Das neue Image wird erst nach `rm + run` aktiv (`cicd/F01`).
+   **Warum nicht `docker restart`:** `restart` startet denselben Container mit demselben alten Image-Layer neu — es zieht NICHT das neue Image. Das neue Image wird erst nach `rm + run` aktiv (`cicd/F01`). **Settings-Daten-Volume (`$SETTINGS_VOLARG`, aus 5b):** ein benanntes Docker-Volume überlebt `docker rm` (ohne `-v`) und `docker run` unverändert — die Persistenz über den Recreate ist dadurch strukturell gegeben (admin-bereich-settings-rollout AC3).
 7. **Smoke-Verifikation:**
    ```bash
    sleep 2
    HTTP_CODE=$(curl -fsS -o /dev/null -w '%{http_code}' "http://localhost:${preview_port}/" 2>/dev/null || echo "000")
    ```
    Schlägt fehl → Logs zeigen (`docker logs "$app" --tail 50`), `Rollout-Gate: FAIL` melden.
-8. **Versions-Endpunkt abgleichen** (falls vorhanden, best-effort):
+8. **Versions-Abgleich Datei vs. Label** (nach dem Recreate, best-effort — Erweiterung des bisherigen Versions-Endpunkt-Abgleichs, **kein Duplikat**: `cicd/P08`, `docs/specs/build-version-verification.md` AC3):
    ```bash
-   VERSION_ENDPOINT=$(curl -fsS "http://localhost:${preview_port}/api/version" 2>/dev/null || echo "")
+   RUNNING_VERSION=$(curl -fsS "http://localhost:${preview_port}/version" | jq -r '.version' 2>/dev/null || echo "")
+   IMAGE_VERSION="$BUILD_VERSION"
+   if [ -n "$RUNNING_VERSION" ]; then
+     if [ "$RUNNING_VERSION" = "$IMAGE_VERSION" ]; then
+       echo "Version-Abgleich: OK ($RUNNING_VERSION)"
+     else
+       echo "Version-Abgleich: WARN mismatch (running=$RUNNING_VERSION image=$IMAGE_VERSION) — mögliche ENV-Overwrite-Regression"
+     fi
+   else
+     echo "Version-Abgleich: /version fehlt — Spec-Lücke (A1, cicd/P01), kein Rollout-Blocker"
+   fi
    ```
-   Enthält der Response `$BUILD_VERSION` → Verifikation OK. Fehlt der Endpunkt → Hinweis ausgeben, nicht scheitern.
+   `RUNNING_VERSION` kommt aus der **gebrannten Datei** (App-Selbstauskunft via `/version`, von innen), `IMAGE_VERSION` aus dem OCI-Label (von außen, Schritt 3) — beide Quellen sind unabhängig befüllt, deshalb ist ihr Abgleich aussagekräftig (kein Zirkelschluss). Mismatch → **sichtbare WARN** im Rollout-Output, **kein Hard-Fail** (Diagnose-Signal, E1). Fehlt `/version` (Alt-Projekt, noch nicht migriert) → Hinweis ausgeben, nicht scheitern (A1, `cicd/P01`).
 
-**A3-VPS (Variante):** Wenn `DEPLOY_ROLE=vps` (aus factory-`.env` oder `/etc/softwareschmiede/role`): Rollout läuft remote auf dem VPS; `bash scripts/decrypt-env.sh` auf dem VPS ausführen (Passphrase ist dort provisioniert — eine der vier Ketten-Quellen, Spec §3); danach Container-Recreate mit `--env-file .env`; Cloudflare-Route sicherstellen (s. CONCEPT §8a). Sequenz identisch zu lokal, URL = `https://<app>.<domain>`.
+**A3-VPS (Variante):** Wenn `DEPLOY_ROLE=vps` (aus factory-`.env` oder `/etc/softwareschmiede/role`): Rollout läuft remote auf dem VPS; `bash scripts/decrypt-env.sh` auf dem VPS ausführen (Passphrase ist dort provisioniert — eine der vier Ketten-Quellen, Spec §3); danach Container-Recreate mit `--env-file .env` **inkl. `$SETTINGS_VOLARG` aus 5b** (Cross-Repo-Hinweis: der dev-gui-VPS-Rollout muss dasselbe Settings-Daten-Volume mounten, sonst gehen Admin-Bereich-Einstellungen beim Redeploy verloren — `docs/specs/admin-bereich-settings-rollout.md` AC2); Cloudflare-Route sicherstellen (s. CONCEPT §8a). Sequenz identisch zu lokal, URL = `https://<app>.<domain>`.
 
 ### A4. Disk-Hygiene (Pflichtschritt)
 
@@ -259,7 +292,7 @@ Lessons: <LESSONS_LANDED> Datei(en) gelandet | keine
 Notes: <ggf. Hinweise>
 ```
 
-Die `Lessons:`-Zeile ist **Pflicht** (AC8): `<n> Datei(en) gelandet` wenn `LESSONS_LANDED > 0`, sonst `keine`. Sie macht den Enforcement-Floor beobachtbar und schützt vor stiller Regression (Drift-Gate-Anker für den reviewer).
+Die `Lessons:`-Zeile ist **Pflicht** (AC8): `<n> Datei(en) gelandet` wenn `LESSONS_LANDED > 0`, sonst `keine`. `<n>` zählt Lessons-Dateien (Regelfall) plus ein etwaiges `.claude/memory.md`-Vorab-Delta aus dem A0-Ausnahmefall — im Regelfall enthält `.claude/memory.md` an dieser Stelle noch kein Delta (die Kuration läuft erst nach der Landung, s. A0). Sie macht den Enforcement-Floor beobachtbar und schützt vor stiller Regression (Drift-Gate-Anker für den reviewer).
 
 ### A6. Tier-1-Write-back (Abschluss jeder ship-/rollout-/rollback-/ci-fix-Sequenz)
 
@@ -309,43 +342,54 @@ Wenn der Code bereits gelandet ist (z.B. nach manuellem Merge bei `pr`-Policy) u
 
 ## D. Build-Metadaten / Versionsstempel (`version-stamp`)
 
-**Ziel:** Build-Zeitstempel (Europe/Zurich, Format `yyMMddHHmmss ZZZ`) + ggf. Git-SHA ins Image einbacken — zur Build-Zeit, nicht zur Container-Start-Zeit.
+**Ziel:** Die Build-Version wird **datei-/label-basiert** ins Image gebrannt — nicht ENV-only (`docs/specs/build-version-verification.md` AC1, `docs/specs/build-version-stamping.md`, `cicd/F02`-Amendment). Container-Recreate-Werkzeuge übernehmen die ENV des Alt-Containers 1:1 und frieren so eine ENV-only-Versionsanzeige ein; eine gebrannte Image-Datei ist recreate-immun. Quelle: **EINE** Build-Zeit-Quelle (`APP_VERSION` + git-SHA), aus der sich Datei **und** OCI-Labels ableiten.
 
-1. **Dockerfile prüfen** (ob `ARG`/`ENV BUILD_VERSION` bereits vorhanden):
+1. **Dockerfile prüfen** (ob das datei-basierte Schema bereits vorhanden ist):
    ```
-   grep -n "BUILD_VERSION\|build.version\|org.opencontainers.image.version" Dockerfile || echo "not found"
+   grep -n "ARG APP_VERSION\|RUN echo.*APP_VERSION.*>\|org.opencontainers.image.version" Dockerfile || echo "not found"
    ```
-2. Falls NICHT vorhanden → `Dockerfile` und `build.yml` anpassen (Schritt 3–4).
-3. **Dockerfile-Pattern einbauen** (additiv, vor dem `CMD`/`ENTRYPOINT`):
+   Findet der grep nur das **historische** ENV-only-Schema (`ARG BUILD_VERSION`/`ENV BUILD_VERSION`/`LABEL build.version` ohne gebrannte Datei) → wie „not found" behandeln, auf das datei-basierte Schema migrieren (Schritt 3–4) — `cicd/F02`-Amendment.
+2. Falls NICHT vorhanden (oder nur das historische Schema) → `Dockerfile` und `build.yml` anpassen (Schritt 3–4).
+3. **Dockerfile-Pattern einbauen** (additiv, vor dem `CMD`/`ENTRYPOINT`; Service-Projekte — Frontend-Templates brennen statt `/app/VERSION` ein `version.json` im served-dir, siehe `templates/{html,flutter,angular}/Dockerfile`):
    ```dockerfile
-   ARG BUILD_VERSION=dev
-   ENV BUILD_VERSION=$BUILD_VERSION
-   LABEL build.version=$BUILD_VERSION
-   LABEL org.opencontainers.image.version=$BUILD_VERSION
+   ARG APP_VERSION=dev
+   ARG GIT_SHA=unknown
+   ARG BUILD_CREATED=""
+   RUN echo "$APP_VERSION" > /app/VERSION
+
+   LABEL org.opencontainers.image.version="$APP_VERSION" \
+         org.opencontainers.image.revision="$GIT_SHA" \
+         org.opencontainers.image.created="$BUILD_CREATED"
    ```
-4. **`build.yml`-Pattern einbauen** (im `docker build`-Schritt, additiv):
+   Die Version landet **in einer Datei** (`/app/VERSION` bzw. `version.json`) — die ENV-Zuweisung entfällt bewusst (kein `ENV APP_VERSION=…` mehr); die OCI-Labels stammen aus **denselben** `ARG`-Werten wie die Datei, keine zweite Quelle (Vorlage: `templates/js/Dockerfile`).
+4. **`build.yml`-Pattern einbauen** (EINE Build-Zeit-Quelle für `build-args` **und** Labels, additiv — Vorlage: `templates/_shared/build.yml`):
    ```yaml
-   - name: Build and push
-     uses: docker/build-push-action@v5
+   - name: Build-Version bestimmen
+     id: version
+     run: |
+       echo "app_version=$(TZ=Europe/Zurich date +'%y%m%d%H%M%S')" >> "$GITHUB_OUTPUT"
+       echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+   - id: meta
+     uses: docker/metadata-action@v5
      with:
+       images: ghcr.io/${{ github.repository }}
+       labels: |
+         org.opencontainers.image.version=${{ steps.version.outputs.app_version }}
+         org.opencontainers.image.revision=${{ github.sha }}
+         org.opencontainers.image.created=${{ steps.version.outputs.created }}
+   - uses: docker/build-push-action@v6
+     with:
+       labels: ${{ steps.meta.outputs.labels }}
        build-args: |
-         BUILD_VERSION=${{ env.BUILD_VERSION }}
+         APP_VERSION=${{ steps.version.outputs.app_version }}
+         GIT_SHA=${{ github.sha }}
    ```
-   Und vor dem Build-Step eine `env`-Zeile setzen:
-   ```yaml
-   env:
-     BUILD_VERSION: ${{ github.run_number }}-${{ github.sha }}
+   `APP_VERSION` (Format `yyMMddHHmmss`, Europe/Zurich) und `github.sha` sind die **einzige** Quelle — `build-args` und `labels` leiten sich aus denselben Werten ab, keine zweite Versionsvariable.
+5. **Versions-Endpunkt-Hinweis** (nicht implementieren — das ist coder-Aufgabe; nur als Spec-Lücke melden, falls `/version` nicht existiert):
    ```
-   Alternativ (Format `yyMMddHHmmss ZZZ`, Europe/Zurich):
-   ```yaml
-   - name: Set build version
-     run: echo "BUILD_VERSION=$(TZ=Europe/Zurich date +'%y%m%d%H%M%S %Z')" >> $GITHUB_ENV
-   ```
-5. **Versions-Endpunkt-Hinweis** (nicht implementieren — das ist coder-Aufgabe; nur als Spec-Lücke melden, falls `/api/version` nicht existiert):
-   ```
-   SPEC-HINWEIS: Versions-Endpunkt (GET /api/version → {"version":"<BUILD_VERSION>"}) fehlt.
-   Als Board-Item anlegen: Spec docs/specs/version-endpoint.md, AC1: GET /api/version antwortet
-   200 mit aktuellem BUILD_VERSION-Wert.
+   SPEC-HINWEIS: Versions-Endpunkt (GET /version → {"version":"<APP_VERSION>", "revision":"<git-sha>", "source":"file|env|dev"}) fehlt.
+   Als Board-Item anlegen: Spec docs/specs/version-endpoint.md, AC1: GET /version liest aus der
+   gebrannten Datei (Fallback Datei → ENV → "dev", fail-soft, nie 5xx).
    ```
 6. Output: geänderte Dateien (`Dockerfile`, `.github/workflows/build.yml`) + Hinweis auf Versions-Endpunkt.
 
@@ -363,7 +407,7 @@ Wenn der Code bereits gelandet ist (z.B. nach manuellem Merge bei `pr`-Policy) u
    - **gitleaks False-Positive:** `REDACTED`-Pattern im Log → gitleaks-Allowlist in `.gitleaks.toml` ergänzen (nur wenn nachweislich kein echtes Secret — Befund ohne Beweis → nicht whitelisten).
    - **GITHUB_TOKEN `packages: write` fehlt:** Image-Push `denied` → `permissions: packages: write` in `build.yml` prüfen.
    - **Action-Version veraltet:** `uses: actions/checkout@v2` o.Ä. → auf aktuelle stable Version updaten.
-   - **Build-Args nicht weitergegeben:** `BUILD_VERSION` im Dockerfile aber nicht in `build-args:` → Pattern aus Abschnitt D einbauen.
+   - **Build-Args nicht weitergegeben:** `APP_VERSION`/`GIT_SHA` im Dockerfile aber nicht in `build-args:` → Pattern aus Abschnitt D einbauen.
 4. **Fix vorbereiten** (editiert `.github/workflows/build.yml` oder `.gitleaks.toml` oder `Dockerfile` direkt im Working-Tree). **Kein App-Code**, kein Spec-Drift.
 5. Output: was gefixt wurde + `ci-fix-Gate: PASS | NEEDS-HUMAN` (letzteres wenn das Problem nicht klar identifizierbar oder mehrdeutig ist).
 
@@ -392,5 +436,5 @@ Notes: <Hinweise, Spec-Lücken, nächste Schritte>
 - **gitleaks-Whitelist nur mit Beweis** — kein reflexartiges Whitelisten; ohne klaren False-Positive-Nachweis → `NEEDS-HUMAN`.
 - **CI-Fix nur in CI-/Build-Dateien** (`.github/workflows/`, `Dockerfile`, `.gitleaks.toml`) — keine App-Logik.
 - **Vertraut dem tester-Gate** — kein eigener Re-Test beim ship; tester-PASS = hinreichende Vorbedingung.
-- **Lessons-Floor IMMER (A0)** — jede getrackte, geänderte `.claude/lessons/*.md` fährt bei jeder ship-Landung mit (beide Policies), auch wenn der SHIP-TRIGGER sie nicht nennt. **NIE `git add -f`** für gitignored Lessons (kein Zwangs-Add, AC6); **NIE** eine überschreibende Datei-Kopie des Worktree-Standes auf `<default_branch>` (klobbert parallele Lessons, AC4). Lessons-Konflikt → additive newest-first-Union (A1a/AC5); unauflösbare inhaltliche Kollision → `NEEDS-HUMAN`, nie ein Eintrag stumm verwerfen. Handoff-Zeile `Lessons:` ist Pflicht (AC8).
+- **Lessons-Floor IMMER (A0)** — jede getrackte, geänderte `.claude/lessons/*.md` fährt bei jeder ship-Landung mit (beide Policies), auch wenn der SHIP-TRIGGER sie nicht nennt. **NIE `git add -f`** für gitignored Lessons (kein Zwangs-Add, AC6); **NIE** eine überschreibende Datei-Kopie des Worktree-Standes auf `<default_branch>` (klobbert parallele Lessons, AC4). Lessons-Konflikt → additive newest-first-Union (A1a/AC5); unauflösbare Kollision → `NEEDS-HUMAN`, nie ein Eintrag stumm verwerfen. Handoff-Zeile `Lessons:` ist Pflicht (AC8). **`.claude/memory.md` ist NICHT Teil dieses Regelwegs** (Spec `docs/specs/project-memory.md` AC6) — der Regelweg ist der Session-Ende-Board-Meta-Commit von `/flow` **nach** der Landung (`skills/flow/SKILL.md` §7); dieser Floor deckt `.claude/memory.md` nur im dokumentierten Ausnahmefall (Vorab-Delta bereits im Story-Worktree, s. A0) — dann gilt für dessen Konflikt die abweichende Tie-Break-Regel am Ende von A1a (jüngere Kurations-Fassung gewinnt).
 - **Tier-1-Write-back nur projekt-lokal** — der Write-back (A6) schreibt **NUR** nach `.claude/lessons/cicd.md` (projekt-lokal). **NIE** nach `.claude/lessons/coder.md` (Infra-Befunde nicht coder-umsetzbar) und **NIE** in die globale `${CLAUDE_PLUGIN_ROOT}/knowledge/cicd.md` (Destillation macht `retro` via PR+Gate).

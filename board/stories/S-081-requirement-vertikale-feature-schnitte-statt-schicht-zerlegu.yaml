@@ -1,0 +1,28 @@
+id: S-081
+parent: F-020
+title: 'requirement: vertikale Feature-Schnitte statt Schicht-Zerlegung (inkl. Split-Kopplung)'
+status: Done
+priority: P1
+spec: docs/specs/vertical-slice-stories.md
+implements:
+- AC1
+- AC2
+- AC4
+- AC5
+depends: null
+labels:
+- intake
+size_est: M
+dispo_est: '3.0'
+dispo_act: '2'
+dispo_forecast: '0.5'
+estimate_note: M-Heuristik; dispo_est aus baseline md|balanced|M (n=19); keine Baseline-Tokens
+confidence: medium
+tok_est: null
+branch: feat/S-081-vertikale-schnitte
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/365
+blocked_reason: null
+created_at: '2026-07-18T13:51:26Z'
+updated_at: '2026-07-18T15:22:55Z'
+done_at: '2026-07-18T15:21:20Z'
+tok: '70149924'

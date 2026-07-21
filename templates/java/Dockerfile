@@ -10,6 +10,19 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 
+# Build-Versionierung (docs/specs/build-version-stamping.md AC2/AC4): Version wird
+# beim Build INS Image gebrannt (Datei), nicht nur in ENV — ENV wird bei einem
+# Container-Recreate vom Alt-Container übernommen und friert die Anzeige ein, die
+# gebrannte Datei nicht (flashrescue-Vorfall 2026-07-19). Labels aus denselben ARGs.
+ARG APP_VERSION=dev
+ARG GIT_SHA=unknown
+ARG BUILD_CREATED=""
+RUN echo "$APP_VERSION" > /app/VERSION
+
+LABEL org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.created="$BUILD_CREATED"
+
 # Non-root-Runtime (Security-Floor). WICHTIG: ein non-root-Container kann NICHT in
 # root-owned Pfade schreiben. Jeder zur Laufzeit beschriebene Pfad (Datei-/Batch-/IO-
 # Output, Temp-Downloads, FTP-Ziele) braucht ein EXPLIZIT writable Data-Dir — sonst

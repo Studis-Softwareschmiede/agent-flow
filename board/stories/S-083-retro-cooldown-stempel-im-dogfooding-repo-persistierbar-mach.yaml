@@ -1,0 +1,27 @@
+id: S-083
+parent: F-022
+title: Retro-Cooldown-Stempel im Dogfooding-Repo persistierbar machen (.retro-last-run
+  vom lessons-gitignore ausnehmen)
+status: Done
+priority: P2
+spec: docs/specs/retro-cooldown-persistence.md
+implements:
+- AC1
+depends: null
+labels:
+- retro
+size_est: S
+dispo_est: '3.25'
+dispo_act: '2'
+dispo_forecast: '.6250'
+estimate_note: S-Heuristik (1 AC, 1 Datei .gitignore); dispo_est aus baseline md|balanced|S
+  (n=6); keine Baseline-Tokens
+confidence: medium
+tok_est: null
+branch: feat/S-083-retro-cooldown-persist
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/381
+blocked_reason: null
+created_at: '2026-07-19T05:45:12Z'
+updated_at: '2026-07-19T15:30:14Z'
+done_at: '2026-07-19T15:29:23Z'
+tok: '79469991'

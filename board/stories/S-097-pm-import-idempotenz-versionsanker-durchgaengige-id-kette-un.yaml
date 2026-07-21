@@ -1,0 +1,32 @@
+id: S-097
+parent: F-020
+title: 'PM-Import: Idempotenz (Versionsanker), durchgaengige ID-Kette und Drift-Erkennung
+  fuer PM-Quellen'
+status: Done
+priority: P2
+spec: docs/specs/pm-import.md
+implements:
+- AC6
+- AC7
+- AC10
+depends:
+- S-095
+- S-096
+labels:
+- docs
+size_est: M
+dispo_est: '3.0'
+dispo_act: '7'
+dispo_forecast: -.5714
+estimate_note: S/M-Heuristik score~6 => M (n_ac=3 AC6/AC7/AC10; reitet groesstenteils
+  auf obsidian-ingest sync_hash + ID-Kette, nur Versionsanker neu). Baseline md|balanced|M
+  (ep 3.0, tok 4736471, n=24); tok_est aus baseline md|balanced|M.
+confidence: medium
+tok_est: '4736471'
+branch: feat/S-097-pm-import-idempotenz
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/391
+blocked_reason: null
+created_at: '2026-07-19T17:27:49Z'
+updated_at: '2026-07-19T18:34:09Z'
+done_at: '2026-07-19T18:33:14Z'
+tok: '177913992'

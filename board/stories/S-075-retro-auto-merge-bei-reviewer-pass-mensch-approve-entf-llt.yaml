@@ -1,0 +1,32 @@
+id: S-075
+parent: F-022
+title: Retro-Auto-Merge bei reviewer-PASS (Mensch-Approve entfällt)
+status: Done
+priority: P1
+spec: docs/specs/retro-auto-merge.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+- AC6
+- AC7
+depends: null
+labels:
+- retro
+size_est: L
+dispo_est: '5.5'
+dispo_act: '5.5'
+dispo_forecast: '0'
+estimate_note: L-Heuristik (n_ac=7 + ~5 Komponenten, score~12); dispo_est/tok_est
+  aus baseline md|balanced|L (n=8)
+confidence: low
+tok_est: '3263685'
+branch: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/359
+blocked_reason: null
+created_at: '2026-07-18T05:34:32Z'
+updated_at: '2026-07-18T06:12:31Z'
+done_at: '2026-07-18T06:10:53Z'
+tok: '39118889'

@@ -1,0 +1,25 @@
+id: F-032
+title: Red-Team-Fähigkeit führt echt aus (Nuclei, scharf hinter Freigabe-Gate)
+goal: 'Den Trockenlauf-Schritt der red-team-Fähigkeit durch einen echten, nicht-destruktiven
+  Nuclei-Lauf ersetzen: frische Templates pro Lauf, Ziel-URL als Eingabe (direkt gegen
+  Origin als sicherer Default), Cloudflare NUR prüfen (nie selbst ändern), Funde parsen
+  -> Triage -> Protokoll/Board-Items/Lessons. Freigabe-Gate + Allowlist bleiben hart.
+  Rahmen: docs/architecture/red-team-subsystem.md.'
+status: Done
+priority: P1
+spec: docs/specs/red-team-capability.md
+definition_of_done: null
+labels:
+- security
+- agent
+- skill
+depends: null
+owner: null
+stories:
+- S-106
+- S-107
+- S-108
+progress: 3/3 done
+created_at: '2026-07-21T05:03:12Z'
+updated_at: '2026-07-21T05:07:34Z'
+done_at: '2026-07-21T05:07:33Z'

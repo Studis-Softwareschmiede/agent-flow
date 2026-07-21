@@ -60,6 +60,7 @@ In beiden Fällen: Migrationen/SQL/Code schreibt **immer der `coder`** mit dem p
    db_dialect: <postgres|mysql|sqlite|mongodb>
    ```
    So weiß der `coder` deterministisch, welchen Pack er zur Umsetzung lädt. Inhalt selbst bleibt dialekt-neutral (Entitäten/Beziehungen/Constraints) — der `coder` übersetzt in den dialekt-spezifischen DDL/JS.
+4. **Neue namespaced IDs nur aus dem reservierten Block (`docs/specs/id-block-reservation.md` AC4 — nur falls `board/id-reservations.yaml` im Projekt existiert):** stempelst du beim Entwerfen des Modells eine neue `BR-###`/`ADR-###`-Referenz (z.B. eine dokumentierte Business-Rule/Architektur-Entscheidung), gilt derselbe Vertrag wie für `coder`: Scope-Schlüssel ermitteln (aktives Feature `F-###` bzw. eigene Story-`S-###`), `scripts/board-id-reserve.sh reserve <namespace> <scope-id>` (idempotent) + `consume <namespace> <scope-id> <n>` nach der Vergabe. Ohne Ledger entfällt der Schritt.
 
 ## Output (Design-Modus)
 `docs/data-model.md` (BINDEND) — der coder implementiert es 1:1 mit dem passenden Pack.

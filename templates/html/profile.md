@@ -1,6 +1,6 @@
 # Projekt-Profil (Vorlage: html) — new-project füllt <…> aus
 language: html
-domains: [css]
+domains: [css, ui]
 frameworks: []          # statische Seite — keine Frameworks; siehe docs/architecture/framework-build-subsystem.md §3
 build: "true"          # statisch, kein Build (kanonisch wäre: none)
 test: "true"           # Smoke = Seite lädt
@@ -11,6 +11,7 @@ cost_mode: balanced     # Token-Hebel je Lauf überschreibbar (/flow --cost …)
 default_branch: main    # Base für PR/direct-Push/CI-Watch. /adopt überschreibt ihn beim Fork-Import mit dem echten Default (oft master); flow leitet ihn sonst zur Laufzeit via `gh repo view` ab.
 board: file
 # obsidian_source: <absoluter-ordnerpfad>  # optional/additiv — verknüpfter Obsidian-Notiz-Ordner für /agent-flow:from-notes. Precedence: Ordner-Argument > dieses Feld; fehlt beides -> Abbruch. Siehe docs/specs/obsidian-ingest.md AC1-AC3.
+# retro_cooldown_days: <N>  # optional — Ganzzahl >= 0 (Tage), Cooldown-Schwelle fuer retro Schutzgitter G3. Fehlend/unparsbar -> Default 1. 0 = kein Cooldown (Stempel wird trotzdem geschrieben). Siehe docs/specs/retro-cooldown-configurable.md AC1-AC6.
 deploy: docker
 image: ghcr.io/studis-softwareschmiede/<name>
 registry: ghcr

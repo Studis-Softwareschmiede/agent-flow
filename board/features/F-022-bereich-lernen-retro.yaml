@@ -9,7 +9,11 @@ labels: []
 depends: null
 owner: null
 area: lernen-retro
-stories: null
-progress: 0/0 done
+stories:
+- S-064
+- S-074
+- S-075
+- S-083
+progress: 3/4 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-04T07:54:22Z'
+updated_at: '2026-07-19T05:45:30Z'

@@ -1,0 +1,17 @@
+schema_version: 1
+namespaces:
+  BR:
+    block_size: 10
+    reservations: []
+  ADR:
+    block_size: 10
+    reservations: []
+  C:
+    block_size: 10
+    reservations:
+    - feature_id: _bestand
+      range_start: 1
+      range_end: 2
+      status: active
+      reserved_at: '2026-07-18T00:00:00Z'
+      high_water: 2

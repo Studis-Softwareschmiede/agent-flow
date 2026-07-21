@@ -11,8 +11,8 @@
     "properties": {
       "stage": {
         "type": "string",
-        "enum": ["a", "b", "c", "sync", "split"],
-        "description": "Pipeline-Stufe, deren Uebergang diese Frage anhaelt. a=Notiz->Konzept, b=Konzept->Spec, c=Spec->Board, sync=Re-Sync (obsidian-sync), split=board area split (docs/specs/board-area-ops.md AC4 — Zuordnung unklarer Artefakte bei einem Bereichs-Split)."
+        "enum": ["a", "b", "c", "sync", "split", "design"],
+        "description": "Pipeline-Stufe, deren Uebergang diese Frage anhaelt. a=Notiz->Konzept, b=Konzept->Spec, c=Spec->Board, sync=Re-Sync (obsidian-sync), split=board area split (docs/specs/board-area-ops.md AC4 — Zuordnung unklarer Artefakte bei einem Bereichs-Split), design=designer-Vorschlags-/Freigabe-Modus (docs/specs/design-owner-approval.md AC1 — Gestaltungsfragen vor der design.md-Freigabe)."
       },
       "id": {
         "type": "string",

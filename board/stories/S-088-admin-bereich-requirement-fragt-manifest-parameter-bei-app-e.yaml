@@ -1,0 +1,29 @@
+id: S-088
+parent: F-020
+title: 'Admin-Bereich: requirement fragt Manifest-Parameter bei App-Erstellung'
+status: Done
+priority: P2
+spec: docs/specs/admin-bereich-manifest-intake.md
+implements:
+- AC1
+- AC2
+- AC3
+depends:
+- S-084
+labels:
+- requirement
+size_est: M
+dispo_est: '3.0'
+dispo_act: '2'
+dispo_forecast: '.5000'
+estimate_note: S/M-Heuristik score~5 => M; Baseline md|balanced|M (ep 3.0, tok 4736471,
+  n=24).
+confidence: medium
+tok_est: '4736471'
+branch: feat/S-088-manifest-intake
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/386
+blocked_reason: null
+created_at: '2026-07-19T13:55:31Z'
+updated_at: '2026-07-19T16:38:09Z'
+done_at: '2026-07-19T16:37:13Z'
+tok: '36679127'

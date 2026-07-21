@@ -54,7 +54,7 @@
 | **Test-Gate** | tester-Verdikt: `PASS | FAIL`. PASS nur bei grünem Build + grünen Tests + allen genannten AC + grünem Coverage-Gate. |
 | **Coverage-Gate** | tester prüft: jede genannte AC + jede referenzierte BR von ≥ 1 Test gedeckt (über Trace-Tags). Lücke = `TRACE-GAP` → FAIL. |
 | **Rollout-Gate** | cicd-Verdikt nach dem produktiven Rollout: `PASS | FAIL | NEEDS-HUMAN`. |
-| **Gate (§5)** | Self-Improvement-Sicherung: Pack-/Skill-Änderungen laufen nie direkt auf `main` → PR → reviewer-Check + Mensch-Approve → merge. |
+| **Gate (§5)** | Self-Improvement-Sicherung: Pack-/Skill-Änderungen laufen nie direkt auf `main` → PR → reviewer-Check + Mensch-Approve → merge. **Ausnahme retro** (seit 2026-07-18): reviewer-`PASS` mergt automatisch, kein Mensch-Approve mehr (`docs/specs/retro-auto-merge.md`). |
 
 ## Wissen & Self-Improvement
 
@@ -74,6 +74,7 @@
 | Begriff | Bedeutung |
 |---|---|
 | **Profile (`.claude/profile.md`)** | Projekt-Sprach-/Build-Profil: Sprache, Build/Test/Lint/Smoke, `merge_policy`, `cost_mode`, Board-Ref, Deploy-Ziel. |
+| **Projekt-Memory (`.claude/memory.md`)** | Kuratierter, kurzer Projekt-Stand (Aktueller Stand / Letzte Arbeiten / Offene Fäden, Deckel 60 Zeilen). Single-Writer `/flow` (Kurations-Schritt am Ende jeder Session — neu schreiben, nicht anhängen). Orientierung, nie Wahrheit: bei Widerspruch gelten Board/Specs. |
 | **new-project / init / adopt** | Bootstrap-Skills: `new-project` legt ein neues Repo an, `init` adoptiert ein bestehendes (inkl. „Spec aus Code“), `adopt` forkt + auditiert ein fremdes Repo. |
 | **Preview / `/preview`** | Ephemerer, wegwerfbarer Dev-/PR-Container (Mac: `localhost`, VPS: `<app>.alexstuder.cloud`). Source of Truth bleibt das ghcr-Image. |
 | **merge_policy** | `pr | direct`: ob Code pro Item als PR (Default) oder direkt auf `main` landet. |

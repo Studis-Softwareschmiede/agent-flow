@@ -1,0 +1,28 @@
+id: S-101
+parent: F-030
+title: 'retro.md + reviewer.md: Domänen-Pack-Lane-Disziplin (retro nur E-Lane, reviewer
+  enforced)'
+status: Done
+priority: P1
+spec: docs/specs/security-pack-freshness.md
+implements:
+- AC4
+- AC5
+depends:
+- S-099
+labels:
+- security
+- agent
+size_est: null
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-20T21:49:10Z'
+updated_at: '2026-07-20T22:06:02Z'
+done_at: '2026-07-20T22:06:02Z'

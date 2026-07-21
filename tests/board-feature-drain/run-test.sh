@@ -37,6 +37,21 @@
 #     bewusst OHNE --dangerously-skip-permissions (Security-Review-Fix) —
 #     der Mock unterscheidet Dossier- vs. Story-Aufruf am Prompt-Präfix.
 #
+# Covers (docs/specs/id-block-reservation.md — Drain-Integration):
+#   AC1/AC2 — Reservierung VOR der ersten Story-Session, committet direkt
+#     gegen origin/main (Test 15; Test 3b prüft zusätzlich, dass eine
+#     Blockade origin/main NUR um diese Reservierung ändert, sonst nichts —
+#     "kein Teil-Deploy" bleibt gewahrt, s. Kommentar dort).
+#   AC7  — kein Reservierungs-Aufruf (kein Ledger-Diff) bei einem
+#     idempotenten Re-Lauf eines bereits vollständigen Features (Test 4 —
+#     unverändert exakte SHA-Gleichheit, da CUR_DONE==CUR_TOTAL keine neue
+#     Story-Session mehr auslöst).
+#   AC10 — Freigabe (`released`) aller aktiven Reservierungen des Features
+#     nach erfolgreichem finalen Merge (Test 15).
+#   Die restlichen ACs (AC3-AC6, AC8, AC9, AC11) sind Sache des dedizierten
+#     Mechanik-Smokes tests/board-id-reservation/run-test.sh — hier nur die
+#     Verdrahtung in den Drain-Ablauf.
+#
 # Verwendet lokale /tmp-Git-Fixtures (bare "origin" + Arbeits-Klon), einen
 # gemockten `gh` (wie tests/board-ship) und einen gemockten "claude"-Aufruf,
 # der EINE Story pro Aufruf simuliert (board set Done + Commit + Push in den
@@ -340,11 +355,18 @@ else
   fail "Test 3a: erwartete Exit 3 mit BLOCKIERT-Meldung, bekam exit=${T3_EXIT}"
   echo "  Output: $T3_OUTPUT"
 fi
+# id-block-reservation AC1/AC2: die Reservierung committet bewusst SCHON VOR
+# der ersten Story-Session direkt gegen origin/main (unabhängig vom späteren
+# Story-/Merge-Ausgang) — main bekommt dadurch auch bei einer Blockade einen
+# neuen Commit. Das ist keine Regression von "kein Teil-Deploy": geprüft wird
+# jetzt, dass main AUSSER der ID-Block-Reservierung unverändert bleibt (kein
+# Story-Status-/Board-Commit, kein Teil-Deploy).
 T3_MAIN_AFTER="$(git -C "$T3_WORK" rev-parse origin/main)"
-if [[ "$T3_MAIN_AFTER" == "$T3_MAIN_BEFORE" ]]; then
-  pass "Test 3b: origin/main unverändert — kein Teil-Deploy trotz 2 fertiger Storys"
+T3_MAIN_DIFF="$(git -C "$T3_WORK" diff --name-only "$T3_MAIN_BEFORE" "$T3_MAIN_AFTER" 2>/dev/null || true)"
+if [[ -z "$T3_MAIN_DIFF" || "$T3_MAIN_DIFF" == "board/id-reservations.yaml" ]]; then
+  pass "Test 3b: origin/main enthält höchstens die ID-Block-Reservierung (id-block-reservation AC2) — kein Teil-Deploy trotz 2 fertiger Storys"
 else
-  fail "Test 3b: origin/main hat sich verändert, obwohl das Feature blockiert war"
+  fail "Test 3b: origin/main hat sich über die ID-Block-Reservierung hinaus verändert (${T3_MAIN_DIFF}), obwohl das Feature blockiert war"
 fi
 
 # ===========================================================================
@@ -792,6 +814,39 @@ if echo "$T14_STATUS" | grep -q "Done"; then
   pass "Test 14d: die Story wurde trotz Dossier-Fehlschlag ganz normal fertig (Done) — kein Blockieren des Feature-Drains"
 else
   fail "Test 14d: Story ist nicht Done (Status: ${T14_STATUS}) — Dossier-Fehlschlag hat den Drain offenbar doch beeinträchtigt"
+fi
+
+# ===========================================================================
+# Test 15 — id-block-reservation AC1/AC10: Drain reserviert BR/ADR/C bei
+# Batch-Start (committet auf origin/main VOR der ersten Story-Session) und
+# gibt sie nach dem erfolgreichen finalen Merge wieder frei (`released`).
+# ===========================================================================
+echo ""
+echo "--- Test 15: id-block-reservation AC1/AC10 — Drain reserviert BR/ADR/C und gibt sie nach Merge frei ---"
+T15_WORK="$(setup_fixture "${TEST_WORK_DIR}/test15" 1)"
+export BOARD_MOCK_FEATURE_BRANCH="feature/F-001"
+T15_OUTPUT="$(cd "$T15_WORK" && bash "$DRAIN_SCRIPT" F-001 2>&1)"
+T15_EXIT=$?
+if [[ $T15_EXIT -eq 0 ]]; then
+  pass "Test 15a: Happy-Path-Lauf mit ID-Block-Reservierung durchläuft ohne Fehler (exit 0)"
+else
+  fail "Test 15a: exit=${T15_EXIT}"
+  echo "  Output: $T15_OUTPUT"
+fi
+T15_LEDGER="$(git -C "$T15_WORK" fetch origin main -q && git -C "$T15_WORK" show origin/main:board/id-reservations.yaml 2>/dev/null || echo "")"
+if echo "$T15_LEDGER" | python3 -c '
+import sys, yaml
+data = yaml.safe_load(sys.stdin) or {}
+namespaces = data.get("namespaces", {})
+for ns in ("BR", "ADR", "C"):
+    entries = [r for r in namespaces.get(ns, {}).get("reservations", []) if r.get("feature_id") == "F-001"]
+    assert len(entries) == 1, (ns, entries)
+    assert entries[0]["status"] == "released", (ns, entries[0])
+'; then
+  pass "Test 15b: BR/ADR/C tragen je genau eine 'released' Reservierung für F-001 nach dem finalen Merge (AC1/AC10)"
+else
+  fail "Test 15b: Ledger entspricht nicht dem erwarteten Zustand:
+$T15_LEDGER"
 fi
 
 # ===========================================================================

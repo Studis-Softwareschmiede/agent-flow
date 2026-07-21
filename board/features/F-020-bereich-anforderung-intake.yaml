@@ -9,7 +9,14 @@ labels: []
 depends: null
 owner: null
 area: anforderung-intake
-stories: null
-progress: 0/0 done
+stories:
+- S-079
+- S-081
+- S-088
+- S-095
+- S-096
+- S-097
+- S-098
+progress: 6/7 done
 created_at: '2026-07-04T07:52:41Z'
-updated_at: '2026-07-04T07:54:21Z'
+updated_at: '2026-07-20T04:39:22Z'
