@@ -1,0 +1,28 @@
+id: S-106
+parent: F-032
+title: 'agents/red-team.md: Schritt 3 scharf — nicht-destruktiver Nuclei-Lauf (frische
+  Templates, exclude dos/intrusive/fuzz, JSONL-Parse) hinter Feuer-Gate; url-Eingabe'
+status: Done
+priority: P1
+spec: docs/specs/red-team-capability.md
+implements:
+- R1
+- R2
+- R3
+depends: null
+labels:
+- security
+- agent
+size_est: null
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T05:03:13Z'
+updated_at: '2026-07-21T05:07:26Z'
+done_at: '2026-07-21T05:07:26Z'

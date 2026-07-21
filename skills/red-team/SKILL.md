@@ -1,9 +1,9 @@
 ---
 name: red-team
-description: Startet den red-team-Agenten — testet eine AUTORISIERTE eigene App des Owners (Allowlist „läuft auf eigenem VPS" ∩ „eigenes Org-Repo") mit einem etablierten Scanner, triagiert die Funde agentisch und liefert die drei Ausgänge des Sicherheits-Lernkreises (Protokoll in docs/red-team-audit.md, Board-Items für /flow, retro-lesbare Lessons). Reines Dispatch — die gesamte Angriffs-/Triage-/Auslieferungs-Logik liegt im Agenten (agents/red-team.md, Task-Tool); der Skill ist der dünne Auslöser (Muster reconcile). Kein Freitext-Ziel: die Ziel-Kennung wird gegen die konstruktiv erzwungene Allowlist geprüft, ein Ziel ausserhalb → sofort STOPP (Default deny). Keine Detection-Evasion — Cloudflare-Koordination (Freischalten vor Lauf, Scharfstellen danach) ist ein menschlich bestätigter Schritt, kein stiller Automatismus. Liefert IMMER als EIN PR (kein Self-Merge, kein Auto-Feuern); ohne Remote/Auth committeter lokaler Branch als Fallback. Headless-konsumierbar (claude -p): läuft der Skill nicht-interaktiv, endet er mit genau EINEM maschinenlesbaren End-JSON (Muster from-notes/regression-define). Sicherheits-Grenze: diese Iteration baut Vertrag + Gerüst; das Scanner-Wiring gegen echte Ziele + Cloudflare-Koordination ist die dev-gui-Kachel-Folge (red-team-subsystem.md §6) — kein autonomer Live-Angriff. Im Ziel-Projekt-Repo ausführen. Aufruf: /agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide].
+description: Startet den red-team-Agenten — testet eine AUTORISIERTE eigene App des Owners (Allowlist „läuft auf eigenem VPS" ∩ „eigenes Org-Repo") mit einem etablierten Scanner, triagiert die Funde agentisch und liefert die drei Ausgänge des Sicherheits-Lernkreises (Protokoll in docs/red-team-audit.md, Board-Items für /flow, retro-lesbare Lessons). Reines Dispatch — die gesamte Angriffs-/Triage-/Auslieferungs-Logik liegt im Agenten (agents/red-team.md, Task-Tool); der Skill ist der dünne Auslöser (Muster reconcile). Kein Freitext-Ziel: die Ziel-Kennung wird gegen die konstruktiv erzwungene Allowlist geprüft, ein Ziel ausserhalb → sofort STOPP (Default deny). Keine Detection-Evasion — Cloudflare-Koordination (Freischalten vor Lauf, Scharfstellen danach) ist ein menschlich bestätigter Schritt, kein stiller Automatismus. Liefert IMMER als EIN PR (kein Self-Merge, kein Auto-Feuern); ohne Remote/Auth committeter lokaler Branch als Fallback. Headless-konsumierbar (claude -p): läuft der Skill nicht-interaktiv, endet er mit genau EINEM maschinenlesbaren End-JSON (Muster from-notes/regression-define). Scharfer Betrieb (F-032): der Agent führt einen ECHTEN, nicht-destruktiven Nuclei-Lauf (frische Templates pro Lauf) HINTER dem Feuer-Freigabe-Gate aus — kein Trockenlauf mehr, aber nie Auto-Feuern. Standard-Modus direkt (gegen den Origin) braucht keine Cloudflare-Änderung; durch-cloudflare/beide setzen eine vorab menschlich gesetzte Ausnahme voraus, die der Lauf nur PRÜFT (nie selbst setzt). Ziel-URL wird server-seitig aus dem Allowlist-Eintrag abgeleitet (kein Client-Freitext). Im Ziel-Projekt-Repo ausführen. Aufruf: /agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>].
 ---
 
-# /agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide]
+# /agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>]
 
 cwd = Ziel-Projekt-Repo (das eigene Org-Repo der zu testenden App).
 
@@ -39,17 +39,24 @@ laufende App bleibt eine per-Lauf menschlich autorisierte Aktion.
 ## 1. Aufruf-Signatur parsen (AC2)
 
 ```
-/agent-flow:red-team ziel=<app-slug> [modus=durch-cloudflare|direkt|beide]
+/agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>]
 ```
 
 - **`ziel=<app-slug>`** ist **Pflicht** und ist eine **Ziel-Kennung** (Slug/Identifikator), **KEIN Freitext-Ziel**
   (keine URL, keine IP, kein Hostname aus freier Eingabe). Fehlt `ziel=` → klarer Abbruch „`ziel=<app-slug>` ist
   Pflicht — eine Ziel-Kennung aus der Allowlist, kein Freitext-Ziel", **kein** Dispatch.
-- **`modus=`** ist optional, Default `durch-cloudflare`. Zulässig genau: `durch-cloudflare` (misst, was ein Angreifer
-  real erreicht), `direkt` (Origin, was ohne Schutz drin wäre), `beide` (beide Messpunkte + Differenz-Ausweis, §2 der
-  Architektur). Anderer Wert → klarer Abbruch, **kein** Dispatch. `modus=direkt|beide` setzt die **menschlich
-  bestätigte** Cloudflare-Koordination voraus (Freischalten/Scharfstellen) — der Skill **koordiniert**, er **tarnt
-  nicht** und schleicht sich an keinem Schutzsystem vorbei (§2, AC4).
+- **`modus=`** ist optional, Default **`direkt`** (gegen den Origin — sicherer Default, braucht **keine**
+  Cloudflare-Änderung). Zulässig genau: `direkt`, `durch-cloudflare` (misst, was ein Angreifer real erreicht),
+  `beide` (beide Messpunkte + Differenz-Ausweis, §2 der Architektur). Anderer Wert → klarer Abbruch, **kein** Dispatch.
+  **Nur** `durch-cloudflare|beide` setzen eine **vorab menschlich gesetzte** Cloudflare-Ausnahme voraus — der Lauf
+  **prüft** deren Vorhandensein, **setzt sie NIE** selbst; `direkt` braucht **keine** Cloudflare-Koordination. Der Skill
+  **koordiniert**, er **tarnt nicht** (§2, AC4, Spec R5).
+- **`url=<origin-url>`** (+ **`url_edge=<public-url>`** bei `modus=beide`) ist die **aufgelöste Ziel-Adresse** des
+  Allowlist-Ziels. **KEIN Client-Freitext:** die dev-gui-Kachel leitet sie **server-seitig aus dem autorisierten
+  Allowlist-Eintrag ab** (VPS-Host:hostPort bzw. öffentliche Hostname) und reicht sie durch; der Client sendet **nur**
+  `ziel`. So bleibt die konstruktive Allowlist gewahrt — die URL gehört **immer** zum geprüften Ziel. Für einen
+  **scharfen** Lauf ist `url=` **Pflicht**; fehlt sie → `status: blocked` (kein Raten, Spec R4). Im Standalone-CLI
+  liefert der (vertrauenswürdige) Owner die zum Ziel gehörende URL.
 
 ## 2. Allowlist-Gate — Default deny (AC3, HART)
 
@@ -73,7 +80,9 @@ Nur nach bestandenem Allowlist-Gate (§2). Dispatch (Task-Tool) an `agents/red-t
 
 ```
 ziel: <app-slug>
-modus: durch-cloudflare | direkt | beide
+modus: direkt | durch-cloudflare | beide     (Default direkt)
+url: <origin-url>                            (server-seitig aus dem Allowlist-Eintrag abgeleitet, R4)
+url_edge: <public-url>                        (nur bei modus=beide)
 headless: <true|false>            (aus HEADLESS_JSON, §0 — der AGENT emittiert dann das End-JSON, §5)
 default_branch: <aus profile>
 ```
@@ -155,6 +164,8 @@ Freigabe: <PR-Link | "Kein PR — Fallback: committeter lokaler Branch (Grund: <
   bestätigter** Vor-/Nach-Schritt, kein stiller Automatismus.
 - **Kein destruktives Ausnutzen** — die Triage belegt Ausnutzbarkeit, ohne Schaden (kein Datenabfluss, keine Löschung).
 - **Kein Self-Merge, kein Auto-Feuern** (AC7) — immer ein PR zur menschlichen Freigabe (Fallback: committeter Branch).
-- **Kein Scanner-Wiring gegen echte Ziele in dieser Iteration** — die Live-Integration (echter Nuclei/ZAP-Lauf gegen
-  den VPS + Cloudflare-Koordination) ist die dev-gui-Kachel-Folge (§6); hier entsteht Vertrag + Gerüst.
+- **Scharfer Nuclei-Lauf ist gebaut (F-032, Spec R1–R6)** — der Agent feuert echt (nicht-destruktiv, frische Templates)
+  **hinter dem Feuer-Freigabe-Gate**; kein Trockenlauf mehr. `direkt` (Origin) ist der Cloudflare-freie Default.
+- **Keine automatische Cloudflare-Umkonfiguration (R5)** — `durch-cloudflare|beide` setzen eine **vorab menschlich
+  gesetzte** Ausnahme voraus; der Lauf **prüft** sie, **setzt sie nie** selbst.
 - **Kein** Board-**Status**-Schreiben — Items entstehen als **To Do** (Hoheit `/flow`).

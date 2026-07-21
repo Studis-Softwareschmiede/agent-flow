@@ -1,0 +1,28 @@
+id: S-108
+parent: F-032
+title: 'Spec + Konzept: Real-Execution-ACs (R1-R6), Cloudflare nur-prüfen, Bewusst-NICHT/§6/§7
+  nachziehen'
+status: Done
+priority: P2
+spec: docs/specs/red-team-capability.md
+implements:
+- R6
+depends:
+- S-106
+- S-107
+labels:
+- security
+- doku
+size_est: null
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T05:03:14Z'
+updated_at: '2026-07-21T05:07:32Z'
+done_at: '2026-07-21T05:07:32Z'

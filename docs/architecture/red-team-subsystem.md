@@ -75,12 +75,13 @@ den nächsten Lauf schärfen.
 
 Wie beim Reconcile: **dünner Auslöser im dev-gui, gesamte Logik in agent-flow.**
 
-- **agent-flow (dies, F-030/F-031):** Skill `skills/red-team/SKILL.md` + Agent `agents/red-team.md` + Pack-Härtung. Sprach-neutral, headless-konsumierbar (`claude -p`).
-- **dev-gui (Folge, noch nicht gebaut):** eine **Red-Team-Kachel** im „Fabrik"-Panel, die — genau wie der Reconcile-Button — nur einen Fabrik-Befehl über einen Headless-Runner startet (Muster `HeadlessReconcileRunner`). Ziel-Auswahl = Allowlist aus §3. Zeigt Protokoll + verlinkt die erzeugten Board-Items. Cloudflare-Koordination (§2) ist ein **menschlich bestätigter** Vor-/Nach-Schritt, kein stiller Automatismus.
+- **agent-flow (dies, F-030/F-031; scharf F-032):** Skill `skills/red-team/SKILL.md` + Agent `agents/red-team.md` + Pack-Härtung. Sprach-neutral, headless-konsumierbar (`claude -p`). **Scharfer Betrieb (F-032):** echter, nicht-destruktiver Nuclei-Lauf (frische Templates pro Lauf) **hinter dem Feuer-Freigabe-Gate** — kein Trockenlauf mehr; Ziel-URL wird server-seitig aus dem Allowlist-Eintrag abgeleitet (Spec R1–R6).
+- **dev-gui (gebaut, F-090):** eine **Red-Team-Kachel** im „Fabrik"-Panel, die — genau wie der Reconcile-Button — nur einen Fabrik-Befehl über einen Headless-Runner startet (`HeadlessRedTeamRunner`). Ziel-Auswahl = Allowlist aus §3 (kein Freitext); leitet die Ziel-**URL** server-seitig aus dem Allowlist-Eintrag ab (VPS-Host:hostPort bzw. öffentliche Hostname). Zeigt Protokoll + verlinkt die erzeugten Board-Items. **Cloudflare-Koordination (§2) ist ein vorab menschlich gesetzter Schritt — die Kachel PRÜFT die Ausnahme, SETZT sie NIE selbst** (Standard-Modus `direkt` braucht keine).
 
 ## 7. Bewusst NICHT
 
-- **Kein Auto-Feuern gegen Live-Infra.** Jeder Lauf gegen eine laufende App ist eine per-Lauf autorisierte Aktion.
+- **Kein Auto-Feuern gegen Live-Infra.** Der Lauf ist scharf (echter Nuclei-Lauf, F-032), aber jeder Lauf gegen eine laufende App ist eine **per-Lauf menschlich autorisierte** Aktion (Feuer-Freigabe-Gate) — nie ungefragt/automatisch.
+- **Keine automatische Cloudflare-Umkonfiguration.** Die Ausnahme setzt der Mensch **vorab**; der Lauf **prüft** sie nur (Spec R5). Standard-Modus `direkt` braucht keine.
 - **Keine Detection-Evasion / Tarnung** (§2).
 - **Keine fremden Ziele** — konstruktiv ausgeschlossen (§3).
 - **Kein destruktives Ausnutzen** — die Triage beweist Ausnutzbarkeit, ohne Schaden anzurichten (kein Datenabfluss, keine Löschung).

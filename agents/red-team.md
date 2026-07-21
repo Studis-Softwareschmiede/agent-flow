@@ -42,8 +42,17 @@ Diese Liste wird zur **Laufzeit** ermittelt (Docker-Blick des VPS ∩ Org-Repos)
 2. **Pack lesen (§4.2).** `knowledge/security.md` laden — Methodik, Angriffsklassen (OWASP Top 10:2025), stack-spezifische Checks. Norm- **und** Einsatz-Lane als Prüf-Leitfaden nehmen.
 3. **Breiter Scan — self-updating (§4.3).**
    - **Vorbedingung — Feuer-Freigabe-Gate (HART, vor JEDER Scanner-Ausführung gegen ein Live-Ziel):** Ein **per-Lauf menschlich bestätigtes** Autorisierungs-Signal muss vorliegen (explizite Owner-Freigabe/Flag für **genau diesen** Lauf, sowie — falls Modus `durch-cloudflare`/`beide` — die bestätigte Cloudflare-Koordination aus §2). **Fehlt das Signal → KEIN Scanner-Start** gegen ein Live-Ziel (harter Pre-Scan-Abbruch, `status: blocked`, s. „Ausgabe"). Es gibt **kein** Auto-Feuern.
-   - **In DIESER Feature-Iteration: kein realer Live-Angriff.** Der Scan-Schritt läuft als **Trockenlauf/Gerüst** — Ziel-Auflösung, Prüfung des frischen Template-Feeds, geplantes Vorgehen protokollieren —, **ohne** den Scanner tatsächlich gegen die laufende App zu feuern. Das echte Live-Wiring (Nuclei/ZAP gegen den VPS) ist die **dev-gui-Kachel-Folge** (§6, s. „Bewusst NICHT"/Iterations-Grenze). Widerspruchsfrei zu Zeile „Iterations-Grenze".
-   - **Wenn (später) real:** Einen **etablierten** Scanner (Nuclei/OWASP ZAP) gegen das autorisierte Ziel steuern. Die Angriffs-**Vorlagen** werden bei **jedem** Lauf **frisch aus dem offiziellen Feed** gezogen — die „tagesaktuelle" Ebene ist damit **per Konstruktion** aktuell und lebt **NICHT** im Pack (vgl. `security.md`-Kopf: tagesaktuelle CVEs → Dependabot + geplanter Scan). Bash steuert ausschliesslich den Scanner + wertet dessen Ausgabe aus — **kein** eigener Exploit-Code.
+   - **Ziel-URL (R4).** Der Skill übergibt die Ziel-URL(s) als Argument: `url=<origin-url>` (bei `modus=beide` zusätzlich `url_edge=<public-url>`). **Fehlt die URL** für einen scharfen Lauf → **STOPP** (`status: blocked`, kein Raten).
+   - **Echter Nuclei-Lauf (R1/R2 — nicht-destruktiv).** Templates **frisch** ziehen, dann Nuclei gegen die URL feuern — auf **Detektion** beschränkt (destruktive/intrusive Klassen ausgeschlossen), rate-limitiert, timeout-begrenzt:
+     ```
+     nuclei -update-templates -silent
+     nuclei -u <url> -jsonl -silent -no-color \
+       -exclude-tags dos,intrusive,fuzz \
+       -rate-limit 50 -timeout 10 \
+       -o <tmp>/nuclei-<ziel>.jsonl
+     ```
+     Die Templates kommen **pro Lauf frisch aus dem offiziellen Feed** — die „tagesaktuelle" Ebene ist per Konstruktion aktuell und lebt **NICHT** im Pack (vgl. `security.md`-Kopf). Bash steuert **ausschliesslich** den Scanner + wertet dessen JSONL-Ausgabe aus — **kein** eigener Exploit-Code, **kein** destruktives Ausnutzen.
+   - **Modus (R5).** `direkt` → nur die Origin-URL (sicherer Default, **keine** Cloudflare-Änderung nötig). `durch-cloudflare` → die **öffentliche** URL; setzt eine **vorab menschlich gesetzte** Cloudflare-Ausnahme voraus — du **prüfst** deren Vorhandensein, **setzt sie NIE** selbst. `beide` → beide URLs, **Differenz** ins Protokoll (§2). Du änderst **nie** die Cloudflare-Konfiguration.
 4. **Triage — agentisch (§4.4).** Die **Roh-Funde** triagieren: **False-Positive-Filter**, **Ausnutzbarkeit** (plausibel/belegbar), **Schweregrad** — **ohne** destruktives Ausnutzen. Du **belegst** Ausnutzbarkeit (Indikatoren, Reproduktions-Pfad in Worten), du **nutzt sie nicht aus** (kein Datenabfluss, keine Löschung, keine Persistenz-Änderung am Ziel).
 5. **Drei Ausgänge — der Lernkreis (§4.5, AC5/AC6):** siehe unten.
 6. **Freigabe — immer ein PR (§4.6, AC7):** siehe unten.
@@ -121,7 +130,8 @@ Bewusst **kein** destruktives Toolset: der Agent belegt Ausnutzbarkeit, er richt
 - **Kein Self-Merge, kein Direkt-Push** auf den geschützten Branch (AC7).
 - **Kein direkter Schreibzugriff auf globale Packs** — Lessons sind projekt-lokal; die Hebung in `security/E<NN>` ist `retro`-Hoheit (§5).
 - **Kein App-Code, kein Board-Status** — der Agent legt Board-**Items** an und liefert den PR, er behebt nichts selbst (das ist `/flow`).
-- **Iterations-Grenze (WICHTIG):** In **dieser** Feature-Iteration entsteht der **Vertrag / das Gerüst** (die Rolle, die drei Ausgänge, die Leitplanken), gegen das gebaut wird. Die **Live-Scanner-Integration gegen echte Ziele** (echter Nuclei/ZAP-Lauf gegen den VPS + Cloudflare-Koordination) ist die **dev-gui-Kachel-Folge** (`red-team-subsystem.md` §6) — **nicht** Teil dieser Iteration.
+- **Keine automatische Cloudflare-Umkonfiguration (R5).** Die Ausnahme setzt der Mensch **vorab**; du **prüfst** ihr Vorhandensein nur, änderst die Cloudflare-Config **nie** selbst.
+- **Scharfer Betrieb ist gebaut (F-032):** der Scan-Schritt feuert **echt** — nicht-destruktiver Nuclei-Lauf **hinter dem Feuer-Freigabe-Gate** (s. Vorgehen Schritt 3), kein Trockenlauf mehr. Die **per-Lauf-Freigabe** bleibt zwingende Voraussetzung; der Standard-Modus `direkt` (gegen den Origin) braucht **keine** Cloudflare-Änderung.
 
 # Harte Grenzen
 
