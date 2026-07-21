@@ -1,8 +1,8 @@
 ---
 pack: frameworks/spring-boot-4
-pack_version: 1.2
+pack_version: 1.3
 framework_version_range: ">=4.0, <5.0"
-pack_date: 2026-06-15
+pack_date: 2026-07-21
 requires:                         # Solver-Constraints (upgrade-subsystem §12); Quelle: A01/A02
   java: ">=17"
   build: { maven: ">=3.6.3", gradle: ">=8.14" }
@@ -46,6 +46,9 @@ Spring-Boot 4.x (Major-Range `>=4.0, <5.0`, GA 2025-11-20; aktuell: 4.1.0 GA 202
 - `spring-boot-4/A09` — **Nativer gRPC-Support via dedizierte Starter (since 4.1).** SB 4.1.0 integriert gRPC nativ: `spring-boot-starter-grpc-server` (Netty-backed + Servlet/HTTP2) und `spring-boot-starter-grpc-client` (`@ImportGrpcClients`-Annotation). Proto-Dateien unter `src/main/proto/`; Build via `com.google.protobuf`-Plugin. Test-Unterstützung: `spring-boot-starter-grpc-server-test` / `spring-boot-starter-grpc-client-test`. Kein Drittanbieter-Starter mehr nötig. Observability (Micrometer), SSL-Bundles und Spring Security werden auto-konfiguriert. [src: https://docs.spring.io/spring-boot/reference/io/grpc.html · https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.1-Release-Notes, since: 4.1]
 - `spring-boot-4/A10` — **4.1 Breaking Changes: Maven-AOT-Skip, Derby deprecated, Layertools-Removal; Spock-Restore (since 4.1).** (a) **Maven:** `-DskipTests` überspringt AOT-Processing **nicht mehr** — stattdessen `mvn ... -Dmaven.test.skip=true` verwenden. (b) **Derby deprecated:** `DatabaseDriver.DERBY` + `EmbeddedDatabaseConnection.DERBY` deprecated; Migration zu H2 oder HSQLDB. (c) **Layertools JAR-Modus entfernt** (war in 4.0 deprecated) → auf `tools`-Jar-Modus wechseln. (d) **Spock wiederhergestellt** (in 4.0 wegen Groovy-5-Inkompatibilität entfernt, in 4.1 mit Spock 2.4 + Groovy 5 zurück — A06-Hinweis nur für reine 4.0-Nutzer relevant). [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.1-Release-Notes, since: 4.1]
 - `spring-boot-4/A11` — **SSRF-Mitigation via `InetAddressFilter` (since 4.1).** Neuer stabiler Schutzmechanismus für beide HTTP-Client-Typen (reaktiv + blockierend): `InetAddressFilter` blockiert ausgehende Requests an konfigurierte Adressen (z.B. interne Metadaten-Endpoints). Konfigurierbar programmatisch per Builder-API. Aktivierung empfohlen bei Anwendungen, die URLs aus User-Input verarbeiten. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.1-Release-Notes, since: 4.1]
+- `spring-boot-4/A12` — **Spring Batch: DB-loser In-Memory-Metadaten-Mode ist jetzt Default (Breaking, since 4.0).** `spring-boot-starter-batch` läuft ab 4.0 im vereinfachten Modus ohne Datenbank (In-Memory-Metadaten). **Beim Upgrade schreibt Spring Batch KEINE Metadaten mehr in eine vorhandene DB** — stiller Verhaltenswechsel, kein Fehler. Wer die bisherige DB-gestützte Persistenz (Job-Restart-Fähigkeit über Prozess-Neustarts hinweg, Job-Historie in der DB) behalten will, MUSS explizit auf `spring-boot-starter-batch-jdbc` wechseln. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide#spring-batch, since: 4.0]
+- `spring-boot-4/A13` — **Hibernate-Dependency-Relocations (Breaking, since 4.0).** `hibernate-jpamodelgen` wurde durch `hibernate-processor` ersetzt (Annotation-Processor-Dependency in Build-Files anpassen); `hibernate-proxool` und `hibernate-vibur` werden von Spring Boot nicht mehr im Dependency-Management geführt (nicht mehr publiziert) — Connection-Pool-Wahl ggf. auf HikariCP (Default) umstellen. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide#hibernate-dependency-management, since: 4.0]
+- `spring-boot-4/A14` — **MongoDB: keine Default-Repräsentation mehr für UUID/BigDecimal (Breaking, since 4.0).** Spring Data MongoDB liefert ab 4.0 keine Defaults mehr für die UUID- und BigInteger/BigDecimal-Repräsentation (Treiber-Empfehlung, um Repräsentationswechsel bei Spring-Data-Upgrades zu vermeiden). **Explizite Konfiguration erforderlich** via `spring.mongodb.representation.uuid` und `spring.data.mongodb.representation.big-decimal` — ohne diese Properties drohen beim Upgrade stille Serialisierungs-/Lesefehler auf Bestandsdaten. [src: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide#mongodb-uuid-and-bigdecimal-representations, since: 4.0]
 
 ## B. Anti-Patterns aus Einsatz
 
@@ -74,6 +77,9 @@ _(noch keine Einträge; siehe Schutzgitter in der Spec)_
 - **gRPC (A09, seit 4.1):** Native Starters `spring-boot-starter-grpc-server`/`-client` — kein Drittanbieter-Starter nötig.
 - **Maven AOT (A10, seit 4.1):** `-DskipTests` überspringt AOT nicht mehr — `mvn ... -Dmaven.test.skip=true` für Build ohne Tests+AOT.
 - **SSRF (A11, seit 4.1):** `InetAddressFilter` konfigurieren bei Anwendungen, die externe URLs aus User-Input auflösen.
+- **Spring Batch (A12):** bei Migration von 3.x-Projekten mit bestehender Batch-Metadaten-DB explizit `spring-boot-starter-batch-jdbc` wählen, sonst still DB-loser In-Memory-Mode.
+- **Hibernate (A13):** `hibernate-jpamodelgen` → `hibernate-processor` in Build-Dependencies; kein `hibernate-proxool`/`hibernate-vibur` mehr referenzieren.
+- **MongoDB (A14):** `spring.mongodb.representation.uuid` + `spring.data.mongodb.representation.big-decimal` explizit setzen bei UUID-/BigDecimal-Feldern in MongoDB-Dokumenten.
 
 ## Reviewer-Checklist
 
@@ -94,6 +100,9 @@ _(noch keine Einträge; siehe Schutzgitter in der Spec)_
 - `mvn ... -DskipTests` in CI/CD-Skripten (bricht AOT-Processing ab 4.1) → **Important** (A10, auf `-Dmaven.test.skip=true` migrieren).
 - Derby als EmbeddedDatabase in Tests (`EmbeddedDatabaseConnection.DERBY`) → **Important** (A10, deprecated in 4.1; H2 oder HSQLDB verwenden).
 - Anwendung verarbeitet externe URLs aus User-Input ohne `InetAddressFilter` → **Important** (A11, SSRF-Risiko).
+- Upgrade eines 3.x-Projekts mit bestehender Batch-Metadaten-DB behält `spring-boot-starter-batch` (statt `-batch-jdbc`) → **Important** (A12, stiller Verlust der DB-Persistenz/Job-Restart-Fähigkeit).
+- `hibernate-jpamodelgen`/`hibernate-proxool`/`hibernate-vibur` als Dependency in 4.x-Build-Files → **Important** (A13, relocated/nicht mehr publiziert).
+- MongoDB-Dokument mit UUID- oder BigDecimal-Feld ohne `spring.mongodb.representation.uuid`/`spring.data.mongodb.representation.big-decimal` → **Important** (A14, kein Default mehr, Risiko stiller Serialisierungswechsel).
 
 ## Test-Approach
 
