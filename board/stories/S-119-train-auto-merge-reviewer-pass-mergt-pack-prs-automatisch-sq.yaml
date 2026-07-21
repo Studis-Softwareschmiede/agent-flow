@@ -2,7 +2,7 @@ id: S-119
 parent: F-021
 title: 'train-Auto-Merge: reviewer-PASS mergt Pack-PRs automatisch (squash) — Fix-Loop,
   Fan-out-Status, LEARNINGS-Union'
-status: In Progress
+status: Done
 priority: P2
 spec: docs/specs/train-auto-merge.md
 implements:
@@ -31,5 +31,5 @@ branch: feat/S-119-train-auto-merge
 pr: null
 blocked_reason: null
 created_at: '2026-07-21T18:27:15Z'
-updated_at: '2026-07-21T20:58:05Z'
-done_at: null
+updated_at: '2026-07-21T21:20:44Z'
+done_at: '2026-07-21T21:20:44Z'
