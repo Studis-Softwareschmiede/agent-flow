@@ -1,0 +1,25 @@
+id: F-034
+title: Fabrik lernt aus Orchestrator-Arbeit + Red-Team-Retro-Auslöser (Retro-Verbesserungen
+  P1+P3)
+goal: 'Aus der Retro 2026-07-21: (P1) den blinden Fleck schliessen — retro harvestet
+  den Orchestrator-Kanal flow.md (heute nicht), + Konvention, dass jeder Orchestrator
+  (main-session/flow/Nachtwächter) Session-Lessons dorthin schreibt; (P3) Red-Team-Retro-Auslöser
+  — bei generischen Funden /retro im Konsum-Repo anstossen, damit die Härtungen cross-repo
+  in Norm-Lane + Baseline promoten. P2 (Worktree-Tests) ist die dev-gui-Seite.'
+status: Backlog
+priority: P1
+spec: docs/specs/factory-learning-improvements.md
+definition_of_done: null
+labels:
+- lernen-retro
+- flow-orchestrierung
+- security
+depends: null
+owner: null
+stories:
+- S-113
+- S-114
+- S-115
+progress: 0/3 done
+created_at: '2026-07-21T07:36:29Z'
+updated_at: '2026-07-21T07:36:32Z'

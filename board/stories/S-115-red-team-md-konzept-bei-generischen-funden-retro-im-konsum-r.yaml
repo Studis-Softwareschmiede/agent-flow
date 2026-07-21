@@ -1,0 +1,26 @@
+id: S-115
+parent: F-034
+title: 'red-team.md + Konzept: bei generischen Funden /retro im Konsum-Repo anstossen/empfehlen
+  (Cross-Repo-Transport) + Ausgabe-/Protokoll-Vermerk'
+status: To Do
+priority: P2
+spec: docs/specs/factory-learning-improvements.md
+implements:
+- AC3
+depends: null
+labels:
+- security
+- agent
+size_est: null
+dispo_est: null
+dispo_act: null
+dispo_forecast: null
+estimate_note: null
+confidence: null
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-21T07:36:31Z'
+updated_at: '2026-07-21T07:36:31Z'
+done_at: null
