@@ -2,7 +2,7 @@ id: S-098
 parent: F-020
 title: 'from-notes: verbindlicher Headless-Ausgabevertrag (--gui-Signal + JSON-Endausgabe
   je Runde) in Spec + SKILL.md'
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/obsidian-ingest.md
 implements:
@@ -22,9 +22,9 @@ estimate_note: S/M-Heuristik score=5 (n_ac=3 AC23/AC24/AC25 + n_comp=2 obsidian-
   n=24); dispo_est + tok_est aus baseline md|balanced|M.
 confidence: medium
 tok_est: '4736471'
-branch: null
+branch: feat/s-098-headless-ausgabevertrag
 pr: null
 blocked_reason: null
 created_at: '2026-07-20T04:38:47Z'
-updated_at: '2026-07-20T04:39:05Z'
+updated_at: '2026-07-23T21:57:25Z'
 done_at: null
