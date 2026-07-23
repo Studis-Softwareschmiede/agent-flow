@@ -9,6 +9,18 @@ on:
     # `master`. GitHub-Actions-Trigger können keine Variable lesen → beide listen, sonst
     # baut die CI auf einem master-Repo NIE (stiller Ausfall, kein ghcr-Image).
     branches: [main, master]
+    # Kosten-Filter (Actions-Minuten): reine Board-/Doku-/Meta-Commits — die der
+    # /flow-Loop häufig nach main pusht (board set Done, dispo mirror, rollup,
+    # id-reservations, Spec-/README-Edits) — lösen KEINEN teuren Multi-Arch-
+    # Image-Build mehr aus. secret-scan + image laufen weiterhin bei jedem Commit,
+    # der Code/Build-relevante Pfade berührt (alles ausser den unten Gelisteten).
+    # Ändert ein Commit BEIDES (Code + Doku), greift der Filter nicht → Build läuft.
+    # Diese Pfade sind Fabrik-Konventionen und in JEDEM Projekt vorhanden.
+    paths-ignore:
+      - 'board/**'
+      - 'docs/**'
+      - '**/*.md'
+      - '.claude/**'
 permissions:
   contents: read
   packages: write
