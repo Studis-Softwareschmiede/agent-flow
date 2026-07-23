@@ -153,6 +153,12 @@ Widersprüche** — read-only, ändert nichts:
   und reicht die Antworten zurück; im Terminal-Pfad wird derselbe Katalog interaktiv gestellt (`AskUserQuestion`).
   Das exakte Format ist Teil der Spec (`docs/specs/obsidian-ingest.md`), damit dev-gui **ohne** Änderung an
   agent-flow andockt.
+- **Headless-Ausgabevertrag (`--gui`, AC23–AC25):** dev-gui ruft den Flow nicht interaktiv, sondern über den
+  `ObsidianIngestRunner` per `claude -p '/agent-flow:from-notes --gui <ordner>' --output-format json` auf. Jede
+  Runde endet dabei mit **genau einem** JSON-Wrapper-Objekt als finaler Assistant-Nachricht (`.result`):
+  `{status: "needs-answers", catalog: [...]}` (gleicher `catalog` wie oben) oder `{status: "done"}`; kein
+  Fliesstext danach. Antworten reicht der Runner per `--resume` im selben Session-Kontext zurück. Details
+  (Feldformat, Resume-Zuordnung über `id`) stehen in `docs/specs/obsidian-ingest.md` „Headless-Ausgabevertrag".
 
 ## 7. Touchpoints
 
