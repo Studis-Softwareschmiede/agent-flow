@@ -262,6 +262,23 @@ generate_dossier() {
   # unverändert: die GESAMTE Datei (inkl. ID-Block-Abschnitt) wird dann
   # entfernt — kein Sonderfall, kein Teil-Dossier.
   local dossier_file="${RUN_DIR}/dossier.md"
+
+  # Dossier-Cache über Skript-Neustarts (Vorfall dev-gui 2026-07-26,
+  # "Taktgeber-Endlosschleife": der aeussere ProjectDrain startete dieses
+  # Skript je Runde NEU, und JEDER Neustart erzeugte das Dossier erneut —
+  # je ein bis zu 120s langer claude-Lauf pro Runde, reine Budget-
+  # Verbrennung ohne Nutzen). Existiert ein nicht-leeres dossier.md aus
+  # einem frueheren Lauf DESSELBEN Features, wird es wiederverwendet
+  # (RUN_DIR ist je Feature-ID partitioniert; der Story-Bestand eines
+  # Features aendert sich waehrend eines Drains nicht substanziell —
+  # und ein veraltetes Dossier ist ein reiner Kontext-Hinweis, nie
+  # Steuer-Input). Loeschen von board/runs/<F-###>/dossier.md erzwingt
+  # eine Neu-Erzeugung.
+  if [[ -s "$dossier_file" ]]; then
+    log "Feature-Kontext-Dossier aus frueherem Lauf wiederverwendet (${dossier_file}) — keine neue claude-Session."
+    return 0
+  fi
+
   local id_blocks
   id_blocks="$(id_reservations_summary)"
   local stories_summary
