@@ -2,7 +2,7 @@ id: S-123
 parent: F-017
 title: 'Board-Tooling: Waiting als gültiger, nicht-terminaler Warte-Status (extern
   gated) — Enum + wait_reason + CLI + Erst-Anwendung S-117'
-status: In Progress
+status: Done
 priority: P2
 spec: docs/specs/story-status-waiting.md
 implements:
@@ -15,18 +15,19 @@ labels:
 - board
 size_est: S
 dispo_est: '3.0'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '3'
+dispo_forecast: '0'
 estimate_note: 'S-Heuristik: Muster story-status-verworfen (S-015) 1:1 — Enum-Stellen
   + CLI-Guard + wait_reason-Feld + Umstellung S-117. Kein estimator gelaufen (manuell
   angelegt, Owner-Auftrag 2026-07-26; Schwester-Story dev-gui S-428).'
 confidence: medium
 tok_est: null
 branch: feat/S-123-story-status-waiting
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/442
 blocked_reason: null
 created_at: '2026-07-26T18:05:00Z'
-updated_at: '2026-07-26T20:09:11Z'
-done_at: null
-claimed_by: f9b0838aef00-4879-1785096544-31872
-claimed_at: '2026-07-26T20:09:07Z'
+updated_at: '2026-07-26T22:00:20Z'
+done_at: '2026-07-26T21:57:55Z'
+claimed_by: MacBook-Pro-von-Alexander.local-98309-1785101485-29759
+claimed_at: '2026-07-26T21:31:32Z'
+tok: '131054341'

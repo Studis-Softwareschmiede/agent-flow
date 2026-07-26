@@ -5,17 +5,19 @@
 #       + Verträge ("Kanban-Abfrage (Stufe-2-Gate)").
 # Aufrufer: skills/reconcile/SKILL.md (Stufe 2, VOR jedem Audit-Dispatch).
 #
-# Prueft per `scripts/board list`, ob die vier aktiven Spalten (To Do, In Progress, Blocked,
-# In Review) ALLE leer sind. Die terminale Menge { Done, Verworfen } ist KEINE aktive Spalte
-# und blockiert das Gate NICHT (Spec docs/specs/story-status-verworfen.md AC8: Verworfen zaehlt,
-# wie Done, als geleert/terminal). Reine Lese-/Report-Operation — KEIN Schreiben, KEIN hartes
+# Prueft per `scripts/board list`, ob die fuenf aktiven Spalten (To Do, In Progress, Blocked,
+# Waiting, In Review) ALLE leer sind. Die terminale Menge { Done, Verworfen } ist KEINE aktive
+# Spalte und blockiert das Gate NICHT (Spec docs/specs/story-status-verworfen.md AC8: Verworfen
+# zaehlt, wie Done, als geleert/terminal). `Waiting` (extern gated, nicht terminal, Spec
+# docs/specs/story-status-waiting.md AC3) zaehlt dagegen — wie Blocked — als OFFEN und blockiert
+# das Gate. Reine Lese-/Report-Operation — KEIN Schreiben, KEIN hartes
 # Fehler-Exit bei fehlendem Board (Review-Lehre S-011: `scripts/board` bricht bei FEHLENDEM
 # Board-Skelett fuer manche Verben hart ab — coder/L15 verlangt fuer LESENDE Pruefungen
 # graceful Handling statt Absturz; dieses Script faengt den `board list`-Fehlerfall fuer den
 # Fall "Board nicht initialisiert" ab und meldet ihn als eigenes Ergebnis statt zu crashen).
 #
 # Ausgabe (stdout), GENAU EIN Token:
-#   empty      — alle vier Spalten leer        -> Vorbedingung erfuellt, Stufe 2 darf laufen
+#   empty      — alle fuenf Spalten leer        -> Vorbedingung erfuellt, Stufe 2 darf laufen
 #   not-empty  — mind. eine Spalte belegt       -> Stufe 2 wird uebersprungen (AC6/A1)
 #   no-board   — Board-Skelett fehlt (board.yaml nicht vorhanden) -> Vorbedingung nicht
 #                pruefbar; Stufe 2 wird konservativ uebersprungen (NFR „Vorsicht" —
@@ -50,13 +52,14 @@ fi
 ERR_TMP="$(mktemp /tmp/reconcile-stage2-gate-err.XXXXXX)"
 trap 'rm -f "$ERR_TMP"' EXIT
 
-# Nur die vier AKTIVEN Spalten zaehlen. Die terminale Menge { Done, Verworfen } wird bewusst
+# Nur die fuenf AKTIVEN Spalten zaehlen. Die terminale Menge { Done, Verworfen } wird bewusst
 # NICHT gelistet: eine `Done`- ODER `Verworfen`-Story gilt als geleert/abgeschlossen und
 # blockiert das Drain-Gate nicht (Spec docs/specs/story-status-verworfen.md AC8 — Verworfen ist,
-# wie Done, keine aktive Spalte; terminale Menge = {Done, Verworfen}). Kein Logik-Zusatz noetig:
-# eine Story, die weder in einer dieser vier Spalten noch als `list --status` einer aktiven
-# Spalte auftaucht, wird schlicht nicht mitgezaehlt.
-COLUMNS=("To Do" "In Progress" "Blocked" "In Review")
+# wie Done, keine aktive Spalte; terminale Menge = {Done, Verworfen}). `Waiting` wird dagegen
+# als aktive Spalte gefuehrt (Spec docs/specs/story-status-waiting.md AC3 — Waiting zaehlt wie
+# Blocked als offen). Kein Logik-Zusatz noetig: eine Story, die weder in einer dieser fuenf
+# Spalten noch als `list --status` einer aktiven Spalte auftaucht, wird schlicht nicht mitgezaehlt.
+COLUMNS=("To Do" "In Progress" "Blocked" "Waiting" "In Review")
 TOTAL=0
 BOARD_MISSING=0
 

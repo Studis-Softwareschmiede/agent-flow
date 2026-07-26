@@ -1,3 +1,19 @@
+## flow/L08 — S-123 (2026-07-26): /flow --parent im Feature-Worktree — Claim + Ship gehören auf den Feature-Branch
+Läuft `/flow --parent F-###` direkt in einem Feature-Worktree, der bereits
+`feature/F-###` ausgecheckt hat (board-feature-drain-Modell): (a) der
+Claim-Commit wird auf `origin/feature/F-###` gepusht, NICHT auf
+`$default_branch` — ein `git push origin HEAD:main` würde den kompletten
+unfertigen Feature-Stand nach main tragen (§2 der Skill-Doku beschreibt den
+board-weiten Normalfall; Präzedenz: frühere Claim-Commits desselben Drains
+liegen ebenfalls auf dem Feature-Branch). (b) `board-ship.sh` Modus B
+verweigert den Aufruf vom Ziel-Branch selbst („erwarte einen eigenen
+Story-Branch") und verlangt einen sauberen Tree: vor dem Ship also
+`git checkout -b feat/<S-###>-<slug>` vom Feature-Worktree-HEAD, Story-Diff
+dort committen, dann `board-ship.sh <S-###> --target-branch feature/F-###`;
+danach zurück `git checkout feature/F-###` + `git merge --ff-only
+origin/feature/F-###` für die Session-Ende-Commits (Dispo-Spiegel/Memory).
+Funktionierte für S-123 in einem Durchlauf (PR #442, Exit 0).
+
 ## flow/L07 — S-098 (2026-07-23): duplicate-dispatch race lässt sich lösen, nicht nur vermeiden
 Wenn `board next` das einzige READY-Item liefert und Memory/das aktuelle Board
 zeigen, dass es schon mehrfach angefasst und wieder verlassen wurde (Race

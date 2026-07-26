@@ -2,7 +2,7 @@ id: S-117
 parent: F-024
 title: Graphify-Pilot am nächsten großen /adopt-Fall — messungs-gestützt, opt-in,
   rückbaubar
-status: Blocked
+status: Waiting
 priority: P3
 spec: docs/specs/graphify-adopt-pilot.md
 implements:
@@ -27,8 +27,9 @@ confidence: low
 tok_est: '5303333'
 branch: null
 pr: null
-blocked_reason: 'Extern gated: wartet auf den nächsten realen großen /adopt-Fall (AC1)
-  — bis dahin nicht drainbar (Owner-Entscheid 2026-07-21).'
+blocked_reason: null
 created_at: '2026-07-21T17:38:54Z'
-updated_at: '2026-07-21T19:35:00Z'
+updated_at: '2026-07-26T21:40:06Z'
 done_at: null
+wait_reason: 'Extern gated: wartet auf den nächsten realen großen /adopt-Fall (AC1)
+  — bis dahin nicht drainbar (Owner-Entscheid 2026-07-21).'
