@@ -1,0 +1,40 @@
+id: S-120
+parent: F-018
+title: 'Claim-Lock vor Story-Start: Duplicate-Dispatch-Race + Geist-In-Progress beheben'
+status: To Do
+priority: P1
+spec: docs/specs/story-claim-lock.md
+implements:
+- AC1
+- AC2
+- AC3
+- AC4
+- AC5
+- AC6
+- AC7
+- AC8
+- AC9
+- AC10
+- AC11
+- AC12
+- AC13
+depends: null
+labels:
+- flow
+- board
+- skill
+size_est: XL
+dispo_est: '4.75'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'estimator: nahe ref-L-subsystem-slice (ep8), Race/TTL-Edge-Cases aufgeschlagen;
+  roh 9.5 EP, Bias md|balanced|XL -0.50 (Cap) => 4.75. Split-Empfehlung (beratend):
+  Claim-Erwerb vs. Stale-Reclamation+Diagnose.'
+confidence: medium
+tok_est: '4750000'
+branch: null
+pr: null
+blocked_reason: null
+created_at: '2026-07-26T09:24:55Z'
+updated_at: '2026-07-26T09:30:16Z'
+done_at: null
