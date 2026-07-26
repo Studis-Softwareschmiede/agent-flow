@@ -18,8 +18,8 @@ labels:
 - worktree
 size_est: L
 dispo_est: '12.75'
-dispo_act: null
-dispo_forecast: null
+dispo_act: '4'
+dispo_forecast: '2.1875'
 estimate_note: 'estimator: roh 8.5 EP (Anker ref-L ep8 + Idempotenz-/Fixture-Aufschlag;
   engster Komp S-121 roh 9.5 ≈ ist 10); Bias md|balanced|L +0.50 (Cap) => 12.75. Vorbehalt:
   Bias-Kappung drückte bei S-120/S-121 unter das Ist — Kalibrierung fraglich, s. lessons/estimator.md.'
@@ -29,7 +29,8 @@ branch: feat/S-122-board-ship-pr-merge
 pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/441
 blocked_reason: null
 created_at: '2026-07-26T13:52:49Z'
-updated_at: '2026-07-26T15:30:57Z'
+updated_at: '2026-07-26T15:32:55Z'
 done_at: '2026-07-26T15:30:49Z'
 claimed_by: MacBook-Pro-von-Alexander.local-82319-1785078409-30583
 claimed_at: '2026-07-26T15:06:57Z'
+tok: '159694396'

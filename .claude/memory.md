@@ -2,38 +2,33 @@
 > Kuratiert von /flow am Ende jeder Session. Max. 60 Zeilen.
 
 ## Aktueller Stand
-Board leer (26.07.2026, nur S-117 bewusst Blocked — wartet auf nächsten
-großen /adopt-Fall). Die zwei strukturellen Dauerbrenner sind behoben und
-gelandet: S-120 Claim-Lock (atomarer Claim-Push vor coder-Dispatch, rebase-
-freie Verlierer-Recovery, Stale-Reclamation nach 4h, RECLAIMABLE-Diagnose)
-und S-121 git-Auth-Härtung (tokenloser x-access-token-Credential-Wrapper +
-Reset-Marker gegen System-Helper + extraheader-Selbstheilung; auf dieser
-Maschine live verifiziert — fetch/fill laufen, kein Token in Dateien).
-Künftige /flow-Sessions MÜSSEN das neue Claim-Protokoll in SKILL.md §2
-befolgen (Claim sofort committen+pushen, bei Ablehnung git show statt
-rebase).
+Board leer (26.07.2026 abends) — einzig S-117 bleibt bewusst Blocked (wartet
+auf nächsten großen /adopt-Fall). Die drei Infrastruktur-Dauerbrenner sind
+alle behoben und im Betrieb verifiziert: Claim-Lock (S-120), tokenlose
+git-Auth (S-121, inkl. bewiesenem Selbstheilungs-Lauf nach Token-Ablauf)
+und board-ship.sh PR-Landung (S-122 — landete sich selbst mit Exit 0 bei
+belegtem main, erstmals seit 7 Fehlversuchen kein manueller Nachschritt).
+Repo aufgeräumt: alle 19 Remote- und 11 lokalen Alt-Branches gelöscht
+(jeder gegen gemergten PR bzw. Inhalt-in-main verifiziert); nur noch main.
+Nachtwächter ist AUS (Owner-Entscheid — bei Bedarf in der dev-gui oder via
+PUT /api/settings/ticker wieder aktivieren).
 
 ## Letzte Arbeiten
-- S-120 (Claim-Lock) gelandet PR #439 — 3 Iterationen; Reviewer fand
-  empirisch den Rebase-Deadlock im Verlierer-Pfad (Zwei-Klon-Race-Test
-  jetzt in tests/story-claim-lock/, 35 Assertions).
-- S-121 (git-Auth) gelandet PR #440 — 3 Iterationen; Reviewer fand 2x
-  Helper-Vorrang-Fallen (roher gh-Eintrag zuerst; fehlender Reset-Marker
-  ließ System-osxkeychain gewinnen). Tests in tests/git-auth-hardening/.
-- S-116 (Simplicity-Leiter) Done ohne Diff — Inhalt war Squash-Beifang in
-  PR #433; S-098 gelandet PR #437 (Vorsessions).
+- S-122 (board-ship PR-Merge worktree-fest) gelandet PR #441 — 1 Iteration,
+  Review+Test PASS; Fix bewies sich an der eigenen Landung (Exit 0).
+- S-120 (Claim-Lock) PR #439, S-121 (git-Auth) PR #440 — je 3 Iterationen,
+  Reviewer fand 3 echte reproduzierte Fehler vor der Landung.
+- Branch-Großputz: 19 remote + 11 lokal gelöscht, main einziger Branch.
 
 ## Offene Fäden
-- board-ship.sh lokaler Nachschritt (gh pr merge) scheitert weiter am
-  main-Worktree-Konflikt im Hauptordner (jetzt 7x: zuletzt S-120/S-121) —
-  PR landet remote trotzdem; Restschritte manuell. Skript-Fix weiter offen
-  (Kandidat-Story: nach Fehlschlag gh pr view prüfen, bei MERGED Board-Flip
-  im Detached-Worktree selbst nachziehen).
-- dev-gui reimplementiert board next/ready nativ in JS (BoardAggregator/
-  ProjectDrain) — kennt claimed_by/claimed_at/RECLAIMABLE noch nicht;
-  dev-gui-seitige Nachführung wäre eine separate Story im dev-gui-Repo.
-- Beim S-121-Review hat der Reviewer via git credential-osxkeychain ein
-  echtes persönliches GitHub-Token in seinen Tool-Output geholt (nirgends
-  persistiert außer im lokalen Session-Transcript). Owner informiert.
-- .claude/lessons/orchestrator.md (L01–L05) wird von der retro.md-Kette
-  nicht mehr gelesen — Migration/Ablöse-Markierung weiter offen.
+- S-117 (Graphify-Pilot) wartet extern — beim nächsten großen /adopt-Fall
+  entblocken.
+- dev-gui kennt claimed_by/claimed_at/RECLAIMABLE noch nicht (eigene
+  JS-Reimplementierung von board next/ready) — separate dev-gui-Story,
+  falls der Nachtwächter das Claim-Wissen nutzen soll.
+- estimator-Bias-Kalibrierung md|balanced|L/XL fraglich: Kappung drückte
+  bei S-120/S-121 unter das Ist, bei S-122 (roh 8.5, Bias→12.75, ist 4)
+  weit darüber — Rohschätzungen treffen derzeit besser; Kandidat für
+  retro Modus E (lessons/estimator.md hat die Details).
+- gh-App-Token läuft nach ~1h ab; ensure-gh-auth.sh vor git-Push-Serien
+  erneut ausführen (Helper heilt sich, aber Token-Mint bleibt nötig).
