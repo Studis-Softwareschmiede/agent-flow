@@ -25,7 +25,24 @@ remote gelandet. **Vor jeder "nicht gelandet"-Fehlermeldung:**
 Worktree wieder entfernen. Kein blinder Retry des Scripts (kann Leer-PRs
 erzeugen, s. flow/L02).
 
-## flow/L05 — gh-Push-Auth: Basic-Auth-Header als Workaround für Bot-Login-Bug
+## flow/L05 — gh-Push-Auth: Basic-Auth-Header als Workaround für Bot-Login-Bug — ÜBERHOLT, siehe unten
+**⚠ ÜBERHOLT (2026-07-26, `git-auth-hardening`/S-121):** Der unten
+dokumentierte `extraheader`-Workaround ist ein **Anti-Pattern** und darf
+NICHT mehr angewendet werden — er hat genau den 23.–26.07.-Ausfall
+verursacht: der ~1h gültige App-Token wurde als
+`http.https://github.com/.extraheader` in `.git/config` persistiert; nach
+Ablauf blockierte der stale Header 3 Tage lang JEDE git-Netzwerkoperation
+aller Sessions mit „Invalid username or token", bis er manuell entfernt
+wurde. **Neuer Weg:** `scripts/ensure-gh-auth.sh` richtet jetzt einen
+tokenlosen, global-scope git-Credential-Helper ein (`gh auth git-credential`
++ Wrapper, der `username=x-access-token` erzwingt) — das Token wird bei
+jedem git-Aufruf frisch gestreamt, nie in eine Datei/Config geschrieben. Das
+Skript erkennt zudem vorhandene `http.*.extraheader`-Reste (auch von diesem
+alten Workaround) und entfernt sie automatisch. Kein manueller Eingriff mehr
+nötig — siehe `docs/specs/git-auth-hardening.md`.
+
+Ursprünglicher (jetzt überholter) Lesson-Text, unverändert dokumentiert als
+Beleg für den Bug, den `ensure-gh-auth.sh` jetzt abdeckt:
 `gh auth setup-git` konfiguriert einen Credential-Helper, der bei der
 GitHub-App-Installation manchmal den Bot-Login statt `x-access-token` als
 Username an `git push` liefert → `Invalid username or token`. Workaround, der
@@ -35,5 +52,6 @@ git config http.https://github.com/.extraheader \
   "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$(gh auth token)" | base64 -w0)"
 ```
 Repo-lokal setzen (gilt dann für alle git-Netzwerkoperationen in diesem
-Working-Tree/Worktree). Sollte langfristig in `ensure-gh-auth.sh` fest
-verdrahtet werden, damit kein `/flow`-Lauf das manuell lösen muss.
+Working-Tree/Worktree). ~~Sollte langfristig in `ensure-gh-auth.sh` fest
+verdrahtet werden~~ — **NICHT tun**, siehe Warnung oben: `ensure-gh-auth.sh`
+verdrahtet stattdessen den tokenlosen Credential-Helper-Weg fest.
