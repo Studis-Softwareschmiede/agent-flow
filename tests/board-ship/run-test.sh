@@ -28,6 +28,20 @@
 #     (Repo ganz ohne Workflows) bleibt wie in v1 ungemockt/unverändert
 #     (gh-api-Fallback der Test-Mocks liefert nie total_count==0) — kein
 #     dedizierter Test, deckt sich mit AC6-Vorgabe (nur a-d gefordert).
+#   Covers (board-ship-pr-merge-worktree-safe, S-122): AC1 PR-Merge OHNE
+#     '--delete-branch'/lokalen Checkout, 'main' im zweiten Worktree belegt
+#     bleibt unberührt (Test 12, statischer Beleg Test 16); AC2(a) nicht-null
+#     Merge-Exit wird am Remote-PR-Zustand festgemacht statt sofort zu 'die'n
+#     (Test 14a Erfolg via MERGED, Test 14b echter Fehlschlag/E1, Test 14c
+#     'gh pr view' selbst gescheitert/E2 fail-safe K1); AC2(b) squash-
+#     tauglicher Idempotenz-Zusatz-Check über PR-Status statt nur merge-base
+#     (Test 13, deckt A2, kein zweiter PR); AC3 Board-Flip/Nacharbeit im
+#     vorhandenen Temp-Detached-Worktree-Mechanismus auch im PR-Pfad, auch
+#     bei belegtem 'main' (Test 12c, Test 14a-2 — Skript stirbt nie NACH
+#     Merge-Erfolg); AC4 Remote-Branch-Löschung via API, nicht-fatal bei
+#     Fehlschlag (Test 15); AC5 s.o. (Tests 12/13/14); AC6 direct-/
+#     --target-branch-Pfad unverändert — implizit über alle unveränderten
+#     Bestandstests (Test 1-11), die weiterhin grün bleiben.
 #   Covers (board-ship-environment-guards, S-070): AC7 kein Checkout des
 #     Ziel-Branches — belegt über einen ECHTEN zweiten Worktree, der 'main'
 #     hält (Test 11a); AC8 FF-Push-Landung + Non-FF-Klartext-Abbruch ohne
@@ -121,11 +135,61 @@ if [[ "$1" == "run" && "$2" == "list" ]]; then
   exit 0
 fi
 if [[ "$1" == "pr" && "$2" == "create" ]]; then
+  if [[ "${MOCK_GH_PR_CREATE_FORBID:-0}" == "1" ]]; then
+    echo "mock: gh pr create haette hier NICHT aufgerufen werden duerfen (Idempotenz-Test, S-122 AC5b)" >&2
+    exit 1
+  fi
   echo "https://github.com/mock/repo/pull/999"
   exit 0
 fi
 if [[ "$1" == "pr" && "$2" == "merge" ]]; then
+  # S-122 AC1/AC2: 'gh pr merge <sel> --squash' OHNE '--delete-branch'. Der
+  # Mock simuliert bei Bedarf den GitHub-seitigen Merge (Ziel-Branch bekommt
+  # den Story-Commit) UND meldet den vom Test gewünschten Exit-Code separat
+  # davon — genau das bildet den Defekt-2-Fall nach (Remote-Merge ok, aber
+  # der CLI-Aufruf selbst meldet trotzdem einen Fehler).
+  if [[ -n "${MOCK_GH_MERGE_SOURCE_BRANCH:-}" && -n "${MOCK_GH_MERGE_TARGET_BRANCH:-}" ]]; then
+    git fetch origin "${MOCK_GH_MERGE_SOURCE_BRANCH}" -q 2>/dev/null || true
+    git push -q origin "origin/${MOCK_GH_MERGE_SOURCE_BRANCH}:${MOCK_GH_MERGE_TARGET_BRANCH}" 2>/dev/null || true
+  fi
+  exit "${MOCK_GH_PR_MERGE_EXIT:-0}"
+fi
+if [[ "$1" == "pr" && "$2" == "view" ]]; then
+  # S-122 AC2(a): 'gh pr view <sel> --json state,mergedAt --jq ...'
+  if [[ "${MOCK_GH_PR_VIEW_FAIL:-0}" == "1" ]]; then
+    echo "mock: gh pr view fehlgeschlagen (simulierte Netz-/Auth-Störung)" >&2
+    exit 1
+  fi
+  case "${MOCK_PR_VIEW_STATE:-}" in
+    MERGED) echo "true" ;;
+    *) echo "false" ;;
+  esac
   exit 0
+fi
+if [[ "$1" == "pr" && "$2" == "list" ]]; then
+  # S-122 AC2(b): 'gh pr list --head <branch> --state all --json ... --jq ...'
+  if [[ "${MOCK_GH_PR_LIST_FAIL:-0}" == "1" ]]; then
+    echo "mock: gh pr list fehlgeschlagen (simulierte Netz-/Auth-Störung)" >&2
+    exit 1
+  fi
+  case "${MOCK_PR_LIST_STATE:-}" in
+    MERGED) echo "true" ;;
+    *) echo "false" ;;
+  esac
+  exit 0
+fi
+if [[ "$1" == "api" ]]; then
+  # S-122 AC4: 'gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>'.
+  # Alle anderen 'gh api'-Aufrufe (z.B. die bestehende actions/workflows-
+  # Abfrage des CI-Watch) sind hier NICHT gemeint und fallen unverändert auf
+  # den Catch-all am Skriptende durch (leere Ausgabe, Exit 0).
+  if [[ " $* " == *" DELETE "* ]]; then
+    if [[ "${MOCK_GH_API_DELETE_FAIL:-0}" == "1" ]]; then
+      echo "mock: gh api DELETE fehlgeschlagen (simuliert, nicht-fatal laut AC4)" >&2
+      exit 1
+    fi
+    exit 0
+  fi
 fi
 exit 0
 MOCKEOF
@@ -216,6 +280,18 @@ YAML
     git push -q origin main
   )
   echo "$work"
+}
+
+# Schaltet eine bereits per setup_fixture angelegte Arbeitskopie von
+# 'merge_policy: direct' (Fixture-Default) auf 'merge_policy: pr' um und
+# committet/pusht die Änderung nach origin/main — für die S-122-Tests
+# (AC1-AC5), die den PR-Merge-Pfad (gh pr create/merge statt FF-Push)
+# gezielt exerzieren.
+set_pr_policy() {
+  local work="$1"
+  sed -i.bak 's/merge_policy: direct/merge_policy: pr/' "${work}/.claude/profile.md"
+  rm -f "${work}/.claude/profile.md.bak"
+  (cd "$work" && git add -A && git commit -q -m "profile: merge_policy pr (S-122-Test)" && git push -q origin main)
 }
 
 # ===========================================================================
@@ -878,6 +954,276 @@ if [[ "$T11B_STATUS" == "status: In Review" ]]; then
   pass "Test 11b-3: Board-Status unverändert (kein Flip)"
 else
   fail "Test 11b-3: Board-Status ist '${T11B_STATUS}', erwartet unverändert 'status: In Review'"
+fi
+
+# ===========================================================================
+# Test 12 — S-122 AC1/AC5(a): merge_policy=pr, 'main' in einem zweiten
+# Worktree belegt. Merge erfolgt GitHub-seitig OHNE '--delete-branch' (kein
+# lokaler Checkout/Branch-Wechsel) — der Mock simuliert den Remote-Merge
+# (Ziel-Branch bekommt den Story-Commit). Exit 0, Story-Commit + Board-Flip
+# auf origin/main, zweiter Worktree unverändert (@trace
+# board-ship-pr-merge-worktree-safe#AC1, #AC5a).
+# ===========================================================================
+echo ""
+echo "--- Test 12: AC1/AC5(a) — PR-Policy, 'main' im zweiten Worktree belegt, Remote-Merge ohne lokale Nebenwirkung ---"
+T12_WORK="$(setup_fixture "${TEST_WORK_DIR}/test12")"
+set_pr_policy "$T12_WORK"
+T12_SECOND_WORKTREE="${TEST_WORK_DIR}/test12/second-worktree"
+(
+  cd "$T12_WORK"
+  git checkout -q -b feat/S-900-test
+  git worktree add -q "$T12_SECOND_WORKTREE" main
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+T12_SECOND_HEAD_BEFORE="$(git -C "$T12_SECOND_WORKTREE" rev-parse HEAD)"
+T12_SECOND_STATUS_BEFORE="$(git -C "$T12_SECOND_WORKTREE" status --porcelain)"
+
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+export MOCK_GH_MERGE_SOURCE_BRANCH="feat/S-900-test" MOCK_GH_MERGE_TARGET_BRANCH="main"
+T12_OUTPUT="$(cd "$T12_WORK" && MOCK_HEAD_SHA="AUTO" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T12_EXIT=$?
+unset MOCK_GH_MERGE_SOURCE_BRANCH MOCK_GH_MERGE_TARGET_BRANCH
+
+if [[ $T12_EXIT -eq 0 ]]; then
+  pass "Test 12a: PR-Merge aus dem Story-Worktree landet trotz zweitem Worktree auf 'main' (exit 0)"
+else
+  fail "Test 12a: exit=${T12_EXIT}"
+  echo "  Output: $T12_OUTPUT"
+fi
+T12_ORIGIN_LOG="$(git -C "$T12_WORK" log origin/main --oneline 2>/dev/null | grep -c "feature work" || true)"
+if [[ "$T12_ORIGIN_LOG" -ge 1 ]]; then
+  pass "Test 12b: Story-Commit ist tatsächlich auf origin/main gelandet"
+else
+  fail "Test 12b: Story-Commit fehlt auf origin/main"
+fi
+T12_STATUS="$(git -C "$T12_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^status:' || true)"
+if [[ "$T12_STATUS" == "status: Done" ]]; then
+  pass "Test 12c: Board-Flip auf Done ist im origin/main-Stand enthalten (AC3 — Nacharbeit lief trotz belegtem 'main')"
+else
+  fail "Test 12c: Board-Status in origin/main ist '${T12_STATUS}'"
+fi
+T12_SECOND_HEAD_AFTER="$(git -C "$T12_SECOND_WORKTREE" rev-parse HEAD)"
+T12_SECOND_STATUS_AFTER="$(git -C "$T12_SECOND_WORKTREE" status --porcelain)"
+if [[ "$T12_SECOND_HEAD_AFTER" == "$T12_SECOND_HEAD_BEFORE" && "$T12_SECOND_STATUS_AFTER" == "$T12_SECOND_STATUS_BEFORE" ]]; then
+  pass "Test 12d: zweiter Worktree (main) unverändert — HEAD + Working-Tree unberührt (AC1)"
+else
+  fail "Test 12d: zweiter Worktree wurde durch den PR-Merge verändert"
+fi
+T12_LOCAL_BRANCH_AFTER="$(git -C "$T12_WORK" rev-parse --abbrev-ref HEAD)"
+if [[ "$T12_LOCAL_BRANCH_AFTER" == "feat/S-900-test" ]]; then
+  pass "Test 12e: aufrufender Worktree steht nach dem PR-Merge unverändert auf dem Story-Branch (AC1)"
+else
+  fail "Test 12e: aufrufender Worktree steht auf '${T12_LOCAL_BRANCH_AFTER}', erwartet 'feat/S-900-test'"
+fi
+
+# ===========================================================================
+# Test 13 — S-122 AC2(b)/AC5(b): Squash-Re-Run. Der Story-Commit ist NICHT
+# Vorfahre von origin/main (Squash erzeugt einen neuen Commit) — der
+# PR-Status (gh pr list --head <branch> --state all, MERGED) erkennt die
+# Landung trotzdem. Exit 0, KEIN zweiter PR (MOCK_GH_PR_CREATE_FORBID würde
+# das Skript sonst sterben lassen), Board-Flip läuft idempotent (deckt A2).
+# ===========================================================================
+echo ""
+echo "--- Test 13: AC2(b)/AC5(b) — Squash-Re-Run, PR bereits MERGED, kein zweiter PR ---"
+T13_WORK="$(setup_fixture "${TEST_WORK_DIR}/test13")"
+set_pr_policy "$T13_WORK"
+(
+  cd "$T13_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+# Simuliert einen bereits per Squash gelandeten PR: origin/main bekommt über
+# einen unabhängigen Klon einen FREMDEN Commit (repräsentiert den
+# Squash-Commit von GitHub) — der lokale Story-Commit ist danach KEIN
+# Vorfahre mehr von origin/main, der merge-base-Check trifft also nicht.
+T13_FOREIGN="${TEST_WORK_DIR}/test13/foreign-clone"
+git clone -q "${TEST_WORK_DIR}/test13/origin.git" "$T13_FOREIGN" 2>/dev/null
+(
+  cd "$T13_FOREIGN"
+  git checkout -q main
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work (squash, simuliert)"
+  git push -q origin main
+)
+T13_SQUASH_SHA="$(git -C "$T13_FOREIGN" rev-parse HEAD)"
+
+export MOCK_PR_LIST_STATE="MERGED" MOCK_GH_PR_CREATE_FORBID=1
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+T13_OUTPUT="$(cd "$T13_WORK" && MOCK_HEAD_SHA="$T13_SQUASH_SHA" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T13_EXIT=$?
+unset MOCK_PR_LIST_STATE MOCK_GH_PR_CREATE_FORBID
+
+if [[ $T13_EXIT -eq 0 ]] && echo "$T13_OUTPUT" | grep -q "squash-tauglicher PR-Status-Check"; then
+  pass "Test 13a: Squash-Re-Run korrekt über PR-Status erkannt (kein merge-base-Treffer nötig)"
+else
+  fail "Test 13a: Squash-Re-Run nicht erkannt (exit=${T13_EXIT})"
+  echo "  Output: $T13_OUTPUT"
+fi
+if echo "$T13_OUTPUT" | grep -qi "gh pr create haette hier NICHT aufgerufen werden"; then
+  fail "Test 13b: ein zweiter PR wurde angelegt — Idempotenz verletzt"
+else
+  pass "Test 13b: kein zweiter PR angelegt (Idempotenz gewahrt, deckt A2)"
+fi
+T13_STATUS="$(git -C "$T13_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^status:' || true)"
+if [[ "$T13_STATUS" == "status: Done" ]]; then
+  pass "Test 13c: Board-Flip lief trotzdem idempotent weiter (Done im origin/main-Stand)"
+else
+  fail "Test 13c: Board-Status in origin/main ist '${T13_STATUS}'"
+fi
+
+# ===========================================================================
+# Test 14 — S-122 AC2(a)/AC5(c): Merge-Aufruf meldet nicht-null Exit (z.B.
+# lokaler Aufräum-Schritt scheitert), Remote-PR-Zustand entscheidet.
+#   (c1) 'gh pr view' liefert state=MERGED -> Exit 0, Board-Flip (deckt A1).
+#   (c2) 'gh pr view' liefert NICHT MERGED -> Exit 1, kein Board-Flip (E1).
+# ===========================================================================
+echo ""
+echo "--- Test 14: AC2(a)/AC5(c) — Merge-Exit != 0, Remote-PR-Zustand entscheidet ---"
+
+# --- (c1) Remote-Zustand MERGED trotz Fehler-Exit -> Erfolg ---
+T14A_WORK="$(setup_fixture "${TEST_WORK_DIR}/test14a")"
+set_pr_policy "$T14A_WORK"
+(
+  cd "$T14A_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+export MOCK_GH_PR_MERGE_EXIT=1 MOCK_PR_VIEW_STATE="MERGED"
+export MOCK_GH_MERGE_SOURCE_BRANCH="feat/S-900-test" MOCK_GH_MERGE_TARGET_BRANCH="main"
+T14A_OUTPUT="$(cd "$T14A_WORK" && MOCK_HEAD_SHA="AUTO" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T14A_EXIT=$?
+unset MOCK_GH_PR_MERGE_EXIT MOCK_PR_VIEW_STATE MOCK_GH_MERGE_SOURCE_BRANCH MOCK_GH_MERGE_TARGET_BRANCH
+
+if [[ $T14A_EXIT -eq 0 ]] && echo "$T14A_OUTPUT" | grep -q "werte als Erfolg"; then
+  pass "Test 14a-1: nicht-null Merge-Exit, aber Remote-Zustand MERGED -> als Erfolg gewertet (A1, Defekt 2 geschlossen)"
+else
+  fail "Test 14a-1: exit=${T14A_EXIT}"
+  echo "  Output: $T14A_OUTPUT"
+fi
+T14A_STATUS="$(git -C "$T14A_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^status:' || true)"
+if [[ "$T14A_STATUS" == "status: Done" ]]; then
+  pass "Test 14a-2: Board-Flip fand trotz Merge-Exit != 0 statt (AC3 — Skript stirbt nie NACH Erfolg)"
+else
+  fail "Test 14a-2: Board-Status in origin/main ist '${T14A_STATUS}'"
+fi
+
+# --- (c2) Remote-Zustand NICHT MERGED -> echter Fehlschlag, Exit 1, kein Flip ---
+T14B_WORK="$(setup_fixture "${TEST_WORK_DIR}/test14b")"
+set_pr_policy "$T14B_WORK"
+(
+  cd "$T14B_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+export MOCK_GH_PR_MERGE_EXIT=1 MOCK_PR_VIEW_STATE="OPEN"
+set +e
+T14B_OUTPUT="$(cd "$T14B_WORK" && MOCK_HEAD_SHA="$(git rev-parse HEAD)" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T14B_EXIT=$?
+set -e
+unset MOCK_GH_PR_MERGE_EXIT MOCK_PR_VIEW_STATE
+
+if [[ $T14B_EXIT -ne 0 ]] && echo "$T14B_OUTPUT" | grep -q "echter Fehlschlag"; then
+  pass "Test 14b-1: Remote-Zustand NICHT MERGED -> echter Fehlschlag erkannt, Exit 1 (E1)"
+else
+  fail "Test 14b-1: exit=${T14B_EXIT}"
+  echo "  Output: $T14B_OUTPUT"
+fi
+T14B_STATUS="$(grep '^status:' "$T14B_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T14B_STATUS" == "status: In Review" ]]; then
+  pass "Test 14b-2: Board-Status unverändert (kein Flip nach echtem Fehlschlag)"
+else
+  fail "Test 14b-2: Board-Status ist '${T14B_STATUS}', erwartet unverändert 'status: In Review'"
+fi
+
+# --- (c3) 'gh pr view' selbst gescheitert (E2, K1 fail-safe) -> Exit 1, kein Flip ---
+T14C_WORK="$(setup_fixture "${TEST_WORK_DIR}/test14c")"
+set_pr_policy "$T14C_WORK"
+(
+  cd "$T14C_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+export MOCK_GH_PR_MERGE_EXIT=1 MOCK_GH_PR_VIEW_FAIL=1
+set +e
+T14C_OUTPUT="$(cd "$T14C_WORK" && MOCK_HEAD_SHA="$(git rev-parse HEAD)" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T14C_EXIT=$?
+set -e
+unset MOCK_GH_PR_MERGE_EXIT MOCK_GH_PR_VIEW_FAIL
+
+if [[ $T14C_EXIT -ne 0 ]] && echo "$T14C_OUTPUT" | grep -q "fail-safe"; then
+  pass "Test 14c-1: 'gh pr view' selbst gescheitert -> fail-safe Abbruch statt Erfolg angenommen (E2, K1)"
+else
+  fail "Test 14c-1: exit=${T14C_EXIT}"
+  echo "  Output: $T14C_OUTPUT"
+fi
+T14C_STATUS="$(grep '^status:' "$T14C_WORK/board/stories/S-900-test.yaml" | head -1)"
+if [[ "$T14C_STATUS" == "status: In Review" ]]; then
+  pass "Test 14c-2: Board-Status unverändert (kein Flip bei unklarem Remote-Zustand)"
+else
+  fail "Test 14c-2: Board-Status ist '${T14C_STATUS}', erwartet unverändert 'status: In Review'"
+fi
+
+# ===========================================================================
+# Test 15 — S-122 AC4: Remote-Branch-Löschung via API, nicht-fatal bei
+# Fehlschlag (Board-Flip findet trotzdem statt).
+# ===========================================================================
+echo ""
+echo "--- Test 15: AC4 — Remote-Branch-Löschung nicht-fatal bei Fehlschlag ---"
+T15_WORK="$(setup_fixture "${TEST_WORK_DIR}/test15")"
+set_pr_policy "$T15_WORK"
+(
+  cd "$T15_WORK"
+  git checkout -q -b feat/S-900-test
+  echo "feature" > feature.txt
+  git add -A
+  git commit -q -m "S-900: feature work"
+)
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+export MOCK_GH_API_DELETE_FAIL=1
+export MOCK_GH_MERGE_SOURCE_BRANCH="feat/S-900-test" MOCK_GH_MERGE_TARGET_BRANCH="main"
+T15_OUTPUT="$(cd "$T15_WORK" && MOCK_HEAD_SHA="AUTO" bash "$SHIP_SCRIPT" S-900 2>&1)"
+T15_EXIT=$?
+unset MOCK_GH_API_DELETE_FAIL MOCK_GH_MERGE_SOURCE_BRANCH MOCK_GH_MERGE_TARGET_BRANCH
+
+if [[ $T15_EXIT -eq 0 ]] && echo "$T15_OUTPUT" | grep -q "nicht-fatal"; then
+  pass "Test 15a: Branch-Löschung fehlgeschlagen, aber Lauf bricht NICHT ab (Exit 0, AC4)"
+else
+  fail "Test 15a: exit=${T15_EXIT}"
+  echo "  Output: $T15_OUTPUT"
+fi
+T15_STATUS="$(git -C "$T15_WORK" show origin/main:board/stories/S-900-test.yaml 2>/dev/null | grep '^status:' || true)"
+if [[ "$T15_STATUS" == "status: Done" ]]; then
+  pass "Test 15b: Board-Flip fand trotz gescheiterter Branch-Löschung statt"
+else
+  fail "Test 15b: Board-Status in origin/main ist '${T15_STATUS}'"
+fi
+
+# ===========================================================================
+# Test 16 — S-122 AC1/Verträge: kein Pfad führt 'gh pr merge ... --delete-branch'
+# mehr aus (statischer Beleg, keine Behauptung).
+# ===========================================================================
+echo ""
+echo "--- Test 16: AC1 — kein '--delete-branch' mehr im Skript ---"
+# Nur ausführbare Zeilen zählen — die AC1-Begründungskommentare erwähnen
+# '--delete-branch' bewusst (Kontext, warum das Flag entfernt wurde).
+if grep -v '^[[:space:]]*#' "$SHIP_SCRIPT" | grep -q -- "--delete-branch"; then
+  fail "Test 16: '--delete-branch' noch in einer ausführbaren Zeile gefunden — AC1 verletzt"
+else
+  pass "Test 16: '--delete-branch' nicht mehr in einer ausführbaren Zeile vorhanden"
 fi
 
 # ===========================================================================

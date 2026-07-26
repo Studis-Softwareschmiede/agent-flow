@@ -337,6 +337,56 @@ if [[ "$MODE" == "merge-feature" ]]; then
   exit 0
 fi
 
+# ---------------------------------------------------------------------------
+# PR-Merge-Feststellung (worktree-fest, board-ship-pr-merge-worktree-safe):
+# der Remote-PR-Zustand wird ausschliesslich über 'gh pr view'/'gh pr list'
+# erfragt — nie behauptet (K1). Ersetzt das frühere '|| die' hinter
+# 'gh pr merge --delete-branch' (Defekt 2: konnte Remote-Erfolg nicht von
+# einem gescheiterten lokalen Aufräum-Schritt unterscheiden) und macht den
+# "bereits gemergt?"-Idempotenz-Check squash-tauglich (Defekt 3: nach einem
+# Squash-Merge ist der Story-Commit KEIN Vorfahre mehr des Ziel-Branches).
+# ---------------------------------------------------------------------------
+
+# AC2(a)/A1/E1/E2: Exit 0 = MERGED (state oder mergedAt gesetzt); Exit 1 =
+# Abfrage ok, aber NICHT gemergt (E1); Exit 2 = die Abfrage selbst ist
+# gescheitert (fail-safe -> NIE als Erfolg werten, K1/E2).
+gh_pr_state_merged() {
+  local sel="$1" out
+  out="$(gh pr view "$sel" --json state,mergedAt --jq '(.state == "MERGED") or (.mergedAt != null)' 2>/dev/null)" || return 2
+  [[ -n "$out" ]] || return 2
+  [[ "$out" == "true" ]] && return 0
+  return 1
+}
+
+# AC2(b): squash-tauglicher Idempotenz-Zusatz-Check — fragt, ob für den
+# STORY-BRANCH bereits ein PR mit state=MERGED existiert (unabhängig davon,
+# ob der Story-Commit noch Vorfahre des Ziel-Branches ist). Kein Treffer
+# (kein PR/Abfrage-Fehler) -> false, fällt zurück auf den normalen Ablauf —
+# der bestehende merge-base-Vorab-Treffer bleibt als Defense-in-Depth
+# erhalten (kein K1-Risiko: ein False-Negative hier führt höchstens zu einem
+# neuen PR-Anlauf, der beim nächsten Aufruf ohnehin idempotent wird).
+pr_head_branch_merged() {
+  local branch="$1" out
+  out="$(gh pr list --head "$branch" --state all --json state,mergedAt --limit 1 --jq '(.[0].state == "MERGED") or (.[0].mergedAt != null)' 2>/dev/null || echo "")"
+  [[ "$out" == "true" ]]
+}
+
+# AC4: Remote-Branch-Löschung serverseitig (API), nicht-fatal — kein
+# lokaler Checkout/'git branch -d' im aufrufenden Worktree.
+delete_remote_branch_or_warn() {
+  local branch="$1" repo
+  repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "")"
+  if [[ -z "$repo" ]]; then
+    log "Remote-Branch-Löschung für '${branch}' übersprungen — Repo-Name nicht ermittelbar (nicht-fatal, AC4)."
+    return 0
+  fi
+  if gh api -X DELETE "repos/${repo}/git/refs/heads/${branch}" >/dev/null 2>&1; then
+    log "Remote-Branch '${branch}' serverseitig gelöscht."
+  else
+    log "Remote-Branch-Löschung für '${branch}' fehlgeschlagen (nicht-fatal, AC4) — evtl. bereits gelöscht oder fehlende Rechte."
+  fi
+}
+
 # ============================================================================
 # Modus A/B — einzelne Story landen (Ziel: profile.default_branch oder --target-branch)
 # ============================================================================
@@ -362,6 +412,14 @@ ALREADY_MERGED=0
 if git rev-parse "origin/${SHIP_BRANCH}" >/dev/null 2>&1 && git merge-base --is-ancestor "$LOCAL_HEAD" "origin/${SHIP_BRANCH}" 2>/dev/null; then
   ALREADY_MERGED=1
   log "bereits gemergt — ${LOCAL_HEAD} ist nachweislich Vorfahre von origin/${SHIP_BRANCH} (merge-base-Check, keine Behauptung übernommen)."
+elif pr_head_branch_merged "$BRANCH"; then
+  # AC2(b) — squash-tauglicher Zusatz-Check (Defekt 3): der merge-base-Check
+  # oben trifft nach einem Squash-Merge nicht mehr (neuer, einzelner Commit).
+  # Der PR-Status (state=MERGED/mergedAt gesetzt) erkennt die Landung trotzdem.
+  ALREADY_MERGED=1
+  log "bereits gemergt — Remote-PR für Branch '${BRANCH}' ist MERGED (squash-tauglicher PR-Status-Check, Defekt 3 geschlossen)."
+fi
+if [[ "$ALREADY_MERGED" -eq 1 ]]; then
   log "kein erneuter Merge nötig — fahre direkt mit CI-Check/Board-Flip fort."
 fi
 
@@ -397,7 +455,30 @@ if [[ "$ALREADY_MERGED" -eq 0 ]]; then
       || die "gh pr create fehlgeschlagen: ${PR_OUT}"
     PR_URL="$(echo "$PR_OUT" | grep -Eo 'https://github\.com/\S+' | tail -1)"
     [[ -n "$PR_URL" ]] || die "konnte PR-URL nicht aus gh-Ausgabe extrahieren: ${PR_OUT}"
-    gh pr merge "$BRANCH" --squash --delete-branch >/dev/null || die "gh pr merge fehlgeschlagen für Branch '${BRANCH}'"
+
+    # AC1: GitHub-seitiger Squash-Merge OHNE '--delete-branch'. Dieses Flag
+    # räumt NACH dem Remote-Merge LOKAL auf (löscht den Story-Branch, schaltet
+    # den aufrufenden Worktree auf den default_branch) — im Worktree-Modell
+    # ist 'main' aber immer vom Hauptordner belegt, Git verbietet denselben
+    # Branch in zwei Worktrees. Ohne '--delete-branch' hat 'gh pr merge' keine
+    # lokale git-Nebenwirkung mehr: kein Checkout, kein Branch-Wechsel im
+    # aufrufenden Worktree. Die Branch-Löschung erfolgt separat, serverseitig
+    # (AC4, delete_remote_branch_or_warn).
+    if ! gh pr merge "$PR_URL" --squash >/dev/null 2>&1; then
+      # AC2(a)/A1 (Defekt 2): ein nicht-null Exit heisst NICHT automatisch
+      # Fehlschlag — den Remote-PR-Zustand befragen, statt sofort zu 'die'n.
+      if gh_pr_state_merged "$PR_URL"; then
+        log "gh pr merge meldete einen Fehler, aber der Remote-PR-Zustand ist MERGED — werte als Erfolg (A1, Defekt 2 geschlossen)."
+      else
+        PR_STATE_RC=$?
+        if [[ "$PR_STATE_RC" -eq 1 ]]; then
+          die "gh pr merge fehlgeschlagen für '${PR_URL}' und der Remote-PR-Zustand ist NICHT MERGED — echter Fehlschlag (E1)."
+        else
+          die "gh pr merge fehlgeschlagen für '${PR_URL}' und der Remote-PR-Zustand konnte nicht zuverlässig festgestellt werden ('gh pr view' fehlgeschlagen) — Abbruch, fail-safe (K1/E2)."
+        fi
+      fi
+    fi
+    delete_remote_branch_or_warn "$BRANCH"   # AC4: serverseitig, nicht-fatal
   fi
 fi
 
