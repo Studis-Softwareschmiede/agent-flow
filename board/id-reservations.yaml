@@ -6,7 +6,7 @@ namespaces:
     - feature_id: F-017
       range_start: 1
       range_end: 10
-      status: active
+      status: released
       reserved_at: '2026-07-26T21:29:35Z'
       high_water: null
   ADR:
@@ -15,7 +15,7 @@ namespaces:
     - feature_id: F-017
       range_start: 1
       range_end: 10
-      status: active
+      status: released
       reserved_at: '2026-07-26T21:29:37Z'
       high_water: null
   C:
@@ -30,6 +30,6 @@ namespaces:
     - feature_id: F-017
       range_start: 3
       range_end: 12
-      status: active
+      status: released
       reserved_at: '2026-07-26T21:29:39Z'
       high_water: null
