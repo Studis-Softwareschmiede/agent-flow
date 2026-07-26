@@ -115,7 +115,8 @@ Die äußere Schleife startet ausschließlich die in `READY` gelisteten Stories 
 ---
 
 ## 1. Nächstes Item wählen
-- `board next` → die nächste bereite Story als JSON (`id`, `spec`, `implements`, `parent`, `labels`, `priority`); Queue-Logik (Priority, Depends-Gate) lebt in der CLI.
+- **Board-Stand frisch holen (Spec [`docs/specs/story-claim-lock.md`](../../docs/specs/story-claim-lock.md) AC1):** `git fetch origin "$default_branch"` **bevor** `board next` aufgerufen wird — nur so sind fremde, bereits gepushte Claims paralleler Sessions sichtbar. Reiner Fetch (kein Reset) — der lokale Working-Tree bleibt unverändert, nur die Remote-Tracking-Refs werden aktualisiert.
+- `board next` → die nächste bereite Story als JSON (`id`, `spec`, `implements`, `parent`, `labels`, `priority`); Queue-Logik (Priority, Depends-Gate) lebt in der CLI. **Stale-Reclamation-Fallback (AC6/AC8):** gibt es kein bereites To-Do-Item, kann `board next` stattdessen eine `In Progress`-Story mit stale `claimed_at` liefern — erkennbar am zusätzlichen JSON-Feld `"reclaimable": true`. Eine frisch geclaimte `In Progress`-Story (nicht stale) liefert `board next` **nie** (AC6, unabhängig davon ob `reclaimable` gesetzt ist). Der reclaimable-Fall wird in §2 wie jede andere Story über den Claim-Ablauf übernommen — kein separater Pfad.
 - Aus dem JSON die **Spec-Referenz** lesen: `spec: docs/specs/<feature>.md` + `implements: [AC…]` — die reichst du an coder/reviewer/tester durch (Source of Truth, nicht der Story-Titel).
 - **Leere Ausgabe → nie stumm (Spec [`docs/specs/empty-drain-diagnostics.md`](../../docs/specs/empty-drain-diagnostics.md) AC3/AC4):** statt sofort zu stoppen oder direkt zu §7 überzugehen, zuerst `board ready` aufrufen (Klartext, kein Agent-Dispatch, kein Board-Schreibvorgang — token-frei) und dessen Ausgabe auf `WAITING <kategorie> (<n>): …`-Zeilen (Aggregat-Block) prüfen:
   - **≥1 `WAITING …`-Zeile vorhanden** (A1 — es gibt To-Do-Stories, aber keine ist ready): dem User explizit melden: `nichts abarbeitbar — Gründe:` gefolgt von den `WAITING …`-Zeilen im Klartext (AC4).
@@ -209,9 +210,48 @@ Wenn `medians[key].n` < 3: Schnitt vorhanden aber dünn — trotzdem verwenden (
 - **Konsument-Pfad (size_est vorhanden):** `tok_est` = `tok_est` aus der Story-YAML (Schritt A, von requirement geschrieben — bzw. `null` bei Alt-Story ohne das Feld, AC5).
 - **Fallback-Pfad:** `tok_est` = `tok_est_from_estimator` (L/XL, Schritt B) bzw. `null` (S/M — kein Baseline-Lookup für `tok_est` im Fallback-Pfad implementiert; optionales Feld, `null` ist erwartet, kein Fehler).
 
-## 2. In Progress
-- `board set <story-id> status "In Progress"` — setzt die Story auf In Progress.
-- `board set <story-id> branch "feat/<story-id>-<slug>"` — setzt den Branch-Namen in der Story-YAML (AC7). Branch-Konvention: `feat/` + Story-ID + kurzer Slug aus dem Titel.
+## 2. In Progress — Claim-Lock (Spec [`docs/specs/story-claim-lock.md`](../../docs/specs/story-claim-lock.md) AC1–AC5/AC12/AC13)
+
+Der Claim ist die **erste** Schreiboperation dieser Story-Session — **kein** `coder`-Dispatch (§3) startet, bevor der Claim-Push bestätigt ist (AC1).
+
+1. **Opaken Session-Token erzeugen (AC5, einmal je Story-Session — kein neues Token je Retry):**
+   ```bash
+   CLAIM_TOKEN="$(hostname)-$$-$(date -u +%s)-${RANDOM}"
+   ```
+   Kein Secret, keine Anmeldedaten — dient ausschliesslich der Unterscheidung „eigener vs. fremder Claim".
+2. **Reservierung in einem Schritt setzen:**
+   ```bash
+   board set <story-id> status "In Progress"
+   board set <story-id> claimed_by "$CLAIM_TOKEN"
+   board set <story-id> claimed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   board set <story-id> branch "feat/<story-id>-<slug>"
+   ```
+   Branch-Konvention unverändert: `feat/` + Story-ID + kurzer Slug aus dem Titel.
+3. **Committen + sofort pushen (AC1/AC2 — vor jedem weiteren Schritt, kein Zurückhalten bis Session-Ende):**
+   ```bash
+   git add board/stories/<story-id>-*.yaml
+   git commit -m "chore(board): <story-id> claim (In Progress)"
+   git push origin HEAD:"$default_branch"
+   ```
+   - **Fast-Forward-Push erfolgreich:** der Claim gehört dieser Session — weiter mit §2a.
+   - **Push abgelehnt (non-fast-forward) — REBASE-FREI (AC2, HART):** **niemals** `git rebase`/`git merge` auf den abgelehnten Claim-Commit anwenden — zwei konkurrierende Claims schreiben praktisch immer dieselbe Story-YAML-Datei komplett neu (`board set` ersetzt die ganze Datei), ein Rebase/Merge konfligiert dort fast garantiert und hinterlässt einen hängenden Rebase-Zustand (`.git/rebase-merge`), aus dem weder `board show` noch ein blosses `git reset --hard` sauber herauskommen (empirisch reproduziert). Stattdessen:
+     ```bash
+     git fetch origin "$default_branch" --quiet
+     STORY_FILE="$(git ls-files 'board/stories/<story-id>-*.yaml' | head -1)"
+     REMOTE_STATUS="$(git show "origin/$default_branch:$STORY_FILE" | python3 -c 'import sys,yaml; print((yaml.safe_load(sys.stdin) or {}).get("status") or "")')"
+     REMOTE_CLAIMED_BY="$(git show "origin/$default_branch:$STORY_FILE" | python3 -c 'import sys,yaml; print((yaml.safe_load(sys.stdin) or {}).get("claimed_by") or "")')"
+     REMOTE_CLAIMED_AT="$(git show "origin/$default_branch:$STORY_FILE" | python3 -c 'import sys,yaml; print((yaml.safe_load(sys.stdin) or {}).get("claimed_at") or "")')"
+     ```
+     Der Re-Read liest **ausschliesslich** aus dem gefetchten Remote-Objekt (`origin/$default_branch`) — der lokale Working-Tree (inkl. des eigenen, noch ungelandeten Claim-Commits) bleibt dabei unangetastet, es findet zu keinem Zeitpunkt ein Merge/Rebase statt. Danach:
+     - **Fremd + frisch** (`REMOTE_CLAIMED_BY` ≠ `$CLAIM_TOKEN`, `REMOTE_STATUS = In Progress`, `REMOTE_CLAIMED_AT` noch nicht stale gemäss `stale_claim_hours`) → eigene lokale Reservierung verwerfen: `git reset --hard origin/"$default_branch"` (reiner Fast-Forward-Reset — kein Rebase-Abbruch nötig, da nie rebased wurde; der eigene ungelandete Claim-Commit verschwindet vollständig), **kein** `coder`-Dispatch auf diese Story, zurück zu **1. Nächstes Item wählen** (AC3).
+     - **Weiterhin `To Do`** (`REMOTE_STATUS = To Do` — die Ablehnung kam von einem unbezogenen fremden Commit): `git reset --hard origin/"$default_branch"`, danach den **kompletten** Claim-Vorgang (Schritt 2–3, gleiches `$CLAIM_TOKEN`) neu ausführen — begrenzt auf **3 Versuche insgesamt** (Retry-Budget, AC4); vor jedem weiteren Versuch erneut fetch + Remote-Re-Read (kein Rebase).
+     - **Retry-Budget erschöpft** (AC13, deckt E1): Claim-Push für diese Story abbrechen — **kein** Bau. `git reset --hard origin/"$default_branch"` (Story bleibt `To Do`, kein halb-geclaimter Zwischenzustand, kein hängender Rebase-Zustand). Klartext-Diagnose an den User (`Claim-Push für <story-id> nach 3 Versuchen abgelehnt — default_branch-Senke belegt.`), danach die Runde regulär beenden (weiter zu §7, kein Weiterziehen zum nächsten Item in dieser Session).
+
+**Kein Fremd-Schreiben (AC12).** `/flow` schreibt `status`/`claimed_by` einer Story, die es nicht besitzt, **nie** — die einzige Ausnahme ist die bewusste Stale-Reclamation direkt unten (expliziter Eigentümerwechsel, kein versehentliches Überschreiben).
+
+**Stale-Reclamation (AC8, deckt A3 — „Geist-In-Progress")**. Lieferte `board next` in §1 einen Kandidaten mit `"reclaimable": true` (keine bereite To-Do-Story, aber eine `In Progress`-Story mit stale `claimed_at`), läuft die Übernahme über **denselben** Claim-Ablauf oben (Schritt 1–3) — der eigene Token/Zeitstempel überschreibt bewusst den verwaisten fremden Claim, kein manueller Eingriff nötig. Kollidiert die Reclamation mit einer parallelen Session, entscheidet dieselbe Push-Atomarität aus Schritt 3 (AC2); der Verlierer erkennt nach Re-Read den neuen, frischen fremden Claim (AC3) und nimmt das nächste Item.
+
+**Headless, kein Dienst (AC11).** Der gesamte Ablauf ist reine Bash/Git/Board-CLI-Mechanik + Zeitstempel-Vergleich — kein Lock-Server, kein Daemon, kein LLM-Urteil.
 
 ## 2a. Secret-Sync-Gate (Spec [`docs/architecture/secrets-subsystem.md`](../../docs/architecture/secrets-subsystem.md) §9)
 

@@ -765,6 +765,13 @@ PYEOF
 #   3. Sortierung: Story-priority (P0<P1<P2<P3) → Parent-Feature-priority → id (aufsteigend)
 #   4. Ergebnis = erstes Element als JSON (id, spec, implements, parent, priority, labels)
 #      Keine bereite Story → leere Ausgabe, Exit 0
+#
+# Stale-Reclamation-Fallback (story-claim-lock AC6/AC7/AC8):
+#   Gibt es keine bereite To-Do-Story, wird als Fallback die erste "In Progress"-
+#   Story mit claimed_at älter als stale_claim_hours (board.yaml, Default 4)
+#   zurückgegeben — zusätzlich markiert mit reclaimable: true. Eine FRISCH
+#   geclaimte "In Progress"-Story (claimed_at nicht stale) wird NIE zurückgegeben
+#   (AC6). Dieselbe Sortierung (Priority/Parent-Priority/id) wie im To-Do-Fall.
 # ---------------------------------------------------------------------------
 cmd_next() {
   # KEIN require_board — next ist ein lesendes Verb; fehlendes Board/Verzeichnis → leere
@@ -799,21 +806,24 @@ cmd_next() {
   fi
 
   # Queue-Logik via Python (deterministisch, kein LLM)
-  python3 - "$parent_filter" "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" \
+  python3 - "$parent_filter" "$BOARD_YAML" "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" \
              "${#feature_files[@]}" "${feature_files[@]+"${feature_files[@]}"}" <<'PYEOF'
 import sys, yaml, json, datetime, re
 
-# Argumente: <parent_filter> <n_stories> <story_file...> <n_features> <feature_file...>
+# Argumente: <parent_filter> <board_yaml> <n_stories> <story_file...> <n_features> <feature_file...>
 args = sys.argv[1:]
 parent_filter = args[0]
-n_stories  = int(args[1])
-story_files  = args[2 : 2 + n_stories]
-rest         = args[2 + n_stories:]
+board_yaml_path = args[1]
+n_stories  = int(args[2])
+story_files  = args[3 : 3 + n_stories]
+rest         = args[3 + n_stories:]
 n_features   = int(rest[0])
 feature_files = rest[1 : 1 + n_features]
 
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 ID_NUM = re.compile(r'^[FS]-(\d+)$')
+STALE_CLAIM_HOURS_DEFAULT = 4
+TS_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
 
 def load_yaml(path):
     try:
@@ -840,6 +850,30 @@ def normalize(val):
 def id_num(id_str):
     m = ID_NUM.match(str(id_str or ""))
     return int(m.group(1)) if m else 999999
+
+def parse_claimed_at(val):
+    """ISO-8601-UTC-String → tz-aware datetime, oder None (fehlend/unparsebar)."""
+    if not val:
+        return None
+    s = str(val).strip()
+    if not TS_PATTERN.match(s):
+        return None
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+
+# --- stale_claim_hours (AC7): board.yaml, Default 4 wenn Feld fehlt/ungueltig ---
+board_data = load_yaml(board_yaml_path)
+stale_claim_hours = STALE_CLAIM_HOURS_DEFAULT
+raw_stale = board_data.get("stale_claim_hours")
+if raw_stale is not None:
+    try:
+        parsed_stale = float(raw_stale)
+        if parsed_stale > 0:
+            stale_claim_hours = parsed_stale
+    except (TypeError, ValueError):
+        pass
 
 # --- Alle Stories laden ---
 stories = {}  # id -> data
@@ -890,11 +924,7 @@ for sid, data in candidates:
     if all_done:
         ready.append((sid, data))
 
-if not ready:
-    # Keine bereite Story — leere Ausgabe, Exit 0
-    sys.exit(0)
-
-# --- Schritt 3: Sortierung ---
+# --- Schritt 3: Sortierung (gemeinsam fuer To-Do- UND Stale-Reclamation-Kandidaten) ---
 def sort_key(item):
     sid, data = item
     story_prio   = PRIORITY_ORDER.get(str(data.get("priority", "P3")), 9)
@@ -903,10 +933,53 @@ def sort_key(item):
     feature_prio = PRIORITY_ORDER.get(str(parent_data.get("priority", "P3")), 9)
     return (story_prio, feature_prio, id_num(sid))
 
-ready.sort(key=sort_key)
+if ready:
+    # --- Schritt 4a: Erste bereite To-Do-Story als JSON ausgeben ---
+    ready.sort(key=sort_key)
+    best_id, best_data = ready[0]
+    best_data = normalize(best_data)
 
-# --- Schritt 4: Erste Story als JSON ausgeben ---
-best_id, best_data = ready[0]
+    output = {
+        "id":         best_data.get("id"),
+        "spec":       best_data.get("spec"),
+        "implements": best_data.get("implements"),
+        "parent":     best_data.get("parent"),
+        "priority":   best_data.get("priority"),
+        "labels":     best_data.get("labels"),
+        # Zusatzfelder für /flow (title, status als Kontext)
+        "title":      best_data.get("title"),
+        "status":     best_data.get("status"),
+        "depends":    best_data.get("depends"),
+        "claimed_by": best_data.get("claimed_by"),
+        "claimed_at": best_data.get("claimed_at"),
+        "reclaimable": False,
+    }
+    print(json.dumps(output, ensure_ascii=False))
+    sys.exit(0)
+
+# --- Schritt 4b: Fallback — stale "In Progress"-Claims (AC8, deckt A3) ---
+# NIE eine frisch geclaimte Story zurueckgeben (AC6) — nur claimed_at aelter
+# als stale_claim_hours zaehlt als Kandidat.
+now = datetime.datetime.now(datetime.timezone.utc)
+stale_candidates = []
+for sid, data in stories.items():
+    if str(data.get("status", "")).strip() != "In Progress":
+        continue
+    if parent_filter and str(data.get("parent", "")).strip() != parent_filter:
+        continue
+    claimed_at_dt = parse_claimed_at(data.get("claimed_at"))
+    if claimed_at_dt is None:
+        continue
+    age_hours = (now - claimed_at_dt).total_seconds() / 3600.0
+    if age_hours > stale_claim_hours:
+        stale_candidates.append((sid, data))
+
+if not stale_candidates:
+    # Kein Kandidat (weder To-Do noch reclaimable) — leere Ausgabe, Exit 0
+    sys.exit(0)
+
+stale_candidates.sort(key=sort_key)
+best_id, best_data = stale_candidates[0]
 best_data = normalize(best_data)
 
 output = {
@@ -916,12 +989,13 @@ output = {
     "parent":     best_data.get("parent"),
     "priority":   best_data.get("priority"),
     "labels":     best_data.get("labels"),
-    # Zusatzfelder für /flow (title, status als Kontext)
     "title":      best_data.get("title"),
     "status":     best_data.get("status"),
     "depends":    best_data.get("depends"),
+    "claimed_by": best_data.get("claimed_by"),
+    "claimed_at": best_data.get("claimed_at"),
+    "reclaimable": True,
 }
-
 print(json.dumps(output, ensure_ascii=False))
 PYEOF
 }
@@ -1896,19 +1970,62 @@ cmd_ready() {
     repo_root="$(pwd)"
   fi
 
-  python3 - "$STORIES_DIR" "$repo_root" "$quiet" "$parent_filter" \
+  python3 - "$STORIES_DIR" "$repo_root" "$quiet" "$parent_filter" "$BOARD_YAML" \
             "${#story_files[@]}" "${story_files[@]+"${story_files[@]}"}" <<'PYEOF'
-import sys, os, yaml, re
+import sys, os, yaml, re, datetime
 
 stories_dir   = sys.argv[1]
 repo_root     = sys.argv[2]
 quiet         = sys.argv[3] == "1"
 parent_filter = sys.argv[4]
-n_stories     = int(sys.argv[5])
-story_files   = sys.argv[6 : 6 + n_stories]
+board_yaml_path = sys.argv[5]
+n_stories     = int(sys.argv[6])
+story_files   = sys.argv[7 : 7 + n_stories]
 
 AC_IN_SPEC      = re.compile(r"\bAC(\d+)\b")
 FRONTMATTER_RE  = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+TS_PATTERN      = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
+STALE_CLAIM_HOURS_DEFAULT = 4
+
+# --- stale_claim_hours (story-claim-lock AC7/AC9): board.yaml, Default 4 ---
+def _load_yaml(path):
+    try:
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+_board_data = _load_yaml(board_yaml_path)
+stale_claim_hours = STALE_CLAIM_HOURS_DEFAULT
+_raw_stale = _board_data.get("stale_claim_hours")
+if _raw_stale is not None:
+    try:
+        _parsed_stale = float(_raw_stale)
+        if _parsed_stale > 0:
+            stale_claim_hours = _parsed_stale
+    except (TypeError, ValueError):
+        pass
+
+def parse_claimed_at(val):
+    """ISO-8601-UTC-String → tz-aware datetime, oder None (fehlend/unparsebar)."""
+    if not val:
+        return None
+    s = str(val).strip()
+    if not TS_PATTERN.match(s):
+        return None
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+
+def is_stale_claim(data):
+    """True, wenn eine In-Progress-Story einen stale claimed_at hat (AC7/AC9)."""
+    claimed_at_dt = parse_claimed_at(data.get("claimed_at"))
+    if claimed_at_dt is None:
+        return False
+    now = datetime.datetime.now(datetime.timezone.utc)
+    age_hours = (now - claimed_at_dt).total_seconds() / 3600.0
+    return age_hours > stale_claim_hours
 
 # --- Alle Stories laden für depends-Status-Lookup ---
 stories = {}  # id -> data
@@ -1973,7 +2090,15 @@ for sid in sorted_ids:
         continue
 
     if status != "To Do":
-        if not quiet:
+        # story-claim-lock AC9: stale-geclaimte "In Progress"-Stories werden als
+        # eigene RECLAIMABLE-Kategorie ausgewiesen — unabhängig von --quiet,
+        # damit Geist-Stories in der Leerlauf-Diagnose sichtbar bleiben.
+        if status == "In Progress" and is_stale_claim(data):
+            lines.append(
+                f"RECLAIMABLE {sid}: In Progress seit {data.get('claimed_at')}, "
+                f"Claim stale (> {stale_claim_hours:g}h)"
+            )
+        elif not quiet:
             lines.append(f"(n/a)     {sid}")
         continue
 
