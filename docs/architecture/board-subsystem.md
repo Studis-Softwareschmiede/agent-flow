@@ -130,9 +130,10 @@ Feature  F-002  „Key-Rotation"
 ║  id            S-014                 ← stabil, projektweit eindeutig        ║
 ║  parent        F-001                 ← PFLICHT: genau ein Feature           ║
 ║  title         IONOS-Adapter                                                ║
-║  status        To Do │ In Progress │ Blocked │ In Review │ Done │ Verworfen ║
+║  status        To Do │ In Progress │ Blocked │ Waiting │ In Review │ Done │ Verworfen ║
 ║                                       ← einziger Schreiber: /flow           ║
 ║                                       ← Verworfen = terminal (Won't-Do), s. story-status-verworfen ║
+║                                       ← Waiting = NICHT terminal (extern gated), s. story-status-waiting ║
 ║  priority      P0 │ P1 │ P2 │ P3     ← Reihenfolge innerhalb To-Do-Queue    ║
 ║  spec          docs/specs/provisioning.md   ← Source of Truth für AC        ║
 ║  implements    [AC1, AC2, AC4]       ← welche AC der Spec diese Story erfüllt║
@@ -148,6 +149,7 @@ Feature  F-002  „Key-Rotation"
 ║  branch        feat/S-014-ionos      ← von /flow gesetzt                    ║
 ║  pr            <url|null>             ← bei pr-Policy                        ║
 ║  blocked_reason  <text|null>         ← Grund bei status=Blocked             ║
+║  wait_reason     <text|null>         ← Grund bei status=Waiting (extern gated) ║
 ║  ── Metadaten ──────────────────────────────────────────────────────────── ║
 ║  created_at / updated_at / done_at                                          ║
 ╚══════════════════════════════════════════════════════════════════════════╝
@@ -161,7 +163,7 @@ Feature  F-002  „Key-Rotation"
 | `parent` | — | ✅ | Story → genau 1 Feature |
 | `title` | ✅ | ✅ | |
 | `goal` / `title`-Beschreibung | ✅ (goal) | — | Feature trägt das *Warum* |
-| `status` | ✅ (5: Backlog…Archived) | ✅ (6: To Do…Done, Verworfen) | **unterschiedliche** Lebenszyklen |
+| `status` | ✅ (5: Backlog…Archived) | ✅ (7: To Do…Done, Waiting, Verworfen) | **unterschiedliche** Lebenszyklen |
 | `priority` | ✅ Roadmap | ✅ Queue | gleiche Skala P0–P3 |
 | `spec` | ✅ (optional) | ✅ (AC-Quelle) | Datei unter `docs/specs/` |
 | `implements` (AC-Liste) | — | ✅ | Drift-Gate-Bindung |
@@ -171,7 +173,7 @@ Feature  F-002  „Key-Rotation"
 | `labels` | ✅ fachlich | ✅ dispatch-steuernd | |
 | `dispo_est`/`dispo_act` (EP + Tokens) | — | ✅ | „Dispo" — geschätzt vs. Ist, §4.4 |
 | `size_est` / `estimate_note` | — | ✅ | Schätzbasis + Agenten-Begründung |
-| `branch`/`pr`/`blocked_reason` | — | ✅ | Laufzeit |
+| `branch`/`pr`/`blocked_reason`/`wait_reason` | — | ✅ | Laufzeit |
 | `stories`/`progress` (Rollup) | ✅ abgeleitet | — | aus Kind-Status berechnet |
 
 > Faustregel: **Feature = Roadmap & Klammer (Was/Warum)**, **Story = ausführbare
@@ -301,6 +303,10 @@ To Do ──► In Progress ──► In Review ──► Done          (Done = 
            Blocked ◄───────────┘   (Spec-Lücke, Loop-Schutz N=3, DB-Smoke-FAIL, Rollout-FAIL)
 
    ┌ (Owner/GUI, aus jedem nicht-terminalen Status) ──► Verworfen   (terminal, Won't-Do/Obsolete)
+   └ (Owner/GUI, aus jedem nicht-terminalen Status) ──► Waiting     (NICHT terminal, extern gated)
+                                                            │
+                                                            ▼ (Owner/GUI, manuell)
+                                                          To Do
 ```
 
 Die Loop-Übergänge und ihre Auslöser bleiben **1:1** wie in `skills/flow/SKILL.md`
@@ -314,6 +320,14 @@ Feature-Vollständigkeit, `reconcile`-Drain-Gate, `/flow`-Auswahl), gilt `Verwor
 **gleichwertig terminal** — aber nie als *erfolgreich*: `done_at` und der `done/total`-Zähler
 bleiben ausschließlich `Done` vorbehalten. Verhaltensvertrag: `docs/specs/story-status-verworfen.md`.
 `Verworfen` ist **Story-only**; der Feature-Enum (`Backlog…Archived`) bleibt unverändert.
+
+**`Waiting` (extern gated) ist NICHT terminal.** Anders als `Verworfen` zählt `Waiting`
+überall als **offen**: Depends-Gate in `board next` NICHT erfüllt (wie `Blocked`), Rollup/
+Progress/`reconcile`-Drain-Gate werten es als offene Spalte, `board next`/`/flow` wählen
+eine `Waiting`-Story nie als Kandidat. Übergang erzwingt `--reason` (analog `Blocked`),
+persistiert im eigenen Feld `wait_reason` (nicht `blocked_reason`); Verlassen von `Waiting`
+löscht `wait_reason`. Kein `/flow`-Übergang erzeugt `Waiting` automatisch — manuelle Owner-
+Entscheidung. Verhaltensvertrag: `docs/specs/story-status-waiting.md`.
 
 ---
 
@@ -372,7 +386,10 @@ board export-github             # einmaliger Import: GitHub-Board → board/ (Mi
 **Queue-Logik von `board next`** (ersetzt `gh project item-list` in `flow/SKILL.md:22`):
 die erste Story mit `status=To Do`, deren `depends` alle terminal sind (Status ∈
 `{Done, Verworfen}`), nach `priority` (P0 zuerst), Tie-Break Feature-`priority`, dann
-`id`. `Verworfen`-Stories sind nie Kandidaten (terminal).
+`id`. `Verworfen`-Stories sind nie Kandidaten (terminal). `Waiting`-Stories sind
+ebenfalls nie Kandidaten (folgt bereits daraus, dass nur `To Do` zugelassen ist) —
+und eine `Waiting`-Vorbedingung erfüllt das Depends-Gate NICHT (nicht terminal,
+s. `docs/specs/story-status-waiting.md` AC3).
 
 **Single-Writer bleibt:** Nur `/flow` ruft `board set <story> status …`. `requirement`
 darf `feature add`/`story add` und nicht-Status-Felder setzen. Das ist die heutige

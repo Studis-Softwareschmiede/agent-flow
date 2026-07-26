@@ -24,8 +24,8 @@
     },
     "status": {
       "type": "string",
-      "enum": ["To Do", "In Progress", "Blocked", "In Review", "Done", "Verworfen"],
-      "description": "Story-Lebenszyklus-Status. Einziger Schreiber: /flow. Terminale Menge = {Done, Verworfen}; Verworfen (Won't-Do/Obsolete) ist terminal, aber nie erfolgreich (kein done_at, zaehlt nicht in done/total)."
+      "enum": ["To Do", "In Progress", "Blocked", "Waiting", "In Review", "Done", "Verworfen"],
+      "description": "Story-Lebenszyklus-Status. Einziger Schreiber: /flow. Terminale Menge = {Done, Verworfen}; Verworfen (Won't-Do/Obsolete) ist terminal, aber nie erfolgreich (kein done_at, zaehlt nicht in done/total). Waiting (extern gated, s. story-status-waiting) ist NICHT terminal — zaehlt wie Blocked als offen (nie Kandidat in next, Depends-Gate nicht erfuellt, Rollup/Drain-Gate offen)."
     },
     "priority": {
       "type": "string",
@@ -100,6 +100,10 @@
     "blocked_reason": {
       "type": ["string", "null"],
       "description": "Optionaler Blockierungsgrund (bei status=Blocked)."
+    },
+    "wait_reason": {
+      "type": ["string", "null"],
+      "description": "Optionaler Warte-Grund (bei status=Waiting, Pflicht beim Uebergang analog blocked_reason; eigenes Feld, NICHT blocked_reason, s. story-status-waiting)."
     },
     "abgenommen_at": {
       "type": ["string", "null"],

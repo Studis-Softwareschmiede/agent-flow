@@ -172,7 +172,9 @@ IMPORTED_OPTIONAL_WARN = {"spec", "implements"}
 
 # Terminale Menge = {Done, Verworfen}; Verworfen (Won't-Do/Obsolete) ist terminal,
 # aber nie erfolgreich (kein done_at, zaehlt nicht in done/total) — s. story-status-verworfen.
-ENUM_STATUS = {"To Do", "In Progress", "Blocked", "In Review", "Done", "Verworfen"}
+# Waiting (extern gated, s. story-status-waiting) ist NICHT terminal — zaehlt wie Blocked
+# als offen (nie Kandidat in next, Depends-Gate nicht erfuellt, Rollup/Drain-Gate offen).
+ENUM_STATUS = {"To Do", "In Progress", "Blocked", "Waiting", "In Review", "Done", "Verworfen"}
 ENUM_PRIORITY = {"P0", "P1", "P2", "P3"}
 ENUM_SIZE_EST = {"S", "M", "L", "XL"}
 ENUM_CONFIDENCE = {"high", "medium", "low"}
