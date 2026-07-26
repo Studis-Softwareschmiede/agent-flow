@@ -1,7 +1,7 @@
 id: S-116
 parent: F-019
 title: 'Simplicity-Leiter (Ponytail-Prinzip): coder/R09 + reviewer/R10 + AGENTS.md-Nachzug'
-status: Blocked
+status: To Do
 priority: P2
 spec: docs/specs/coder-simplicity-ladder.md
 implements:
@@ -24,8 +24,7 @@ confidence: medium
 tok_est: '5303333'
 branch: null
 pr: null
-blocked_reason: 'Taktgeber: 3x kein Fortschritt (Nacht-Drain 22.07). Session starb, Worktree/Branch
-  verloren — Ursachen: Claim-Race + git-Push-Auth (flow/L05/L07). Neustart nötig.'
+blocked_reason: null
 created_at: '2026-07-21T17:38:50Z'
-updated_at: '2026-07-26T09:20:00Z'
+updated_at: '2026-07-26T09:45:00Z'
 done_at: null
