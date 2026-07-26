@@ -11,7 +11,13 @@ namespaces:
       high_water: null
   ADR:
     block_size: 10
-    reservations: []
+    reservations:
+    - feature_id: F-017
+      range_start: 1
+      range_end: 10
+      status: active
+      reserved_at: '2026-07-26T21:29:37Z'
+      high_water: null
   C:
     block_size: 10
     reservations:
