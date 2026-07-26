@@ -27,3 +27,9 @@ namespaces:
       status: active
       reserved_at: '2026-07-18T00:00:00Z'
       high_water: 2
+    - feature_id: F-017
+      range_start: 3
+      range_end: 12
+      status: active
+      reserved_at: '2026-07-26T21:29:39Z'
+      high_water: null
