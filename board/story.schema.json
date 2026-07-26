@@ -124,6 +124,15 @@
     "github_issue": {
       "type": ["integer", "null"],
       "description": "Optionaler GitHub-Issue-Nummer (nur bei importierten Stories via board export-github gesetzt). Marker fuer importierte Story: lint meldet fehlende spec/implements als WARN STORY-UNSPEC statt FEHLER FIELD-REQUIRED."
+    },
+    "claimed_by": {
+      "type": ["string", "null"],
+      "description": "Optionaler opaker Session-Claim-Token (kein Secret, z.B. host+pid+random). null = nicht geclaimt. Erste Schreiboperation vor jedem coder-Dispatch (docs/specs/story-claim-lock.md AC1/AC5)."
+    },
+    "claimed_at": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "Optionaler ISO-8601-UTC-Zeitstempel des Claims. null = nicht geclaimt (kein Leerstring — die pattern-Option ohne aeussere Optionalitaet erzwingt bei gesetztem string entweder ein gueltiges ISO-8601-UTC-Format oder den type null). Alter > stale_claim_hours (board.yaml) macht den Claim reclaimable (docs/specs/story-claim-lock.md AC7/AC8)."
     }
   },
   "if": {
