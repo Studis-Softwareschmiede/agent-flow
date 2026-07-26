@@ -379,7 +379,7 @@ Läuft **nach** dem Secrets-Scaffold (2g) und **vor** dem Audit (3) — **immer*
 **a) `playwright.config.ts`** — existiert am Repo-Root bereits eine `playwright.config.*` → **nicht anfassen** (bestehenden Stand behalten). Fehlt sie → kopieren: `cp ${CLAUDE_PLUGIN_ROOT}/templates/_shared/regression/playwright.config.ts .` (Referenz-Template-Artefakt, keine divergente Zweit-Definition — AC4; CTRF-JSON + JUnit-Reporter aktiv — AC1).
 
 **b) Playwright-Dev-Dependency** (`@playwright/test` + `playwright-ctrf-json-reporter`, AC1/AC5):
-- **Root-`package.json` vorhanden** (typisch bei bestehenden js/angular-Repos): fehlende Einträge unter `devDependencies` **ergänzen** — bereits vorhandene Versionen/Einträge **nicht überschreiben**.
+- **Root-`package.json` vorhanden** (typisch bei bestehenden js/angular-Repos): fehlende Einträge unter `devDependencies` **ergänzen** — bereits vorhandene Versionen/Einträge **nicht überschreiben**. **Ausnahme (Owner-Entscheidung 2026-07-26):** steht `@playwright/test` auf `latest` oder einem Range, auf die gepinnte Fabrik-Version korrigieren (aktuell `1.61.1`, s. `new-project` Schritt 4f.2 — muss zum dev-gui-Image-Browser-Set passen).
 - **Kein `package.json`** (java/flutter/html-Repos ohne npm-Ökosystem): ein **eigenständiges, minimales** `package.json` anlegen, das ausschließlich Playwright als Dev-Runner trägt (AC5 „eigenständiger Runner", stack-agnostisch) — analog `new-project` Schritt 4f.2.
 
 **c) `tests/regression/`-Baum** (AC2 — leere Bereichs-Suiten je Eintrag in `board/areas.yaml`, deckt A2 „kein/leeres `areas.yaml`"):

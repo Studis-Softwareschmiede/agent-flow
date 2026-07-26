@@ -125,7 +125,9 @@ Fehlt `target` im Frontmatter einer Begleitbeschreibung → Fehler (kein stillsc
 ### Voraussetzungen
 
 ```bash
-npm install --save-dev @playwright/test playwright-ctrf-json-reporter
+npm install --save-dev @playwright/test@1.61.1 playwright-ctrf-json-reporter@0.0.29
+# Version EXAKT gepinnt (Fabrik-Standard, Owner 2026-07-26): muss zum fest im
+# dev-gui-Image eingebauten Browser-Set passen (chromium-1228 fuer PW 1.61.x).
 ```
 
 ### Layout

@@ -113,14 +113,15 @@ Bootstrap, damit die Fabrik an einem Projekt arbeiten kann. cwd = Workspace (`ne
    1. **`playwright.config.ts` kopieren** (idempotent — nur anlegen, falls noch nicht vorhanden): `cp ${CLAUDE_PLUGIN_ROOT}/templates/_shared/regression/playwright.config.ts .` — Referenz-Template-Artefakt, keine divergente Zweit-Definition (AC4); aktiviert CTRF-JSON + JUnit-Reporter (AC1).
    2. **Playwright-Dev-Dependency** (`@playwright/test` + `playwright-ctrf-json-reporter`, AC1/AC5):
       - Existiert bereits ein Root-`package.json` (js/angular): als `devDependencies` **ergänzen** (bestehende Einträge/Deps nicht überschreiben).
+      - **Version zentral gepinnt (Owner-Entscheidung 2026-07-26):** `@playwright/test` wird EXAKT auf die Fabrik-Version gepinnt (aktuell `1.61.1` — identisch mit dem fest ins dev-gui-Image eingebauten Browser-Set, `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, chromium-1228). KEIN `latest`, KEIN `^`-Range: eine abweichende Minor-Version verlangt einen anderen Chromium-Build und bricht den zentralen dev-gui-Regressionslauf. Versions-Hebung ist ein bewusster Fabrik-Schritt (dev-gui-Image + dieses Pinning gemeinsam heben).
       - Existiert **kein** `package.json` (Normalfall bei `new-project` — noch kein App-Code; ebenso jede nicht-npm-Sprache: java/flutter/html): ein **eigenständiges, minimales** `package.json` anlegen, das ausschließlich Playwright als Dev-Runner trägt (AC5 „eigenständiger Runner", stack-agnostisch):
         ```json
         {
           "name": "<projektname-kebab-case>-regression",
           "private": true,
           "devDependencies": {
-            "@playwright/test": "latest",
-            "playwright-ctrf-json-reporter": "latest"
+            "@playwright/test": "1.61.1",
+            "playwright-ctrf-json-reporter": "0.0.29"
           }
         }
         ```
