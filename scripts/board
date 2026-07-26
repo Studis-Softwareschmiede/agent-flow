@@ -413,6 +413,7 @@ item_data = {
     "branch":        None,
     "pr":            None,
     "blocked_reason": None,
+    "wait_reason":   None,
     "created_at":    ts,
     "updated_at":    ts,
     "done_at":       None,
@@ -531,8 +532,8 @@ cmd_set() {
         esac
       elif [[ "$id" =~ ^S-[0-9]{3,}$ ]]; then
         case "$wert" in
-          "To Do"|"In Progress"|Blocked|"In Review"|Done|Verworfen) ;;
-          *) die "set: status muss 'To Do'|'In Progress'|Blocked|'In Review'|Done|Verworfen sein für Stories, war '$wert'" ;;
+          "To Do"|"In Progress"|Blocked|Waiting|"In Review"|Done|Verworfen) ;;
+          *) die "set: status muss 'To Do'|'In Progress'|Blocked|Waiting|'In Review'|Done|Verworfen sein für Stories, war '$wert'" ;;
         esac
       fi
       ;;
@@ -553,6 +554,11 @@ cmd_set() {
   # Sonderfall: status=Blocked erfordert --reason
   if [[ "$feld" == "status" && "$wert" == "Blocked" ]]; then
     [[ -n "$reason" ]] || die "set: status=Blocked erfordert --reason"
+  fi
+
+  # Sonderfall: status=Waiting erfordert --reason (analog Blocked, story-status-waiting AC2)
+  if [[ "$feld" == "status" && "$wert" == "Waiting" ]]; then
+    [[ -n "$reason" ]] || die "set: status=Waiting erfordert --reason"
   fi
 
   local ts
@@ -606,6 +612,11 @@ data[feld] = parsed_wert
 if feld == "status" and wert == "Blocked" and reason:
     data["blocked_reason"] = reason
 
+# Sonderfall: wait_reason bei status=Waiting (eigenes Feld, NICHT blocked_reason;
+# story-status-waiting AC2)
+if feld == "status" and wert == "Waiting" and reason:
+    data["wait_reason"] = reason
+
 # Sonderfall: done_at bei status=Done
 if feld == "status" and wert == "Done":
     data["done_at"] = ts
@@ -618,6 +629,11 @@ if feld == "status" and wert != "Done":
 if feld == "status" and wert != "Blocked":
     if "blocked_reason" in data:
         data["blocked_reason"] = None
+
+# wait_reason löschen wenn status != Waiting (Verlassen von Waiting, story-status-waiting AC2)
+if feld == "status" and wert != "Waiting":
+    if "wait_reason" in data:
+        data["wait_reason"] = None
 
 # updated_at nachziehen
 data["updated_at"] = ts
@@ -760,8 +776,11 @@ PYEOF
 # Verb: next — Queue-Logik (AC6, board-cli-Spec V6 + board-subsystem §7)
 #
 # Algorithmus:
-#   1. Kandidaten = alle Stories mit status == "To Do" (Verworfen nie enthalten, AC4)
-#   2. Filter: alle depends-Stories terminal (status ∈ {Done, Verworfen}, AC3; offene → überspringen)
+#   1. Kandidaten = alle Stories mit status == "To Do" (Verworfen nie enthalten, AC4;
+#      Waiting ebenfalls nie enthalten — extern gated, nie Arbeits-Kandidat, s.
+#      story-status-waiting AC3)
+#   2. Filter: alle depends-Stories terminal (status ∈ {Done, Verworfen}, AC3; offene → überspringen;
+#      eine Waiting-depends-Vorbedingung ist NICHT terminal — gilt als offen, story-status-waiting AC3)
 #   3. Sortierung: Story-priority (P0<P1<P2<P3) → Parent-Feature-priority → id (aufsteigend)
 #   4. Ergebnis = erstes Element als JSON (id, spec, implements, parent, priority, labels)
 #      Keine bereite Story → leere Ausgabe, Exit 0
@@ -893,6 +912,8 @@ for path in feature_files:
 
 # --- Schritt 1: Kandidaten = To-Do-Stories ---
 # Nur "To Do" ist Kandidat; "Verworfen" (terminal, Won't-Do) wird NIE aufgegriffen (AC4).
+# "Waiting" (extern gated, nicht terminal) ist ebenfalls NIE Kandidat — folgt bereits daraus,
+# dass nur "To Do" zugelassen ist (story-status-waiting AC3).
 # --parent-Filter (optional): nur Storys dieses Features (board-feature-drain.sh).
 candidates = [
     (sid, data)
@@ -914,6 +935,8 @@ for sid, data in candidates:
     # Depends-Gate: terminale Menge = {Done, Verworfen} erfuellt das Gate
     # (Verworfen = terminal, s. story-status-verworfen AC3). Ein Dependent wird
     # dadurch nicht dauerhaft blockiert, wenn seine Vorbedingung verworfen wurde.
+    # "Waiting" ist NICHT in dieser Menge — eine Waiting-Vorbedingung gilt als offen,
+    # der Dependent bleibt geblockt (story-status-waiting AC3).
     all_done = True
     for dep_id in deps:
         dep_data = stories.get(dep_id, {})
@@ -1139,12 +1162,16 @@ done_count  = status_counter.get("Done", 0)
 ip_count    = status_counter.get("In Progress", 0)
 review_count = status_counter.get("In Review", 0)
 blocked_count = status_counter.get("Blocked", 0)
+waiting_count = status_counter.get("Waiting", 0)
 verworfen_count = status_counter.get("Verworfen", 0)
 todo_count  = status_counter.get("To Do", 0)
 
-# Format: "<done>/<total> done [· <n> in progress] [· <n> in review] [· <n> blocked] [· <n> verworfen]"
+# Format: "<done>/<total> done [· <n> in progress] [· <n> in review] [· <n> blocked] [· <n> waiting] [· <n> verworfen]"
 # done/total zaehlt NUR erfolgreich abgeschlossene (Done); Verworfen wird separat
 # als Suffix ausgewiesen (nur wenn N>0) und nicht in done gemischt (AC5).
+# "Waiting" (extern gated, nicht terminal, s. story-status-waiting AC3) zaehlt wie
+# Blocked als offen und wird ebenfalls separat ausgewiesen (nur wenn N>0), nicht in
+# done gemischt und nicht in die Feature-Vollstaendigkeit ({Done, Verworfen}) eingerechnet.
 # Der "<done>/<total> done"-Praefix bleibt formatstabil (ROLLUP-STALE-Praefix-Check).
 parts = [f"{done_count}/{total} done"]
 if ip_count > 0:
@@ -1153,6 +1180,8 @@ if review_count > 0:
     parts.append(f"{review_count} in review")
 if blocked_count > 0:
     parts.append(f"{blocked_count} blocked")
+if waiting_count > 0:
+    parts.append(f"{waiting_count} waiting")
 if verworfen_count > 0:
     parts.append(f"{verworfen_count} verworfen")
 

@@ -35,7 +35,7 @@ Festlegen, wie ein Board als git-Dateien aussieht — ein menschenlesbares, diff
 `board/features/F-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.1: **Pflicht** `id` (`F-###`), `title`, `goal`, `status` (`Backlog|Planned|Active|Done|Archived`), `priority` (`P0|P1|P2|P3`), `created_at`, `updated_at`. **Optional** `spec`, `definition_of_done`, `labels[]`, `depends[]` (Feature-IDs), `owner`, `area` (String|null — Bereichs-Kopplung, muss falls gesetzt auf einen `id`-Eintrag in `board/areas.yaml` zeigen; [[board-areas]] AC2). **Abgeleitet (nicht von Hand)** `stories[]`, `progress`.
 
 ### V3 — Story-YAML
-`board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|In Review|Done|Verworfen`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `tok_est`, `branch`, `pr`, `blocked_reason`, `done_at`. `tok_est` (Ganzzahl | null, erwartete Gesamt-Tokens des Flow-Durchlaufs — A-priori-Wert aus `baseline.json`-Lookup bzw. `estimator`, Persistenz als Text via `board set` analog `dispo_est`; s. [[apriori-token-estimate]] AC1/AC2) ist rückwärtskompatibel: fehlt es (Alt-Story), bleibt die Story gültig (kein `lint`-Fehler). Der Status `Verworfen` (Won't-Do/Obsolete) ist **terminal** wie `Done`, aber nicht *erfolgreich* — Semantik + terminale Wertung in `next`/`rollup`/`/flow` siehe [[story-status-verworfen]].
+`board/stories/S-###-<slug>.yaml` trägt die Felder aus board-subsystem §4.2: **Pflicht** `id` (`S-###`), `parent` (genau eine `F-###`), `title`, `status` (`To Do|In Progress|Blocked|Waiting|In Review|Done|Verworfen`), `priority` (`P0|P1|P2|P3`), `spec`, `implements[]` (AC-Nummern), `created_at`, `updated_at`. **Optional** `depends[]` (Story-IDs), `labels[]`, `size_est`, `dispo_est`, `dispo_act`, `dispo_forecast`, `estimate_note`, `confidence`, `tok_est`, `branch`, `pr`, `blocked_reason`, `wait_reason`, `done_at`. `tok_est` (Ganzzahl | null, erwartete Gesamt-Tokens des Flow-Durchlaufs — A-priori-Wert aus `baseline.json`-Lookup bzw. `estimator`, Persistenz als Text via `board set` analog `dispo_est`; s. [[apriori-token-estimate]] AC1/AC2) ist rückwärtskompatibel: fehlt es (Alt-Story), bleibt die Story gültig (kein `lint`-Fehler). Der Status `Verworfen` (Won't-Do/Obsolete) ist **terminal** wie `Done`, aber nicht *erfolgreich* — Semantik + terminale Wertung in `next`/`rollup`/`/flow` siehe [[story-status-verworfen]]. Der Status `Waiting` (extern gated) ist NICHT terminal — er zählt wie `Blocked` als offen (nie Kandidat in `next`, Depends-Gate nicht erfüllt, Rollup/`reconcile`-Drain-Gate offen); `wait_reason` (String|null) ist das eigene Warte-Grund-Feld (nicht `blocked_reason`), Semantik siehe [[story-status-waiting]].
 
 **Sonderfall: importierte Stories** (Feld `github_issue` gesetzt): `spec` und `implements` dürfen bei einem GitHub-Export-Lauf fehlen/null sein, wenn kein `Spec:`/`implements:`-Marker im Issue-Body vorhanden war. `lint` meldet fehlende Werte dieser beiden Felder dann als **WARN STORY-UNSPEC** (nicht als FEHLER FIELD-REQUIRED). Der Owner zieht sie im Cut-PR nach (Drift-Gate greift zur Implementierungszeit via coder/reviewer). Native Stories (ohne `github_issue`) behalten `spec`/`implements` als harte Pflichtfelder (FIELD-REQUIRED bei Fehlen).
 
@@ -70,7 +70,7 @@ Story-YAML kennt das **optionale** Feld `abgenommen_at` (ISO-8601-UTC-Timestamp 
 
 - **AC1** — `board/board.yaml` enthält `schema_version` (int), `project_slug` und je einen ID-Zähler `next_feature_id`/`next_story_id`; ohne `board.yaml` gilt das Board als nicht initialisiert. *(V1)*
 - **AC2** — Feature-YAML trägt alle Pflichtfelder aus board-subsystem §4.1 (`id,title,goal,status,priority,created_at,updated_at`) plus die optionalen/abgeleiteten Felder (inkl. `area`); `status`∈{Backlog,Planned,Active,Done,Archived}, `priority`∈{P0,P1,P2,P3}. *(V2)*
-- **AC3** — Story-YAML trägt alle Pflichtfelder aus board-subsystem §4.2 (`id,parent,title,status,priority,spec,implements,created_at,updated_at`) plus die optionalen Felder; `status`∈{To Do,In Progress,Blocked,In Review,Done,Verworfen}, `priority`∈{P0,P1,P2,P3}. `Verworfen` ist ein terminaler Status (Won't-Do/Obsolete, [[story-status-verworfen]]). Für **importierte Stories** (`github_issue` gesetzt) sind `spec`/`implements` bei Fehlen WARN STORY-UNSPEC (kein FEHLER), bis der Owner sie im Cut-PR nachzieht. *(V3)*
+- **AC3** — Story-YAML trägt alle Pflichtfelder aus board-subsystem §4.2 (`id,parent,title,status,priority,spec,implements,created_at,updated_at`) plus die optionalen Felder; `status`∈{To Do,In Progress,Blocked,Waiting,In Review,Done,Verworfen}, `priority`∈{P0,P1,P2,P3}. `Verworfen` ist ein terminaler Status (Won't-Do/Obsolete, [[story-status-verworfen]]). `Waiting` ist ein **nicht-terminaler**, extern gegateter Status (zählt wie `Blocked` als offen; eigenes optionales Feld `wait_reason`, [[story-status-waiting]]). Für **importierte Stories** (`github_issue` gesetzt) sind `spec`/`implements` bei Fehlen WARN STORY-UNSPEC (kein FEHLER), bis der Owner sie im Cut-PR nachzieht. *(V3)*
 - **AC4** — IDs matchen `^F-\d{3,}$`/`^S-\d{3,}$`, Enums tragen nur erlaubte Werte, `implements[]` sind `AC<n>`-Tokens, Zeitstempel ISO-8601-UTC; Abweichung → `lint`-Fehler. *(V4, V9)*
 - **AC5** — `lint` meldet doppelte Feature-/Story-IDs und einen Dateiname-Präfix, der nicht zur `id` im Body passt, als Fehler. *(V5)*
 - **AC6** — `lint` meldet eine Story mit fehlendem/leerem/unbekanntem `parent` als Fehler. *(V6)*
@@ -115,8 +115,9 @@ updated_at: 2026-06-14T00:00:00Z
 id: S-014
 parent: F-001            # PFLICHT, genau ein Feature
 title: IONOS-Adapter
-status: To Do            # To Do|In Progress|Blocked|In Review|Done|Verworfen (Schreiber: /flow)
+status: To Do            # To Do|In Progress|Blocked|Waiting|In Review|Done|Verworfen (Schreiber: /flow)
                          #   Verworfen = terminal (Won't-Do/Obsolete), nicht "erfolgreich" — s. story-status-verworfen
+                         #   Waiting = NICHT terminal, extern gated, zaehlt wie Blocked als offen — s. story-status-waiting
 priority: P0             # P0|P1|P2|P3
 spec: docs/specs/provisioning.md
 implements: [AC1, AC2, AC4]
@@ -132,6 +133,7 @@ tok_est: null                         # optional  Ganzzahl|null  (A-priori-Token
 branch: null                          # optional
 pr: null                              # optional
 blocked_reason: null                  # optional
+wait_reason: null                     # optional  (bei status=Waiting, Pflicht beim Uebergang; NICHT blocked_reason)
 abgenommen_at: null                   # optional  ISO-8601-UTC|null (Owner-Abnahme nach Done; Schreiber NUR dev-gui, kein Agent)
 created_at: 2026-06-14T00:00:00Z
 updated_at: 2026-06-14T00:00:00Z

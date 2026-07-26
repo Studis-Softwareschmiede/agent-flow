@@ -16,6 +16,12 @@
 #         Verankert als getestete Invariante (Test 6, Regressionsschutz — keine Logik-Änderung
 #         am Gate, nur Kommentar + dieser Test).
 #
+# Covers (story-status-waiting): AC3
+#   AC3 — Reconcile-Drain-Gate zählt `Waiting` als OFFEN (wie `Blocked`): eine Story, die nur in
+#         `Waiting` steht, blockiert das Gate weiterhin ("not-empty"). Verankert als getestete
+#         Invariante (Test 8, Regressionsschutz — das Gate darf `Waiting` niemals aus seinen
+#         aktiven Spalten herausnehmen, obwohl es wie die terminale Menge NICHT-drainbar ist).
+#
 # Self-Test für `scripts/reconcile-stage2-gate.sh` (Kanban-Vorbedingungs-Check des Reconcile-
 # Skills, Stufe 2). Verwendet /tmp-Fixtures + ein eigenes BOARD_DIR — berührt NIEMALS das
 # echte board/ des Repos.
@@ -192,6 +198,21 @@ if [[ "$T7_OUT" == "empty" ]]; then
   pass "Test 7 (story-status-verworfen AC8): Done + Verworfen gemischt -> 'empty' (terminale Menge {Done, Verworfen})"
 else
   fail "Test 7: erwartet 'empty', bekam '${T7_OUT}'"
+fi
+
+# ===========================================================================
+# Test 8 (story-status-waiting AC3): Story NUR in 'Waiting' (andere Spalten leer) -> "not-empty"
+#   Waiting ist — anders als die terminale Menge {Done, Verworfen} — eine aktive/offene Spalte
+#   und blockiert das Drain-Gate wie Blocked.
+# ===========================================================================
+T8_DIR="${TEST_WORK_DIR}/t8/board"
+init_board "$T8_DIR"
+write_story "${T8_DIR}/stories/S-001-x.yaml" "S-001" "Waiting"
+T8_OUT="$(run_gate "$T8_DIR")"
+if [[ "$T8_OUT" == "not-empty" ]]; then
+  pass "Test 8 (story-status-waiting AC3): Story nur in 'Waiting' -> 'not-empty' (Waiting zählt wie Blocked als offen)"
+else
+  fail "Test 8: erwartet 'not-empty', bekam '${T8_OUT}'"
 fi
 
 # ===========================================================================
