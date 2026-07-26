@@ -2,7 +2,7 @@ id: S-122
 parent: F-025
 title: 'board-ship.sh PR-Merge worktree-fest: Merge ohne lokalen Checkout + Selbstheilung
   bei bereits gemergtem PR'
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/board-ship-pr-merge-worktree-safe.md
 implements:
@@ -25,9 +25,11 @@ estimate_note: 'estimator: roh 8.5 EP (Anker ref-L ep8 + Idempotenz-/Fixture-Auf
   Bias-Kappung drückte bei S-120/S-121 unter das Ist — Kalibrierung fraglich, s. lessons/estimator.md.'
 confidence: medium
 tok_est: '12750000'
-branch: null
+branch: feat/S-122-board-ship-pr-merge
 pr: null
 blocked_reason: null
 created_at: '2026-07-26T13:52:49Z'
-updated_at: '2026-07-26T14:00:24Z'
+updated_at: '2026-07-26T15:07:05Z'
 done_at: null
+claimed_by: MacBook-Pro-von-Alexander.local-82319-1785078409-30583
+claimed_at: '2026-07-26T15:06:57Z'
