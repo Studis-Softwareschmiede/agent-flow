@@ -1,0 +1,2 @@
+Done: Foo gebaut
+Der Status ist Review-Gate: PASS heute.
