@@ -5,7 +5,7 @@
 > Diese Datei entwirft die Zustandsmaschine, die die Spec bewusst offen liess. Sie ändert **kein** Verhalten der Spec und **keine** Board-/Gate-Semantik — sie verlagert die Ausführungsökonomie (AC9/AC10).
 > **Konformität ist Review-Kriterium** (Drift-Gate): Jede Mechanisierung eines heutigen Ermessensfalls MUSS einen in §1 klassifizierten Eskalations-Ausgang haben (AC6/AC7).
 
-Status: draft · Autor: architekt · Datum: 2026-07-28 · Confidence: mittel (Dispatch-Mechanik-Detail owner-offen, s. §9)
+Status: entschieden (Owner, 28.07.2026, alle 7 Fragen §9 per Empfehlung a) · Autor: architekt · Datum: 2026-07-28 · Confidence: hoch
 Reevaluations-Trigger: (1) `claude -p`-Subsession-Kosten weichen von der board-feature-drain-Erfahrung ab; (2) Gate-Token-Format in coder/reviewer/tester ändert sich; (3) `board next`/`board-ship.sh`-Verträge ändern sich.
 
 ---
@@ -418,41 +418,49 @@ Stufe 2 zerlegt `SKILL.md` in einen schlanken Kern + Sonderfall-Kapitel (Lazy-Lo
 ## 9. Offene Entscheidungsfragen für den Owner
 
 > Nicht vom architekt entschieden — bewusst dem Owner vorgelegt. Format: frage / optionen / quelle.
+> **Alle 7 Fragen vom Owner am 28.07.2026 entschieden** — durchgehend die architekt-Empfehlung (Option a). Entscheid je Frage direkt darunter vermerkt.
 
 **Q1 — Dispatch-Mechanik der Agent-Subsessions.**
 - frage: Wie werden `coder`/`reviewer`/`tester` vom Bash-Runner als isolierte Sessions gestartet?
 - optionen: (a) `claude -p "<prompt>"` je Agent, exakt wie `board-feature-drain.sh` es auf Story-Ebene tut (bewährt, aber `-p` startet eine generische Session — die Agent-Rolle/Frontmatter muss im Prompt referenziert werden); (b) ein dünner LLM-Shell-Schritt, der nur das Task-Tool je Agent aufruft und sofort endet (näher an heute, aber hält kurz einen kleinen LLM-Kontext); (c) ein noch zu klärender direkter Subagent-Invoke ohne generische Session.
 - quelle: `board-feature-drain.sh` Zeile 587 (`claude -p /flow --parent`); AC2; die Agent-Frontmatter (`name:`/`model:`) definiert die Rolle heute nur im Task-Tool-Kontext.
+- **Entscheid (Owner, 28.07.2026): (a)** — `claude -p "<prompt>"` je Agent, analog `board-feature-drain.sh`. Bewährtes Muster, kein Neuland.
 
 **Q2 — Modellstufe des Gate-Judge (§5.1).**
 - frage: Auf welcher Cost-/Modell-Stufe läuft der leichte Gate-Normalisierungs-Call?
 - optionen: (a) fix günstigste Stufe (Mini-Modell, unabhängig vom Runden-Cost-Mode); (b) an den aktiven Cost-Mode gekoppelt; (c) `haiku`-artig fix mit Owner-Override.
 - quelle: `knowledge/model-tiers.md`; Judge ist ein Ein-Token-Klassifikations-Call.
+- **Entscheid (Owner, 28.07.2026): (a)** — fix günstigste Modell-Stufe, unabhängig vom Cost-Mode der Runde. Die Klassifikationsfrage ist immer gleich trivial.
 
 **Q3 — Memory-Kuration: pro Runde vs. gebatcht (§5.2, S7.1).**
 - frage: Der einzige garantierte (c)-Call der Standard-Runde ist die §7-Memory-Kuration. Pro Runde ausführen (heutiges Verhalten, ein LLM-Call/Runde) oder gebatcht am Ende der Aussenschleife (spart Calls, weicht aber von SKILL.md §7 „letzter Schritt jeder Session" ab)?
 - optionen: (a) pro Runde (verhaltensgleich zu heute, AC9-konform); (b) gebatcht am Aussenschleifen-Ende (Kosten-Ersparnis, erfordert Spec-Präzisierung `project-memory.md` AC3); (c) headless-Runden schreiben nur einen mechanischen `## Letzte Arbeiten`-Einzeiler (kein LLM), volle Kuration nur interaktiv.
 - quelle: `skills/flow/SKILL.md` §7; `docs/specs/project-memory.md` AC3–AC6.
+- **Entscheid (Owner, 28.07.2026): (a)** — pro Runde, verhaltensgleich zu heute. Keine Spec-Präzisierung nötig.
 
 **Q4 — `flow.md`-Orchestrator-Lessons im Runner-Pfad (S0.7-Risiko).**
 - frage: Der Bash-Runner kann prosaische `flow.md`-Lessons nicht „befolgen". Wie wird sichergestellt, dass eine künftige standard-pfad-relevante Lesson greift?
 - optionen: (a) Retro-Konvention: standard-pfad-relevante `flow.md`-Lessons müssen bei Promotion **ins Skript/in einen Fixture-Test** wandern (Prosa bleibt nur Lernquelle); (b) der Runner liest `flow.md` **doch** einmalig und leitet daraus einen strukturierten Vorab-Check ab (bricht die „kein LLM-Kontext"-Reinheit); (c) Status quo akzeptieren + im Runner-Doc dokumentieren, dass `flow.md` für den Runner-Pfad nicht durchsetzend ist.
 - quelle: `skills/flow/SKILL.md` §0 (flow.md-Vertrag); §1.1-S0.7 dieses Dokuments.
+- **Entscheid (Owner, 28.07.2026): (a)** — Retro-Konvention: standard-pfad-relevante `flow.md`-Lessons wandern bei Promotion ins Skript/in einen Fixture-Test. Prosa bleibt Lernquelle, wird aber nicht mehr Durchsetzungsebene des Standard-Pfads.
 
 **Q5 — Reihenfolge/Bündelung Stufe 1 / Stufe 2 / Runner.**
 - frage: Werden Stufe 1 (Primitive) und Stufe 2 (SKILL.md-Zerlegung) als eigene Stories vor/nach dem Runner gebaut oder in einem Runner-Epic gebündelt?
 - optionen: (a) Empfehlung des architekt: Stufe 1 zuerst (eigene fixture-getestete Stories) → Runner → Stufe 2 optional danach; (b) alles in einem Feature-Batch `F-###` (via `board-feature-drain.sh`); (c) nur Stufe 1 + Runner jetzt, Stufe 2 zurückstellen bis der Rest-LLM-Pfad-Anteil gemessen ist.
 - quelle: §6 dieses Dokuments; Spec „Nicht-Ziele" (Owner-Entscheid Bündelung ausstehend).
+- **Entscheid (Owner, 28.07.2026): (a)** — Stufe 1 zuerst als eigene, fixture-getestete Stories → Runner → Stufe 2 optional danach.
 
 **Q6 — Scope-Grenze des ersten Runner-Schnitts bestätigen.**
 - frage: Ist der Ausschluss von `--all`/`--parent`/`--plan`/SR1-Parallel/Design-interaktiv aus dem ersten Runner-Schnitt so gewollt (kleinster Blast-Radius), oder soll Phase E (Feature-Batch-Integration) schon mitgeplant werden?
 - optionen: (a) erster Schnitt strikt board-weite Standard-Einzelrunde (Empfehlung); (b) Feature-Batch (Phase E) direkt mit einplanen; (c) auch SR1-Parallel im Runner-Scope (deutlich grösserer (c)-Anteil, höheres Risiko).
 - quelle: §0 Anti-Ziel; §1.7; AC1 („eine Standard-Runde").
+- **Entscheid (Owner, 28.07.2026): (a)** — erster Schnitt strikt board-weite Standard-Einzelrunde. Feature-Batch/SR1-Parallel bleiben vorerst beim LLM-Orchestrator.
 
 **Q7 — Gate-Parser-Strenge (§5.1, AC7).**
 - frage: Wie streng ist der mechanische Gate-Parser, bevor er an den Judge eskaliert?
 - optionen: (a) exakt-Regex-only, jede Abweichung → Judge (sicherster S-047-Pfad, mehr Mini-Calls); (b) toleranter Parser (trim/case-insensitive/erste passende Zeile), Judge nur bei echtem Widerspruch (weniger Calls, minimal grösseres Rate-Risiko); (c) exakt-Regex + eine kleine, **fest dokumentierte** Normalisierung (nur Whitespace/Trailing), sonst Judge.
 - quelle: AC3 (dieselben Gate-Tokens wie heute); AC7 (kein stilles Raten); Verträge-Abschnitt der Spec (Gate-Token-Liste).
+- **Entscheid (Owner, 28.07.2026): (c)** — exakt-Regex + kleine, fest dokumentierte Normalisierung (nur Whitespace/Trailing), sonst Judge. Mittelweg zwischen Sicherheit und unnötigen Zusatz-Aufrufen.
 
 ---
 
