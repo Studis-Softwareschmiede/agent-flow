@@ -1,7 +1,7 @@
 id: S-126
 parent: F-018
 title: board-round-finalize.sh — FINALIZE-Sequenz als Stufe-1-Primitiv (Phase A)
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/flow-deterministic-runner.md
 implements:
@@ -17,10 +17,12 @@ estimate_note: 'M-Heuristik (n_ac+n_comp). S/M: kein estimator (nicht im require
   risikoarm (bestehende Mechanik gebuendelt/additiv). confidence medium (Schnitt n=34).'
 confidence: medium
 tok_est: '5303333'
-branch: null
+branch: feat/S-126-board-round-finalize-sh-finali
 pr: null
 blocked_reason: null
 wait_reason: null
 created_at: '2026-07-28T11:37:24Z'
-updated_at: '2026-07-28T11:38:28Z'
+updated_at: '2026-07-28T12:26:58Z'
 done_at: null
+claimed_by: MacBook-Pro-von-Alexander.local-70719-1785241601-27097-S-126
+claimed_at: '2026-07-28T12:26:50Z'
