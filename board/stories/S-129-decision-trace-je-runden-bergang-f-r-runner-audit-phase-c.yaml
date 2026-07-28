@@ -1,7 +1,7 @@
 id: S-129
 parent: F-018
 title: Decision-Trace je Rundenübergang für Runner-Audit (Phase C)
-status: In Progress
+status: Done
 priority: P1
 spec: docs/specs/flow-deterministic-runner.md
 implements:
@@ -20,11 +20,11 @@ estimate_note: 'M-Heuristik (n_ac+n_comp). S/M: kein estimator (nicht im require
 confidence: medium
 tok_est: '5303333'
 branch: feat/S-129-decision-trace
-pr: null
+pr: https://github.com/Studis-Softwareschmiede/agent-flow/pull/447
 blocked_reason: null
 wait_reason: null
 created_at: '2026-07-28T11:37:33Z'
-updated_at: '2026-07-28T18:33:02Z'
-done_at: null
+updated_at: '2026-07-28T19:07:34Z'
+done_at: '2026-07-28T19:07:28Z'
 claimed_by: MacBook-Pro-von-Alexander.local-95869-1785263568-15601-S-129
 claimed_at: '2026-07-28T18:32:55Z'
