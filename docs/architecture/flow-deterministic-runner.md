@@ -95,7 +95,7 @@ Die Tabelle ist **erschöpfend** über `skills/flow/SKILL.md` geführt; die 20 P
 | S3.5 | dba-Dispatch + Gate parsen (beide Gates PASS Pflicht) | **b** | wie S3.3, plus UND-Verknüpfung beider Gates | wie S3.3 |
 | S3.6 | **SPEC-LÜCKE-Eskalation** `[Pflicht #1]` | **a** (Routing) | Marker `SPEC-LÜCKE:` im Handoff → `board set … Blocked` | die **Klassifikation** „Lücke vs. Bug" trifft der **dispatchte Agent** (LLM, in der Subsession) — der Runner routet nur den Marker mechanisch |
 | S3.7 | **Schleifenschutz N=3** `[Pflicht #2]` | **a** | harter Iterations-Zähler; N>3 → `board set … Blocked "Loop-Schutz N=3"` | Runner nutzt reinen Zähler-Cap (≥ heutige Garantie — „selber Befund"-Erkennung ist strenger nicht nötig, Zähler deckt es ab) |
-| S4.1 | tester-Dispatch + **Test-Gate parsen** `[Pflicht via AC3]` | **b** | `grep -E '^Test-Gate:\s*(PASS\|FAIL\|SKIPPED-NO-DOCKER\|SKIPPED-DOC-ONLY)\s*$'` | mehrdeutig → **leichtes LLM-Urteil (§5)** |
+| S4.1 | tester-Dispatch + **Test-Gate parsen** `[Pflicht via AC3]` | **b** | `grep -E '^Test-Gate:\s*(PASS\|FAIL\|SKIPPED-NO-DOCKER\|SKIPPED-DOC-ONLY\|SKIPPED-NO-BUILD)\s*$'` | mehrdeutig → **leichtes LLM-Urteil (§5)** |
 | S4.2 | `SKIPPED-NO-DOCKER` → Human-Handoff `[Pflicht #14]` | **a** | Marker → `board set … Blocked "DB-Smoke ohne Docker"` | definierter Blocked-Ausgang, kein Bypass |
 | S4.3 | `SKIPPED-DOC-ONLY` → äquiv. PASS | **a** | Marker → weiter zu Landen | n/a |
 | S4.4 | **Template-Diff = hartes Test-Gate** `[Pflicht #14]` | **a** | `git diff --name-only` gegen Pflicht-Pfade (`templates/_shared/db-*/**` etc.) → PASS Pflicht | Pfad-Match unsicher? Pfad-Glob ist deterministisch; kein Bypass auch bei `direct` |
@@ -279,7 +279,7 @@ Die Tabelle ist **erschöpfend** über `skills/flow/SKILL.md` geführt; die 20 P
 **Handoff-Rückkanal (unverändert zu heute — AC3):** Der Runner liest aus dem Klartext-Handoff der Subsession **ausschliesslich** die definierten Marker:
 - coder: `Done:` / `Review-Handoff: REVIEW REQUIRED (#…, Iteration N)` / `Spec: … SPEC-LÜCKE: …`
 - reviewer/dba: `Review-Gate: PASS | CHANGES-REQUIRED` + `## Critical`/`## Important`-Zähler (für Metrik)
-- tester: `Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER | SKIPPED-DOC-ONLY`
+- tester: `Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER | SKIPPED-DOC-ONLY | SKIPPED-NO-BUILD`
 - estimator: JSON-Objekt (`dispo_est`/`tok_est`/…)
 
 Der Runner **parst nur diese Marker** — er interpretiert den Fliesstext nicht. Fehlt/mehrdeutig → §5.
@@ -333,7 +333,7 @@ Zwei Eskalations-Kanäle, beide **fokussiert** (kein grosser Orchestrator-Kontex
 **Auslöser.** Ein Gate-Parse (S3.3/S3.5/S4.1) matcht das erwartete Regex **nicht eindeutig**: keine Zeile, mehrere widersprüchliche Zeilen, oder ein unbekanntes Token (z. B. ein neuer `SKIPPED-*`-Wert, ein Tippfehler, Gate-Zeile in Prosa eingebettet).
 
 **Mechanik.**
-1. Der Runner startet einen **eng umrissenen** `claude -p`-Judge-Call. Kontext: **ausschliesslich** der Handoff-Text des betreffenden Agenten + die feste Frage: *„Welches Gate-Token trifft zu? Antworte mit **genau einem** von: `PASS` | `CHANGES-REQUIRED` | `FAIL` | `SKIPPED-NO-DOCKER` | `SKIPPED-DOC-ONLY` | `AMBIGUOUS`. Keine Begründung."* (rollenabhängige erlaubte Menge).
+1. Der Runner startet einen **eng umrissenen** `claude -p`-Judge-Call. Kontext: **ausschliesslich** der Handoff-Text des betreffenden Agenten + die feste Frage: *„Welches Gate-Token trifft zu? Antworte mit **genau einem** von: `PASS` | `CHANGES-REQUIRED` | `FAIL` | `SKIPPED-NO-DOCKER` | `SKIPPED-DOC-ONLY` | `SKIPPED-NO-BUILD` | `AMBIGUOUS`. Keine Begründung."* (rollenabhängige erlaubte Menge).
 2. Modell: günstigste sinnvolle Stufe (`knowledge/model-tiers.md`; Judge ist ein Klassifikations-Mini-Call, kein Design) — Owner-Frage §9-Q2.
 3. Rückgabe ein bekanntes Token → Runner fährt den entsprechenden Übergang (§2) wie beim direkten Match.
 4. Rückgabe `AMBIGUOUS` (oder Judge-Fehler/Timeout/leer) → **kein Weiterraten** → Owner-Eskalation: `board set … Blocked --reason "Gate-Text uneindeutig — manuelle Klärung nötig"` + Klartext-Meldung. Runde endet über BLOCK→FINALIZE.

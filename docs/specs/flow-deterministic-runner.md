@@ -90,7 +90,7 @@ Aus `skills/flow/SKILL.md` abgeleitet — **nicht erschöpfend gemeint**; der `a
 
 ## Verträge
 - **Eingaben:** Board (`board next`/`board show`/`board set`), Spec-Referenz + `implements`-ACs der Story, Agent-Handoff-Texte (Gate-Zeilen), `.claude/profile.md` (merge_policy, default_branch, cost_mode).
-- **Gate-Tokens (mechanisch geparst, unverändert zu heute):** `Review-Gate: PASS | CHANGES-REQUIRED`; `Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER | SKIPPED-DOC-ONLY`.
+- **Gate-Tokens (mechanisch geparst, unverändert zu heute):** `Review-Gate: PASS | CHANGES-REQUIRED`; `Test-Gate: PASS | FAIL | SKIPPED-NO-DOCKER | SKIPPED-DOC-ONLY | SKIPPED-NO-BUILD` (fünfter Token, `profile.build == none`, `agents/tester.md`).
 - **Wiederverwendete Bausteine (kein Neubau):** `scripts/board-ship.sh` (Landen), [[story-claim-lock]]-Push-Protokoll (Claim/Race/Stale), Metrik-Touchpoints ([[metrics-recording-reliability]]).
 - **Ausgaben/Statusübergänge:** identisch zum heutigen `/flow` — `To Do` → `In Progress` → (`In Review`) → `Done` bzw. `Blocked`; Single-Writer `/flow`.
 
