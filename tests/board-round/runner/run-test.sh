@@ -23,6 +23,14 @@
 #   @trace flow-deterministic-runner#AC10
 #   @trace flow-deterministic-runner#AC11
 #
+#   S-129 (Detailkonzept §7 "Decision-Trace + Audit", AC9/AC10) — additive
+#   Decision-Trace-Schreibung (board/runs/round-<story>.trace, JSON-Lines,
+#   APPEND-ONLY, gitignored): Test 1d/1e/1f verifizieren Entstehung + Format
+#   + die vollständige Happy-Path-Übergangsfolge; Test 8c/8d verifizieren den
+#   Eskalations-Fall (Übergang nach JUDGE + judge_called/judge_result im
+#   Trace, kein stilles Raten). Kein Verhaltensdelta am Zustandsautomaten
+#   selbst (reine Beobachtbarkeit, s. board-round.sh write_trace()).
+#
 #   Test 1  (AC1/AC2/AC9)  — kompletter Happy-Path: Item-Wahl -> Claim ->
 #     coder -> reviewer PASS -> tester PASS -> board-ship.sh -> Done.
 #   Test 2  (AC5)           — Review-Gate CHANGES-REQUIRED -> Iterate (N=2)
@@ -598,6 +606,56 @@ else
   fail "Test 1c: Story-Worktree wurde nicht abgebaut"
 fi
 
+# Decision-Trace (S-129, Detailkonzept §7 "Decision-Trace + Audit", AC9/AC10):
+# board/runs/round-<story>.trace entsteht, ist JSON-Lines (jede Zeile für
+# sich per `python3 json.loads` fehlerfrei parsbar) und enthält für den
+# Happy-Path GENAU die erwartete Übergangsfolge aus der Architektur-§2-
+# Tabelle (kein DB_REVIEW/JUDGE, da kein DB-Trigger und kein mehrdeutiges
+# Gate in diesem Testfall).
+T1_TRACE_FILE="${T1_WORK}/board/runs/round-S-950.trace"
+if [[ -s "$T1_TRACE_FILE" ]]; then
+  pass "Test 1d: Trace-Datei board/runs/round-S-950.trace entstanden"
+else
+  fail "Test 1d: Trace-Datei fehlt oder leer (${T1_TRACE_FILE})"
+fi
+
+T1_TRACE_PARSE_ERR="$(python3 -c '
+import json, sys
+path = sys.argv[1]
+errors = 0
+with open(path) as f:
+    for i, line in enumerate(f, 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            json.loads(line)
+        except Exception as e:
+            errors += 1
+            print(f"line {i}: {e}", file=sys.stderr)
+sys.exit(1 if errors else 0)
+' "$T1_TRACE_FILE" 2>&1)" || true
+if [[ -z "$T1_TRACE_PARSE_ERR" ]]; then
+  pass "Test 1e: jede Trace-Zeile ist geparst-verifizierbares JSON"
+else
+  fail "Test 1e: mindestens eine Trace-Zeile ist kein gültiges JSON:
+${T1_TRACE_PARSE_ERR}"
+fi
+
+T1_TRACE_SEQ="$(python3 -c '
+import json
+path = "'"$T1_TRACE_FILE"'"
+with open(path) as f:
+    tos = [json.loads(l)["to"] for l in f if l.strip()]
+print(",".join(tos))
+' 2>/dev/null)" || true
+T1_EXPECTED_SEQ="SELECT,CLAIM,DESIGN_GATE,CODE,REVIEW,TEST,LAND,FINALIZE,EXIT"
+if [[ "$T1_TRACE_SEQ" == "$T1_EXPECTED_SEQ" ]]; then
+  pass "Test 1f: Trace-Übergangsfolge entspricht dem Happy-Path (${T1_EXPECTED_SEQ})"
+else
+  fail "Test 1f: unerwartete Trace-Übergangsfolge -- erwartet '${T1_EXPECTED_SEQ}', bekam '${T1_TRACE_SEQ}'"
+fi
+
 # ===========================================================================
 echo ""
 echo "--- Test 2 (AC5): Review-Gate CHANGES-REQUIRED -> Iterate -> PASS -> Done ---"
@@ -750,6 +808,43 @@ if echo "$T8_SHOW" | grep -q '"status": "Blocked"' && echo "$T8_SHOW" | grep -q 
   pass "Test 8b: S-957 Blocked mit 'Gate-Text uneindeutig — manuelle Klärung nötig'"
 else
   fail "Test 8b: unerwarteter Board-Zustand: ${T8_SHOW}"
+fi
+
+# Decision-Trace (S-129): der Eskalations-Fall MUSS im Trace sichtbar sein --
+# eine Zeile mit to=JUDGE (Review-Gate mehrdeutig -> Judge gerufen) und eine
+# Zeile mit judge_called=true + judge_result=AMBIGUOUS auf dem Weg zu BLOCK
+# (kein stilles Raten, s. AC7).
+T8_TRACE_FILE="${T8_WORK}/board/runs/round-S-957.trace"
+T8_TRACE_JUDGE_ENTRY="$(python3 -c '
+import json
+with open("'"$T8_TRACE_FILE"'") as f:
+    for l in f:
+        e = json.loads(l)
+        if e.get("to") == "JUDGE":
+            print("found")
+            break
+' 2>/dev/null)" || true
+if [[ "$T8_TRACE_JUDGE_ENTRY" == "found" ]]; then
+  pass "Test 8c: Trace enthält einen Übergang nach JUDGE (Gate-Eskalation dokumentiert)"
+else
+  fail "Test 8c: kein 'to: JUDGE'-Eintrag im Trace gefunden (${T8_TRACE_FILE}):
+$(cat "$T8_TRACE_FILE" 2>/dev/null || echo '<fehlt>')"
+fi
+
+T8_TRACE_JUDGE_RESULT="$(python3 -c '
+import json
+with open("'"$T8_TRACE_FILE"'") as f:
+    for l in f:
+        e = json.loads(l)
+        if e.get("judge_called") and e.get("judge_result"):
+            print(e["judge_result"])
+            break
+' 2>/dev/null)" || true
+if [[ "$T8_TRACE_JUDGE_RESULT" == "AMBIGUOUS" ]]; then
+  pass "Test 8d: Trace belegt judge_called=true mit judge_result=AMBIGUOUS (Eskalations-Ergebnis dokumentiert)"
+else
+  fail "Test 8d: erwartete judge_result=AMBIGUOUS im Trace, bekam '${T8_TRACE_JUDGE_RESULT}':
+$(cat "$T8_TRACE_FILE" 2>/dev/null || echo '<fehlt>')"
 fi
 
 # ===========================================================================

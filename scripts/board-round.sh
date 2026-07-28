@@ -145,6 +145,49 @@ release_round_state() {
   rm -f "$ROUND_STATE_FILE" 2>/dev/null || true
 }
 
+# ============================================================================
+# Decision-Trace (Phase C, Detailkonzept §7 "Decision-Trace + Audit", Spec
+# AC9/AC10 — rein additive Beobachtbarkeit, KEIN Verhaltensdelta): schreibt
+# je Zustandsübergang EINE JSON-Lines-Zeile nach
+# `board/runs/round-<story-id>.trace` (APPEND-ONLY, gitignored via die
+# bestehende `board/runs/`-Regel — analog `board/runs/<F-###>/` für
+# Feature-Batches). Das ist ein ANDERER Mechanismus als ROUND_STATE_FILE/
+# write_round_state() oben (I4): jene Datei hält NUR den aktuellen Zustand
+# für Crash-Recovery und wird bei jedem Übergang ÜBERSCHRIEBEN; diese Datei
+# ist die vollständige, nie überschriebene Übergangs-Historie der Runde, die
+# der Owner (oder ein Retro-Lauf) gegen die Übergangstabelle (Architektur §2)
+# auditiert. Reine Beobachtbarkeit — kein Zustandsautomat-Verhalten hängt von
+# dieser Datei ab; sie schreibt best-effort und blockiert die Runde nie (K3,
+# analog Metrik-Touchpoints).
+#
+# write_trace <from> <to> <trigger> [<judge_called:0|1>] [<judge_result>]
+#
+# Ohne bekannte STORY_ID (noch kein Item gewählt, z.B. leeres Board vor
+# DIAGNOSE) ist kein Datei-Name ableitbar (der Dateiname ist story-id-
+# verankert) — write_trace ist dann bewusst ein No-Op, kein Fehler.
+# ============================================================================
+write_trace() {
+  local from="$1" to="$2" trigger="$3" judge_called="${4:-0}" judge_result="${5:-}"
+  [[ -n "$STORY_ID" ]] || return 0
+  local trace_file="${REPO_ROOT}/board/runs/round-${STORY_ID}.trace"
+  mkdir -p "$(dirname "$trace_file")" 2>/dev/null || return 0
+  TRACE_STORY="$STORY_ID" TRACE_FROM="$from" TRACE_TO="$to" TRACE_TRIGGER="$trigger" \
+  TRACE_ITER="${ITER:-1}" TRACE_JUDGE_CALLED="$judge_called" TRACE_JUDGE_RESULT="$judge_result" \
+    python3 -c '
+import json, os, datetime
+print(json.dumps({
+    "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "story": os.environ.get("TRACE_STORY", ""),
+    "from": os.environ.get("TRACE_FROM", ""),
+    "to": os.environ.get("TRACE_TO", ""),
+    "trigger": os.environ.get("TRACE_TRIGGER", ""),
+    "iteration": int(os.environ.get("TRACE_ITER") or 1),
+    "judge_called": os.environ.get("TRACE_JUDGE_CALLED") == "1",
+    "judge_result": (os.environ.get("TRACE_JUDGE_RESULT") or None),
+}, ensure_ascii=False))
+' >> "$trace_file" 2>/dev/null || true
+}
+
 # kill_process_tree <pid> <signal> — beendet <pid> UND alle Nachfahren
 # (bottom-up, rekursiv über pgrep -P) — robuster als ein einzelnes
 # `pkill -P`, das nur DIREKTE Kinder erreicht, falls die Dispatch-Subshell
@@ -366,13 +409,25 @@ select_and_claim_loop() {
     next_json="$("$BOARD_SCRIPT" next 2>/dev/null || true)"
     if [[ -z "$next_json" ]]; then
       print_empty_diagnosis
+      write_trace "SELECT" "DIAGNOSE" "board next: leer (kein Story-Bezug, No-Op)"
+      write_trace "DIAGNOSE" "FINALIZE" "Runde endet (Empty-Drain, kein Story-Bezug, No-Op)"
       finalize_empty_or_no_claim "Board leer / nichts abarbeitbar"
+      write_trace "FINALIZE" "EXIT" "Rotation-Default (1 Story, kein Story-Bezug, No-Op)"
       exit 0
     fi
 
     parse_next_json "$next_json"
     [[ "$STORY_ID" =~ ^S-[0-9]{3,}$ ]] || die "board next lieferte ein nicht klassifizierbares Item-JSON (id='${STORY_ID}')."
     [[ -n "$SPEC_PATH" ]] || die "board next lieferte kein 'spec'-Feld für ${STORY_ID} — kein Dispatch ohne Spec-Referenz."
+
+    # Decision-Trace (Phase C): SETUP->SELECT feuert nur beim allerersten
+    # Versuch dieser Runde (nicht bei jedem Claim-Race-Retry auf ein
+    # NEUES Item) -- konzeptionell lief SETUP genau einmal, bevor überhaupt
+    # ein Item gewählt wurde.
+    if [[ "$attempt" -eq 1 ]]; then
+      write_trace "SETUP" "SELECT" "S0.* alle ok (Runde-Start)"
+    fi
+    write_trace "SELECT" "CLAIM" "board next liefert Item-JSON id=${STORY_ID} spec=${SPEC_PATH}"
 
     # ABSOLUT (Critical-1-Fix) -- ein späteres `cd` (STORY_WORKTREE, Ship-
     # Aufrufe) darf NICHT dazu führen, dass write_round_state() plötzlich in
@@ -387,12 +442,18 @@ select_and_claim_loop() {
     set -e
 
     case "$claim_rc" in
-      0) break ;;
-      2) release_round_state; continue ;;
+      0) write_trace "CLAIM" "DESIGN_GATE" "board-claim.sh: Exit 0 (Claim-Push bestätigt)"; break ;;
+      2)
+        write_trace "CLAIM" "SELECT" "board-claim.sh: Exit 2 (Re-Read fremd+frisch, story-claim-lock AC3)"
+        release_round_state
+        continue
+        ;;
       3)
+        write_trace "CLAIM" "FINALIZE" "board-claim.sh: Exit 3 (Retry-Budget erschöpft, AC13)"
         log "Claim-Retry-Budget für ${STORY_ID} erschöpft — Story bleibt 'To Do'."
         release_round_state
         finalize_empty_or_no_claim "Claim-Budget für ${STORY_ID} erschöpft"
+        write_trace "FINALIZE" "EXIT" "Rotation-Default (1 Story)"
         exit 0
         ;;
       *) die "board-claim.sh lieferte einen unerwarteten Exit-Code ${claim_rc} für ${STORY_ID}." ;;
@@ -612,6 +673,19 @@ ${handoff}"
 
 # resolve_gate <role> <handoff> — Exit 0 (Token auf stdout) | 2 (weiterhin
 # mehrdeutig NACH Judge — Aufrufer MUSS blockieren, nie raten, AC7).
+#
+# Decision-Trace (Phase C, WICHTIG): resolve_gate wird von JEDEM Aufrufer
+# per Kommando-Substitution aufgerufen (`token="$(resolve_gate ...)"`, s.
+# build_loop) -- das forkt zwingend eine SUBSHELL (exakt dieselbe Bash-
+# Semantik, die weiter oben bei dispatch_agent/CURRENT_DISPATCH_PID bereits
+# ausführlich dokumentiert ist). JEDE globale Variablenzuweisung innerhalb
+# dieser Funktion geht beim Rücksprung verloren -- NUR Dateischreibvorgänge
+# (write_trace) überleben die Subshell. Deshalb schreibt resolve_gate bei
+# einer Eskalation, die NACH dem Judge weiterhin mehrdeutig bleibt, die
+# terminale "JUDGE -> BLOCK"-Zeile HIER SELBST (inkl. judge_called/
+# judge_result) -- der Aufrufer (build_loop) ruft block_round() danach nur
+# noch mit skip_entry_trace=1 auf, um keine zweite, redundante Trace-Zeile
+# für denselben Übergang zu erzeugen (s. block_round).
 resolve_gate() {
   local role="$1" handoff="$2"
   local token rc
@@ -624,12 +698,16 @@ resolve_gate() {
     return 0
   fi
   if [[ "$rc" -eq 2 ]]; then
+    local from_state="$CUR_STATE"
+    write_trace "$from_state" "JUDGE" "parse-gate.sh:2 (Gate-Zeile fehlt/mehrdeutig, Rolle ${role})"
     local judged
     judged="$(run_judge "$role" "$handoff")"
     if [[ -n "$judged" && "$judged" != "AMBIGUOUS" ]]; then
+      write_trace "JUDGE" "$from_state" "judge:${judged}" 1 "$judged"
       printf '%s' "$judged"
       return 0
     fi
+    write_trace "JUDGE" "BLOCK" "judge:${judged:-AMBIGUOUS} (weiterhin mehrdeutig, Rolle ${role})" 1 "${judged:-AMBIGUOUS}"
     printf ''
     return 2
   fi
@@ -800,6 +878,26 @@ push_meta_with_retry() {
 # ============================================================================
 block_round() {
   local reason="$1"
+  # Decision-Trace (Phase C): from_state ist per Default der zum Aufrufzeit-
+  # punkt AKTUELLE CUR_STATE (der Aufrufer hat CUR_STATE noch nicht auf
+  # "BLOCK" umgesetzt -- das passiert erst zwei Zeilen weiter unten). Für
+  # Übergänge, die über eine virtuelle, in CUR_STATE nicht abgebildete
+  # Zwischenstation laufen (ITERATE), übergeben die Aufrufer den passenden
+  # Bezeichner explizit (2. Argument) statt sich auf CUR_STATE zu verlassen
+  # -- KEIN Eingriff in die CUR_STATE-Semantik selbst (I4/Signal-Trap
+  # bleiben unangetastet).
+  #
+  # skip_entry_trace (3. Argument, "1"): resolve_gate() hat die Judge-
+  # Eskalation ("X -> JUDGE" bzw. "JUDGE -> BLOCK") bereits SELBST
+  # geschrieben (Subshell-Grund, s. Kommentar dort) -- der Aufrufer (dieser
+  # Fall: "Gate-Text uneindeutig") ruft block_round() dann mit
+  # skip_entry_trace=1 auf, um die BLOCK-Eintrittszeile NICHT ein zweites
+  # Mal (redundant, ohne Judge-Bezug) zu schreiben.
+  local from_state="${2:-$CUR_STATE}"
+  local skip_entry_trace="${3:-0}"
+  if [[ "$skip_entry_trace" != "1" ]]; then
+    write_trace "$from_state" "BLOCK" "$reason"
+  fi
   CUR_STATE="BLOCK"
   write_round_state
 
@@ -837,6 +935,7 @@ d=json.load(sys.stdin); v=d.get("dispo_forecast"); print(v if v is not None else
     return 0
   }
   _block_apply_fields
+  write_trace "BLOCK" "FINALIZE" "board set … Blocked --reason gesetzt (board-round-finalize.sh blocked=1)"
 
   run_memory_curation "$STORY_ID" "Blocked: ${reason}" || true
   [[ -n "$MEMORY_CURATION_CONTENT" ]] && printf '%s\n' "$MEMORY_CURATION_CONTENT" > .claude/memory.md
@@ -852,6 +951,7 @@ d=json.load(sys.stdin); v=d.get("dispo_forecast"); print(v if v is not None else
 
   release_round_state
   teardown_story_worktree
+  write_trace "FINALIZE" "EXIT" "Rotation-Default (1 Story)"
   log "Runde beendet: ${STORY_ID} Blocked — ${reason}"
   exit 0
 }
@@ -918,6 +1018,7 @@ d=json.load(sys.stdin); v=d.get("dispo_forecast"); print(v if v is not None else
     || log "⚠ Push des Dispo-Spiegels/Memory für ${STORY_ID} fehlgeschlagen (nicht fatal, Story bleibt Done)."
 
   release_round_state
+  write_trace "FINALIZE" "EXIT" "Rotation-Default (1 Story)"
   log "Runde beendet: ${STORY_ID} Done."
   exit 0
 }
@@ -952,10 +1053,13 @@ finalize_empty_or_no_claim() {
 # ============================================================================
 iterate_or_block() {
   local reason="$1"
+  local from_state="$CUR_STATE"
+  write_trace "$from_state" "ITERATE" "$reason"
   ITER=$(( ITER + 1 ))
   if [[ "$ITER" -gt 3 ]]; then
-    block_round "Loop-Schutz N=3 — gleicher Befund überlebt 3 Iterationen"
+    block_round "Loop-Schutz N=3 — gleicher Befund überlebt 3 Iterationen" "ITERATE"
   fi
+  write_trace "ITERATE" "CODE" "N++ (N=${ITER} <= 3) -> Retry"
 }
 
 land_and_finalize() {
@@ -967,10 +1071,12 @@ land_and_finalize() {
   set -e
 
   if [[ "$ship_rc" -eq 0 ]]; then
+    write_trace "LAND" "FINALIZE" "board-ship.sh Exit 0"
     finalize_done
     return
   fi
 
+  write_trace "LAND" "RECOVER" "board-ship.sh Exit ${ship_rc}"
   CUR_STATE="RECOVER"
   write_round_state
   log "board-ship.sh endete mit Exit ${ship_rc} — prüfe Remote-PR-Status (Flip-Fixer §4.1) statt 'nicht gelandet' anzunehmen."
@@ -984,6 +1090,7 @@ land_and_finalize() {
     local retry_rc=$?
     set -e
     if [[ "$retry_rc" -eq 0 ]]; then
+      write_trace "RECOVER" "FINALIZE" "gh pr list state=MERGED -> Flip-Fixer-Restschritte nachgezogen (retry ship exit 0)"
       finalize_done
       return
     fi
@@ -1025,6 +1132,7 @@ build_loop() {
       block_round "coder-Handoff uneindeutig — kein 'Review-Handoff: REVIEW REQUIRED'-Marker gefunden (Iteration ${ITER})"
     fi
 
+    write_trace "CODE" "REVIEW" "coder-Handoff: 'Review-Handoff: REVIEW REQUIRED'-Marker gefunden (Iteration ${ITER})"
     CUR_STATE="REVIEW"
     write_round_state
     local reviewer_prompt reviewer_out review_gate review_rc
@@ -1039,7 +1147,7 @@ build_loop() {
     metric_after reviewer "${review_gate:-AMBIGUOUS}" "$(count_section "$reviewer_out" Critical)" "$(count_section "$reviewer_out" Important)"
 
     if [[ "$review_rc" -eq 2 ]]; then
-      block_round "Gate-Text uneindeutig — manuelle Klärung nötig"
+      block_round "Gate-Text uneindeutig — manuelle Klärung nötig" "$CUR_STATE" 1
     fi
 
     if [[ "$review_gate" == "CHANGES-REQUIRED" ]]; then
@@ -1050,6 +1158,7 @@ build_loop() {
 
     # review_gate == PASS ab hier
     if db_trigger_check; then
+      write_trace "REVIEW" "DB_REVIEW" "Review-Gate: PASS + DB-Trigger (Label 'db' oder Diff-Heuristik)"
       CUR_STATE="DB_REVIEW"
       write_round_state
       local dba_prompt dba_out dba_gate dba_rc
@@ -1064,13 +1173,16 @@ build_loop() {
       metric_after dba "${dba_gate:-AMBIGUOUS}" "$(count_section "$dba_out" Critical)" "$(count_section "$dba_out" Important)"
 
       if [[ "$dba_rc" -eq 2 ]]; then
-        block_round "Gate-Text uneindeutig — manuelle Klärung nötig"
+        block_round "Gate-Text uneindeutig — manuelle Klärung nötig" "$CUR_STATE" 1
       fi
       if [[ "$dba_gate" == "CHANGES-REQUIRED" ]]; then
         FINDINGS="$(extract_findings "$dba_out")"
         iterate_or_block "dba CHANGES-REQUIRED"
         continue
       fi
+      write_trace "DB_REVIEW" "TEST" "Review-Gate: PASS (dba) UND reviewer-PASS"
+    else
+      write_trace "REVIEW" "TEST" "Review-Gate: PASS (kein DB-Trigger)"
     fi
 
     CUR_STATE="TEST"
@@ -1087,11 +1199,12 @@ build_loop() {
     metric_after tester "${test_gate:-AMBIGUOUS}" 0 0
 
     if [[ "$test_rc" -eq 2 ]]; then
-      block_round "Gate-Text uneindeutig — manuelle Klärung nötig"
+      block_round "Gate-Text uneindeutig — manuelle Klärung nötig" "$CUR_STATE" 1
     fi
 
     case "$test_gate" in
       PASS|SKIPPED-DOC-ONLY)
+        write_trace "TEST" "LAND" "Test-Gate: ${test_gate}"
         break
         ;;
       SKIPPED-NO-DOCKER)
@@ -1121,6 +1234,7 @@ main() {
   if ! design_gate_check; then
     block_round "Design-Freigabe ausstehend"
   fi
+  write_trace "DESIGN_GATE" "CODE" "Bestandsschutz greift oder Design-Freigabe erfüllt"
 
   build_loop
   land_and_finalize
