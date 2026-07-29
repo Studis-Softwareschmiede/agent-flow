@@ -56,9 +56,23 @@ log() { echo "[board-ship] $*"; }
 die() { echo "FEHLER [board-ship]: $*" >&2; exit 1; }
 
 # --- L6-Guard: niemals mit uncommitteten Änderungen destruktiv git-operieren ---
+# Schliesst .claude/worktrees/ per Git-Pathspec-Exclude explizit aus der
+# Prüfung aus (S-131-Fix, Iteration 3 — dieselbe Fehlerklasse wie
+# board-round.sh guard_repo_root_clean()/board-claim.sh guard_clean_or_die()).
+# Modus A/B laufen zwar im Story-Worktree (dort ist REPO_ROOT bereits der
+# Worktree selbst, kein Fremd-Worktree-Verzeichnis darunter), aber Modus C
+# (--merge-feature, aufgerufen von board-feature-drain.sh) läuft direkt im
+# REPO_ROOT des Hauptordners, OHNE vorheriges cd in einen Story-Worktree —
+# dort taucht ein liegengebliebener Story-Worktree IRGENDEINER Story
+# (teardown_story_worktree() entfernt ihn bewusst NICHT, wenn er dirty ist,
+# S-130) sonst als scheinbar fremder uncommitteter Inhalt auf und lässt den
+# kompletten Feature-Batch-Abschluss scheitern. Ein Fix an dieser EINEN,
+# von allen drei Modi geteilten Definition deckt automatisch jeden
+# Aufrufkontext ab — universeller Fix, unabhängig von der .gitignore des
+# Zielprojekts.
 guard_clean_or_die() {
   local dirty
-  dirty="$(git status --porcelain)"
+  dirty="$(git status --porcelain -- . ':(exclude).claude/worktrees/')"
   if [[ -n "$dirty" ]]; then
     die "Working-Tree hat uncommittete Änderungen — STOPP vor jedem git fetch/pull/reset.
 Commit oder stash zuerst, dann erneut aufrufen. Betroffene Dateien:

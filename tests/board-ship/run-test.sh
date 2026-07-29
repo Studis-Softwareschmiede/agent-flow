@@ -42,6 +42,19 @@
 #     Fehlschlag (Test 15); AC5 s.o. (Tests 12/13/14); AC6 direct-/
 #     --target-branch-Pfad unverändert — implizit über alle unveränderten
 #     Bestandstests (Test 1-11), die weiterhin grün bleiben.
+#   Covers (flow-deterministic-runner):
+#     @trace flow-deterministic-runner#AC9
+#     @trace flow-deterministic-runner#AC11
+#     AC9/AC11 — S-131-Fix, Iteration 3: guard_clean_or_die() schliesst
+#       .claude/worktrees/ per Git-Pathspec-Exclude aus der Prüfung aus
+#       (dieselbe Fehlerklasse wie board-round.sh guard_repo_root_clean()/
+#       board-claim.sh guard_clean_or_die(), s. tests/board-round/runner/
+#       run-test.sh Test 19, tests/board-round/claim/run-test.sh Test 6) —
+#       Modus C (--merge-feature, von board-feature-drain.sh direkt im
+#       REPO_ROOT ohne vorheriges cd in einen Story-Worktree aufgerufen) hat
+#       den grössten Blast-Radius der drei Fundstellen, da ein
+#       liegengebliebener Story-Worktree IRGENDEINER Story den Abschluss
+#       eines ganzen Feature-Batches scheitern liess (Test 17).
 #   Covers (board-ship-environment-guards, S-070): AC7 kein Checkout des
 #     Ziel-Branches — belegt über einen ECHTEN zweiten Worktree, der 'main'
 #     hält (Test 11a); AC8 FF-Push-Landung + Non-FF-Klartext-Abbruch ohne
@@ -1224,6 +1237,96 @@ if grep -v '^[[:space:]]*#' "$SHIP_SCRIPT" | grep -q -- "--delete-branch"; then
   fail "Test 16: '--delete-branch' noch in einer ausführbaren Zeile gefunden — AC1 verletzt"
 else
   pass "Test 16: '--delete-branch' nicht mehr in einer ausführbaren Zeile vorhanden"
+fi
+
+# ===========================================================================
+# Test 17 (S-131, AC9/AC11) — Modus C (--merge-feature) läuft direkt im
+# REPO_ROOT (aufgerufen von board-feature-drain.sh, KEIN vorheriges cd in
+# einen Story-Worktree, da beim finalen Feature-Merge kein Story-Worktree
+# mehr existiert) — ein liegengebliebener Story-Worktree IRGENDEINER Story
+# (nicht nur der zuletzt bearbeiteten) darf den Feature-Batch-Abschluss
+# nicht mit einem Guard-Fehlalarm scheitern lassen.
+# ===========================================================================
+echo ""
+echo "--- Test 17 (S-131, AC9/AC11): --merge-feature im REPO_ROOT trotz liegengebliebenem Fremd-Story-Worktree ---"
+
+T17_WORK="$(setup_fixture "${TEST_WORK_DIR}/test17")"
+(
+  cd "$T17_WORK"
+  git checkout -q -b feat/S-800-test
+  echo "feature work" > feature17.txt
+  git add -A
+  git commit -q -m "S-800: feature work"
+  git push -q origin HEAD:feature/F-800
+  git checkout -q main
+)
+
+# Simuliert einen liegengebliebenen Story-Worktree EINER ANDEREN, längst
+# abgeschlossenen Story des Feature-Batches (nicht S-800) -- echter
+# `git worktree add`, wie board-round.sh es tut, MIT einer uncommitteten
+# Änderung darin (teardown_story_worktree() lässt ihn nach S-130 bewusst
+# stehen, wenn er dirty ist).
+(
+  cd "$T17_WORK"
+  git worktree add -q -B feat/S-799-ghost .claude/worktrees/S-799 origin/main
+  echo "abgebrochene, nie committete Coder-Arbeit" > .claude/worktrees/S-799/mock-impl.txt
+)
+
+export MOCK_CI_STATUS="completed" MOCK_CI_CONCLUSION="success"
+T17_MAIN_BEFORE="$(git -C "$T17_WORK" rev-parse origin/main)"
+set +e
+T17_OUTPUT="$(cd "$T17_WORK" && MOCK_HEAD_SHA="AUTO" bash "$SHIP_SCRIPT" --merge-feature "feature/F-800" 2>&1)"
+T17_EXIT=$?
+set -e
+
+if [[ $T17_EXIT -eq 0 ]]; then
+  pass "Test 17a: --merge-feature im REPO_ROOT liefert trotz liegengebliebenem Fremd-Story-Worktree Exit 0"
+else
+  fail "Test 17a: exit=${T17_EXIT} — Output: $T17_OUTPUT"
+fi
+
+if ! printf '%s' "$T17_OUTPUT" | grep -q 'uncommittete Änderungen'; then
+  pass "Test 17b: kein Guard-Fehlalarm im Log (Pathspec-Exclude griff)"
+else
+  fail "Test 17b: unerwarteter Guard-Fehlalarm im Log — Output: $T17_OUTPUT"
+fi
+
+T17_MAIN_AFTER="$(git -C "$T17_WORK" rev-parse origin/main)"
+if [[ "$T17_MAIN_AFTER" != "$T17_MAIN_BEFORE" ]]; then
+  pass "Test 17c: origin/main hat einen neuen Commit (der Feature-Merge lief trotz Fremd-Worktree durch)"
+else
+  fail "Test 17c: origin/main unverändert — Merge hat nicht stattgefunden"
+fi
+
+if [[ -f "${T17_WORK}/.claude/worktrees/S-799/mock-impl.txt" ]]; then
+  pass "Test 17d: der liegengebliebene Fremd-Story-Worktree (S-799) ist unangetastet"
+else
+  fail "Test 17d: der Fremd-Story-Worktree wurde unerwartet verändert/entfernt"
+fi
+
+# Gegenprobe (Zahnlos-Check): eine ECHTE fremde uncommittete Änderung
+# AUSSERHALB von .claude/worktrees/ muss weiterhin blockiert werden — der
+# Pathspec-Exclude betrifft NUR .claude/worktrees/. Der erneute
+# --merge-feature-Aufruf trifft zwar den bereits idempotenten
+# "bereits vollständig enthalten"-Zweig, aber guard_clean_or_die() läuft
+# davor IMMER, unabhängig davon (board-ship.sh Modus C, erster Guard-Aufruf).
+echo "echte fremde Änderung (simulierte Parallel-Session)" > "${T17_WORK}/real-foreign-change.txt"
+set +e
+T17G_OUTPUT="$(cd "$T17_WORK" && MOCK_HEAD_SHA="AUTO" bash "$SHIP_SCRIPT" --merge-feature "feature/F-800" 2>&1)"
+T17G_EXIT=$?
+set -e
+rm -f "${T17_WORK}/real-foreign-change.txt"
+
+if [[ $T17G_EXIT -ne 0 ]]; then
+  pass "Test 17e: Guard bleibt scharf — echte fremde Änderung ausserhalb .claude/worktrees/ blockiert weiterhin (Exit != 0)"
+else
+  fail "Test 17e: erwartete Exit != 0 (Guard hätte blockieren müssen), bekam Exit 0 — Output: $T17G_OUTPUT"
+fi
+
+if printf '%s' "$T17G_OUTPUT" | grep -q 'real-foreign-change.txt'; then
+  pass "Test 17f: Fehlermeldung nennt die tatsächlich fremde Datei (real-foreign-change.txt)"
+else
+  fail "Test 17f: erwartete Guard-Fehlermeldung mit real-foreign-change.txt fehlt — Output: $T17G_OUTPUT"
 fi
 
 # ===========================================================================

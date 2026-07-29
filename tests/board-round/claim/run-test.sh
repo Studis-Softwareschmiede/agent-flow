@@ -14,6 +14,8 @@
 #
 # Covers (flow-deterministic-runner):
 #   @trace flow-deterministic-runner#AC4
+#   @trace flow-deterministic-runner#AC9
+#   @trace flow-deterministic-runner#AC11
 #   AC4 — board-claim.sh nutzt für Claim/Claim-Race/Retry ausschliesslich das
 #        bestehende Push-basierte story-claim-lock-Protokoll (kein neues
 #        Lock-/Race-Protokoll):
@@ -38,6 +40,22 @@
 #          "fremd übernommen" (Exit 2) — deckt story-claim-lock AC3 ("fremd,
 #          FRISCH (nicht stale)") + AC7 (stale_claim_hours) + AC8 (S2.3,
 #          Stale-Reclamation-Kollision).
+#   AC9/AC11 — S-131-Fix, Iteration 2: guard_clean_or_die() schliesst
+#        .claude/worktrees/ per Git-Pathspec-Exclude aus der Prüfung aus
+#        (dieselbe Fehlerklasse wie board-round.sh guard_repo_root_clean(),
+#        s. tests/board-round/runner/run-test.sh Test 19) — kein
+#        Verhaltensunterschied ggü. heute für den erhaltenen Sonderfall
+#        "liegengebliebener Fremd-Story-Worktree" (AC9), Board-Status wird
+#        weiterhin nur bei tatsächlich erfolgreichem/abgelehntem Claim
+#        geschrieben (AC11):
+#        Test 6 — ein liegengebliebener Story-Worktree einer FRÜHEREN,
+#          unterbrochenen Runde für eine ANDERE Story (echter
+#          `git worktree add`, teardown_story_worktree() lässt ihn bewusst
+#          stehen, wenn er dirty ist, S-130) blockiert einen NEUEN
+#          Claim-Versuch für eine dritte Story NICHT mehr (Exit 0, kein
+#          Guard-Fehlalarm, Fremd-Worktree bleibt unangetastet). Gegenprobe
+#          (Zahnlos-Check): eine ECHTE fremde uncommittete Änderung
+#          ausserhalb von .claude/worktrees/ blockiert weiterhin (Exit 1).
 #
 # Exit: 0 = alle Tests bestanden, 1 = mindestens ein Fehler
 
@@ -465,6 +483,80 @@ if [[ ! -d "${T5_DIR}/clone_a/.git/rebase-merge" && ! -d "${T5_DIR}/clone_a/.git
   pass "Test 5e: kein hängender Rebase-Zustand"
 else
   fail "Test 5e: hängender Rebase-Zustand — CRITICAL-Regression"
+fi
+
+# ===========================================================================
+# Test 6 (S-131, AC9/AC11) — liegengebliebener Fremd-Story-Worktree einer
+# FRÜHEREN, unterbrochenen Runde darf einen NEUEN Claim-Versuch für eine
+# ANDERE Story nicht blockieren (guard_clean_or_die()-Pathspec-Exclude,
+# dieselbe Fehlerklasse wie board-round.sh guard_repo_root_clean(), Test 19
+# in tests/board-round/runner/run-test.sh).
+# ===========================================================================
+echo ""
+echo "--- Test 6 (S-131, AC9/AC11): liegengebliebener Fremd-Story-Worktree blockiert neuen Claim-Versuch NICHT ---"
+
+T6_DIR="${TEST_WORK_DIR}/test6"
+T6_ORIGIN="$(setup_claim_origin "$T6_DIR")"
+git clone -q "$T6_ORIGIN" "${T6_DIR}/clone_a"
+(cd "${T6_DIR}/clone_a" && git config user.name test && git config user.email test@test.local)
+
+# Simuliert einen liegengebliebenen Story-Worktree einer FRÜHEREN,
+# unterbrochenen Runde für eine ANDERE Story (S-001) -- echter
+# `git worktree add`, wie board-round.sh es tut, MIT einer uncommitteten
+# Änderung darin (genau der Zustand, in dem teardown_story_worktree() ihn
+# nach S-130 bewusst NICHT entfernt, weil er dirty ist).
+(
+  cd "${T6_DIR}/clone_a"
+  git worktree add -q -B feat/S-001-ghost .claude/worktrees/S-001 origin/main
+  echo "abgebrochene, nie committete Coder-Arbeit" > .claude/worktrees/S-001/mock-impl.txt
+)
+
+T6_EXIT=0
+T6_OUT="$(cd "${T6_DIR}/clone_a" && bash "$BOARD_CLAIM_SCRIPT" S-002 2>&1)" || T6_EXIT=$?
+
+if [[ "$T6_EXIT" -eq 0 ]]; then
+  pass "Test 6a: board-claim.sh S-002 liefert trotz liegengebliebenem Fremd-Story-Worktree Exit 0"
+else
+  fail "Test 6a: erwartete Exit 0, bekam ${T6_EXIT} — Output: $T6_OUT"
+fi
+
+if ! printf '%s' "$T6_OUT" | grep -q 'uncommittete Änderungen'; then
+  pass "Test 6b: kein Guard-Fehlalarm im Log (Pathspec-Exclude griff)"
+else
+  fail "Test 6b: unerwarteter Guard-Fehlalarm im Log — Output: $T6_OUT"
+fi
+
+T6_REMOTE_STATUS="$(cd "${T6_DIR}/clone_a" && git show origin/main:board/stories/S-002-x.yaml | grep '^status:')"
+if [[ "$T6_REMOTE_STATUS" == "status: In Progress" ]]; then
+  pass "Test 6c: S-002 tatsächlich geclaimt (Claim lief trotz Fremd-Worktree durch)"
+else
+  fail "Test 6c: S-002 remote-Status unerwartet: $T6_REMOTE_STATUS"
+fi
+
+if [[ -f "${T6_DIR}/clone_a/.claude/worktrees/S-001/mock-impl.txt" ]]; then
+  pass "Test 6d: der liegengebliebene Fremd-Story-Worktree (S-001) ist unangetastet (kein versehentliches Aufräumen durch board-claim.sh)"
+else
+  fail "Test 6d: der Fremd-Story-Worktree wurde unerwartet verändert/entfernt"
+fi
+
+# Gegenprobe (Zahnlos-Check): eine ECHTE fremde uncommittete Änderung
+# AUSSERHALB von .claude/worktrees/ muss weiterhin blockiert werden — der
+# Pathspec-Exclude betrifft NUR .claude/worktrees/.
+echo "echte fremde Änderung (simulierte Parallel-Session)" > "${T6_DIR}/clone_a/real-foreign-change.txt"
+T6G_EXIT=0
+T6G_OUT="$(cd "${T6_DIR}/clone_a" && bash "$BOARD_CLAIM_SCRIPT" S-001 2>&1)" || T6G_EXIT=$?
+rm -f "${T6_DIR}/clone_a/real-foreign-change.txt"
+
+if [[ "$T6G_EXIT" -eq 1 ]]; then
+  pass "Test 6e: Guard bleibt scharf — echte fremde Änderung ausserhalb .claude/worktrees/ blockiert weiterhin (Exit 1)"
+else
+  fail "Test 6e: erwartete Exit 1 (Guard hätte blockieren müssen), bekam ${T6G_EXIT} — Output: $T6G_OUT"
+fi
+
+if printf '%s' "$T6G_OUT" | grep -q 'real-foreign-change.txt'; then
+  pass "Test 6f: Fehlermeldung nennt die tatsächlich fremde Datei (real-foreign-change.txt)"
+else
+  fail "Test 6f: erwartete Guard-Fehlermeldung mit real-foreign-change.txt fehlt — Output: $T6G_OUT"
 fi
 
 # ===========================================================================

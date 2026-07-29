@@ -92,6 +92,18 @@
 #     vorhanden, Board-Status bleibt 'In Progress' (Guard griff VOR jedem
 #     Board-Schreibvorgang) — kein Datenverlust, Story bleibt über das
 #     bestehende Stale-Reclamation-Netz erreichbar.
+#   Test 19 (S-131, AC9/AC11) — EXAKTE Reproduktion des research-app-
+#     Vorfalls vom 2026-07-29: ein Zielprojekt OHNE eigenen
+#     .claude/worktrees/-Gitignore-Eintrag (anders als agent-flow selbst) +
+#     Loop-Schutz-N=3-Blocked-Ausgang. Vor dem Fix hielt
+#     guard_repo_root_clean() den eigenen, gerade angelegten Story-Worktree
+#     fälschlich für eine fremde uncommittete Änderung und brach die Runde
+#     komplett ab (Exit != 0), statt regulär Blocked zu setzen. Test 19a-c:
+#     Pathspec-Exclude greift -> Exit 0, kein Guard-Fehlalarm, Story korrekt
+#     Blocked. Test 19d-f (Gegenprobe, Zahnlos-Check): dasselbe verwundbare
+#     Zielprojekt, aber mit einer ECHTEN fremden uncommitteten Änderung
+#     ausserhalb von .claude/worktrees/ (wie Test 18) -> der Guard MUSS
+#     weiterhin blockieren, der Exclude betrifft NUR .claude/worktrees/.
 #
 # Ehrliche Lücke (Handoff-Pflicht, Owner-Transparenz): NICHT abgedeckt in
 # diesem Anlauf sind Claim-Race/Stale-Reclamation als eigenständiges Thema
@@ -556,6 +568,27 @@ GITIGNOREEOF
     git push -q origin main
   )
   git -C "$origin" symbolic-ref HEAD refs/heads/main
+  echo "$work"
+}
+
+# setup_fixture_no_worktree_gitignore <dir> [<lang>] — wie setup_fixture(),
+# aber die .gitignore des Zielprojekts hat den .claude/worktrees/-Eintrag
+# NICHT (S-131, exakte Nachstellung des research-app-Vorfalls vom
+# 2026-07-29: anders als agent-flow selbst — und anders als die Standard-
+# Fixture oben — hat das Zielprojekt dort keinen passenden
+# .gitignore-Eintrag für den vom Runner selbst angelegten Story-Worktree).
+setup_fixture_no_worktree_gitignore() {
+  local dir="$1" lang="${2:-md}"
+  local work
+  work="$(setup_fixture "$dir" "$lang")"
+  (
+    cd "$work"
+    grep -v '^\.claude/worktrees/$' .gitignore > .gitignore.tmp
+    mv .gitignore.tmp .gitignore
+    git add -A
+    git commit -q -m "gitignore ohne .claude/worktrees (research-app-Vorfall-Nachstellung)"
+    git push -q origin main
+  )
   echo "$work"
 }
 
@@ -1356,6 +1389,78 @@ if [[ "$T18_STATUS" == "status: In Progress" ]]; then
   pass "Test 18g: S-968 bleibt 'In Progress' (Guard griff VOR jedem Board-Status-Schreibvorgang in block_round) -- Stale-Reclamation-Netz bleibt zustaendig"
 else
   fail "Test 18g: unerwarteter remote-Status: ${T18_STATUS}"
+fi
+
+# ===========================================================================
+echo ""
+echo "--- Test 19 (S-131, AC9/AC11): guard_repo_root_clean() schliesst .claude/worktrees/ per Pathspec-Exclude aus -- Fehlalarm-Fix + Gegenprobe ---"
+
+T19_DIR="${TEST_WORK_DIR}/t19"
+T19_WORK="$(setup_fixture_no_worktree_gitignore "$T19_DIR")"
+add_story "$T19_WORK" "S-971" "null"
+
+# Reproduziert den Vorfall vom 2026-07-29: ein Zielprojekt OHNE eigenen
+# .claude/worktrees/-Gitignore-Eintrag (anders als agent-flow selbst) +
+# ein Loop-Schutz-N=3-Blocked-Ausgang (block_round() ruft
+# guard_repo_root_clean() auf, waehrend der Story-Worktree noch existiert,
+# s. board-round.sh:978). VOR dem Fix hielt der Guard den eigenen, gerade
+# angelegten Story-Worktree faelschlich fuer eine fremde uncommittete
+# Aenderung und brach das Skript komplett ab (Exit != 0), STATT den
+# Blocked-Zustand regulaer zu setzen.
+run_round "$T19_WORK" MOCK_REVIEWER_SEQUENCE=CR,CR,CR,CR
+
+if [[ "$ROUND_RC" -eq 0 ]]; then
+  pass "Test 19a: Exit 0 -- kein Guard-Fehlalarm auf den eigenen Story-Worktree trotz fehlendem .claude/worktrees/-Gitignore-Eintrag im Zielprojekt"
+else
+  fail "Test 19a: erwartete Exit 0 (regulaerer Blocked-Abschluss), bekam ${ROUND_RC} -- Output:
+${ROUND_OUT}"
+fi
+
+if ! printf '%s' "$ROUND_OUT" | grep -q 'hat uncommittete Änderungen'; then
+  pass "Test 19b: kein REPO_ROOT-Guard-Fehlalarm im Log (Pathspec-Exclude griff)"
+else
+  fail "Test 19b: unerwarteter Guard-Fehlalarm im Log -- Output:
+${ROUND_OUT}"
+fi
+
+T19_SHOW="$(cd "$T19_WORK" && BOARD_DIR=board "$BOARD_SCRIPT" show S-971)"
+if echo "$T19_SHOW" | grep -q '"status": "Blocked"' && echo "$T19_SHOW" | grep -q 'Loop-Schutz N=3'; then
+  pass "Test 19c: S-971 korrekt Blocked mit 'Loop-Schutz N=3'-Grund (nicht durch Guard-Absturz verhindert)"
+else
+  fail "Test 19c: unerwarteter Board-Zustand: ${T19_SHOW}"
+fi
+
+# Gegenprobe (Zahnlos-Check): dasselbe verwundbare Zielprojekt (KEIN
+# .claude/worktrees/-Gitignore-Eintrag), aber diesmal MIT einer ECHTEN
+# fremden uncommitteten Änderung ausserhalb von .claude/worktrees/
+# (simulierte Parallel-Session, wie Test 18) -- der Guard MUSS das
+# weiterhin erkennen und blockieren; der Pathspec-Exclude betrifft NUR
+# .claude/worktrees/.
+T19G_DIR="${TEST_WORK_DIR}/t19-gegenprobe"
+T19G_WORK="$(setup_fixture_no_worktree_gitignore "$T19G_DIR")"
+add_story "$T19G_WORK" "S-972" "null"
+
+run_round "$T19G_WORK" MOCK_REVIEWER_SEQUENCE=CR,CR,CR,CR "MOCK_DIRTY_REPO_ROOT=${T19G_WORK}"
+
+if [[ "$ROUND_RC" -ne 0 ]]; then
+  pass "Test 19d: Guard bleibt scharf -- echte fremde Änderung ausserhalb .claude/worktrees/ blockiert weiterhin (Exit != 0)"
+else
+  fail "Test 19d: erwartete Exit != 0 (echte fremde Änderung hätte blockieren müssen), bekam Exit 0 -- Output:
+${ROUND_OUT}"
+fi
+
+if printf '%s' "$ROUND_OUT" | grep -q 'hat uncommittete Änderungen'; then
+  pass "Test 19e: Fehlermeldung nennt weiterhin die uncommitteten Änderungen (echte fremde Datei bleibt erkannt)"
+else
+  fail "Test 19e: erwartete Guard-Fehlermeldung fehlt -- Output:
+${ROUND_OUT}"
+fi
+
+T19G_STATUS="$(git --git-dir="${T19G_DIR}/origin.git" show main:board/stories/S-972-mock.yaml | grep '^status:')"
+if [[ "$T19G_STATUS" == "status: In Progress" ]]; then
+  pass "Test 19f: S-972 bleibt 'In Progress' (Guard griff VOR jedem Board-Status-Schreibvorgang, wie Test 18g)"
+else
+  fail "Test 19f: unerwarteter remote-Status: ${T19G_STATUS}"
 fi
 
 # ===========================================================================
