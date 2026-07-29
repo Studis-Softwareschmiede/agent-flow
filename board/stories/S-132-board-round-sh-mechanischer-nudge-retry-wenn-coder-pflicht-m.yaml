@@ -1,7 +1,7 @@
 id: S-132
 parent: F-018
 title: 'board-round.sh: mechanischer Nudge-Retry, wenn coder Pflicht-Marker vergisst'
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/flow-deterministic-runner.md
 implements:
@@ -22,10 +22,12 @@ estimate_note: 'Owner-Vorfall 29.07.2026, dreimal reproduziert in Folge (S-014/S
   bevor block_round greift. Kein Aufweichen der Marker-Pruefung selbst.'
 confidence: high
 tok_est: null
-branch: null
+branch: feat/S-132-board-round-sh-mechanischer-nudge-retry-wenn-coder-pflicht-m
 pr: null
 blocked_reason: null
 wait_reason: null
 created_at: '2026-07-29T20:41:06Z'
-updated_at: '2026-07-29T20:41:35Z'
+updated_at: '2026-07-29T20:43:04Z'
 done_at: null
+claimed_by: MacBook-Pro-von-Alexander.local-27519-1785357770-8235
+claimed_at: '2026-07-29T20:42:57Z'
