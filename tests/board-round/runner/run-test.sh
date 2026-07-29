@@ -75,6 +75,23 @@
 #     Folge-Lauf nach künstlich veraltetem `claimed_at` reklamiert die
 #     Story sauber über den bestehenden Stale-Reclamation-Pfad und bringt
 #     sie zu Ende (Done) — die Story bleibt reklamierbar.
+#   Test 17 (S-130, Bug-1-Fix, AC8/AC9) — produktiv-realistischer coder, der
+#     (wie sein echter Vertrag vorschreibt) NIE committet: der Runner
+#     committet den fertigen Worktree-Stand selbst vor jedem Landen-Aufruf
+#     (commit_story_changes()) -> board-ship.sh's L6-Guard bricht NICHT mehr
+#     ab -> Done, Worktree danach sauber abgebaut, Commit-Betreff trägt die
+#     Story-ID.
+#   Test 18 (S-130, Bug-2-Fix, AC8/AC9/AC11) — EXAKTE Reproduktion des
+#     Datenverlust-Vorfalls vom 2026-07-29: nie-committender coder + Loop-
+#     Schutz-N=3-Abbruch (Review-Gate CHANGES-REQUIRED x3) + eine fremde,
+#     uncommittete Änderung in REPO_ROOT (simulierte Parallel-Session) löst
+#     block_round()s eigenen guard_repo_root_clean()-Treffer aus -> Runner
+#     bricht mit Exit != 0 ab -> der EXIT-Trap darf den dirty Story-Worktree
+#     NICHT mehr force-entfernen (worktree_is_dirty()-Guard): Worktree
+#     existiert weiterhin, die uncommittete Coder-Arbeit ist unverändert
+#     vorhanden, Board-Status bleibt 'In Progress' (Guard griff VOR jedem
+#     Board-Schreibvorgang) — kein Datenverlust, Story bleibt über das
+#     bestehende Stale-Reclamation-Netz erreichbar.
 #
 # Ehrliche Lücke (Handoff-Pflicht, Owner-Transparenz): NICHT abgedeckt in
 # diesem Anlauf sind Claim-Race/Stale-Reclamation als eigenständiges Thema
@@ -287,6 +304,16 @@ case "$ROLE" in
     idx=0; [[ -f "$IDX_FILE" ]] && idx="$(cat "$IDX_FILE")"
     idx=$(( idx + 1 )); echo "$idx" > "$IDX_FILE"
 
+    # S-130-Fixture (Bug-2-Reproduktion): simuliert eine fremde, uncommittete
+    # Änderung, die WÄHREND der Runde in REPO_ROOT auftaucht (z.B. eine
+    # parallele Session) -- unabhängig vom Story-Worktree selbst, in dem der
+    # Coder-Dispatch läuft. Löst später block_round()s eigenen
+    # guard_repo_root_clean()-Aufruf aus (exakt der zweite, im Vorfall
+    # beobachtete Guard-Treffer, diesmal in REPO_ROOT statt im Ship-Worktree).
+    if [[ -n "${MOCK_DIRTY_REPO_ROOT:-}" ]]; then
+      echo "stray foreign change (simulierte Parallel-Session)" > "${MOCK_DIRTY_REPO_ROOT}/stray-foreign-change.txt"
+    fi
+
     if [[ "${MOCK_CODER_SPEC_LUECKE:-0}" == "1" && "$idx" == "1" ]]; then
       echo "Done: nichts umgesetzt (Spec-Lücke erkannt)"
       echo "Files: -"
@@ -327,6 +354,22 @@ case "$ROLE" in
       mkdir -p db_scripts
       echo "-- mock migration ${idx}" >> db_scripts/001_mock.sql
     fi
+
+    # S-130-Fixture (Bug-1-Reproduktion, HART, "MOCK_CODER_UNCOMMITTED"): der
+    # ECHTE coder-Agent committet NIE (agents/coder.md: "Editiere nur den
+    # Worktree, committe NICHT") -- die vorherigen Mock-Zweige oben committen
+    # aus Fixture-Bequemlichkeit selbst und verdecken damit Bug 1 (fehlender
+    # Commit-Schritt in board-round.sh vor dem Landen). Dieser Zweig bildet
+    # den PRODUKTIV-realistischen Vertrag ab: schreibt, committet NICHT.
+    if [[ "${MOCK_CODER_UNCOMMITTED:-0}" == "1" ]]; then
+      echo "Done: mock implementation (iter ${idx}, uncommitted -- echter coder-Vertrag)"
+      echo "Files: mock-impl.txt"
+      echo "Spec: unverändert"
+      echo "Self-Test: ok"
+      echo "Review-Handoff: REVIEW REQUIRED (#1, Iteration ${idx})"
+      exit 0
+    fi
+
     git add -A
     git commit -q -m "mock coder iteration ${idx}"
 
@@ -1212,6 +1255,107 @@ if [[ "$T16_FINAL_STATUS" == "status: Done" ]]; then
   pass "Test 16j: S-966 nach Stale-Reclamation + frischem Lauf sauber 'Done' -- Story bleibt reklamierbar"
 else
   fail "Test 16j: S-966 nach Reklamation nicht 'Done': ${T16_FINAL_STATUS}"
+fi
+
+# ===========================================================================
+echo ""
+echo "--- Test 17 (S-130, Bug-1-Fix): produktiv-realistischer coder (committet NICHT) -> Runner committet selbst vor dem Landen -> Done ---"
+T17_DIR="${TEST_WORK_DIR}/t17"
+T17_WORK="$(setup_fixture "$T17_DIR")"
+add_story "$T17_WORK" "S-967" "null"
+
+run_round "$T17_WORK" MOCK_CODER_UNCOMMITTED=1
+if [[ "$ROUND_RC" -eq 0 ]]; then
+  pass "Test 17a: Exit 0 -- board-ship.sh's L6-Guard bricht NICHT ab (Runner hat vor dem Landen committet)"
+else
+  fail "Test 17a: erwartete Exit 0, bekam ${ROUND_RC} -- Output:
+${ROUND_OUT}"
+fi
+T17_STATUS="$(git --git-dir="${T17_DIR}/origin.git" show main:board/stories/S-967-mock.yaml | grep '^status:')"
+if [[ "$T17_STATUS" == "status: Done" ]]; then
+  pass "Test 17b: S-967 remote 'Done' trotz nie-committendem coder"
+else
+  fail "Test 17b: S-967 remote-Status unerwartet: ${T17_STATUS} -- Output:
+${ROUND_OUT}"
+fi
+if [[ ! -d "${T17_WORK}/.claude/worktrees/S-967" ]]; then
+  pass "Test 17c: Story-Worktree nach Landung sauber abgebaut (nichts mehr uncommittet)"
+else
+  fail "Test 17c: Story-Worktree wurde nicht abgebaut"
+fi
+# git log -1 träfe hier den NACHFOLGENDEN Dispo-Spiegel/Memory-Commit
+# (finalize_done() committet nach der Landung noch einmal Board-Meta) --
+# die eigentliche Story-Implementierung muss also in der VOLLEN Historie
+# gesucht werden, nicht nur im allerletzten Commit.
+T17_COMMIT_SUBJECT="$(git --git-dir="${T17_DIR}/origin.git" log --format=%s main | grep -m1 '^S-967:' || true)"
+if [[ "$T17_COMMIT_SUBJECT" == S-967:* ]]; then
+  pass "Test 17d: gelandeter Story-Commit trägt die erwartete '${T17_COMMIT_SUBJECT}'-Betreffzeile (Story-ID-Präfix, von commit_story_changes() gesetzt)"
+else
+  fail "Test 17d: kein Commit mit 'S-967:'-Präfix in der main-Historie gefunden -- Output:
+${ROUND_OUT}"
+fi
+
+# ===========================================================================
+echo ""
+echo "--- Test 18 (S-130, Bug-2-Fix): EXAKTE Vorfall-Reproduktion -- dirty Story-Worktree + REPO_ROOT-Guard-Treffer waehrend BLOCK -> Worktree NICHT geloescht ---"
+T18_DIR="${TEST_WORK_DIR}/t18"
+T18_WORK="$(setup_fixture "$T18_DIR")"
+add_story "$T18_WORK" "S-968" "null"
+
+# Reproduziert 1:1 den Vorfall vom 2026-07-29: ein coder, der (wie der echte
+# Vertrag es vorsieht) NICHT committet, gefolgt von einem Loop-Schutz-N=3-
+# Abbruch (Review-Gate CHANGES-REQUIRED dreimal), waehrend WAEHREND der Runde
+# eine fremde, uncommittete Aenderung in REPO_ROOT auftaucht (simulierte
+# Parallel-Session) -- genau der zweite Guard-Treffer aus dem Vorfallbericht
+# ("diesmal im REPO_ROOT, beim Versuch den Board-Meta-Commit zu schreiben").
+run_round "$T18_WORK" MOCK_CODER_UNCOMMITTED=1 MOCK_REVIEWER_SEQUENCE=CR,CR,CR,CR "MOCK_DIRTY_REPO_ROOT=${T18_WORK}"
+
+if [[ "$ROUND_RC" -ne 0 ]]; then
+  pass "Test 18a: Runner bricht mit Exit != 0 ab (REPO_ROOT-Guard griff waehrend BLOCK, wie im Vorfall beobachtet)"
+else
+  fail "Test 18a: erwartete Exit != 0 (Guard-Treffer), bekam Exit 0 -- Output:
+${ROUND_OUT}"
+fi
+if printf '%s' "$ROUND_OUT" | grep -q 'uncommittete Änderungen'; then
+  pass "Test 18b: Fehlermeldung nennt die uncommitteten Änderungen in REPO_ROOT (Board-Meta-Write-Guard)"
+else
+  fail "Test 18b: erwartete Guard-Fehlermeldung fehlt -- Output:
+${ROUND_OUT}"
+fi
+
+T18_STORY_WORKTREE="${T18_WORK}/.claude/worktrees/S-968"
+if [[ -d "$T18_STORY_WORKTREE" ]]; then
+  pass "Test 18c: Story-Worktree existiert NOCH (Bug-2-Fix -- kein Force-Remove eines dirty Worktrees)"
+else
+  fail "Test 18c: Story-Worktree wurde entfernt -- GENAU der reproduzierte Datenverlust-Vorfall"
+fi
+
+if [[ -f "${T18_STORY_WORKTREE}/mock-impl.txt" ]] && grep -q "mock coder iteration" "${T18_STORY_WORKTREE}/mock-impl.txt"; then
+  pass "Test 18d: die (nie committete) Coder-Arbeit (mock-impl.txt) ist noch vorhanden -- kein Datenverlust"
+else
+  fail "Test 18d: mock-impl.txt fehlt oder leer -- Coder-Arbeit verloren -- Output:
+${ROUND_OUT}"
+fi
+
+T18_WORKTREE_DIRTY="$(git -C "$T18_STORY_WORKTREE" status --porcelain 2>/dev/null || true)"
+if [[ -n "$T18_WORKTREE_DIRTY" ]]; then
+  pass "Test 18e: Story-Worktree ist weiterhin uncommittet (nichts wurde heimlich committet oder verworfen)"
+else
+  fail "Test 18e: Story-Worktree ist ueberraschend sauber -- Zustand entspricht nicht dem erwarteten Vorfall"
+fi
+
+if printf '%s' "$ROUND_OUT" | grep -q 'unversicherte Änderungen — NICHT entfernt'; then
+  pass "Test 18f: Runner-Log belegt die explizite Rettungs-Warnung (teardown_story_worktree-Guard griff)"
+else
+  fail "Test 18f: erwartete Rettungs-Warnung fehlt im Log -- Output:
+${ROUND_OUT}"
+fi
+
+T18_STATUS="$(git --git-dir="${T18_DIR}/origin.git" show main:board/stories/S-968-mock.yaml | grep '^status:')"
+if [[ "$T18_STATUS" == "status: In Progress" ]]; then
+  pass "Test 18g: S-968 bleibt 'In Progress' (Guard griff VOR jedem Board-Status-Schreibvorgang in block_round) -- Stale-Reclamation-Netz bleibt zustaendig"
+else
+  fail "Test 18g: unerwarteter remote-Status: ${T18_STATUS}"
 fi
 
 # ===========================================================================

@@ -76,6 +76,22 @@
 #   - block_round() ruft board-round-finalize.sh jetzt mit blocked=1 auf —
 #     auch Blocked-Runden landen im Metrik-Ledger.
 #
+# S-130-Fixes (Datenverlust-Vorfall 2026-07-29, erster echter Dogfood-Lauf):
+#   - Bug 1: land_and_finalize() rief board-ship.sh bisher OHNE vorher zu
+#     committen auf — board-ship.sh's eigener L6-Guard bricht dann korrekt
+#     mit "uncommittete Änderungen" ab (kein Datenverlust an DIESER Stelle).
+#     Fix: commit_story_changes() committet den fertigen, geprüften
+#     Worktree-Stand deterministisch VOR jedem SHIP_SCRIPT-Aufruf.
+#   - Bug 2 (der eigentliche Datenverlust): teardown_story_worktree() (EXIT-
+#     Trap UND jeder reguläre Aufruf) entfernte den Story-Worktree per
+#     `git worktree remove --force` BEDINGUNGSLOS — `--force` übergeht genau
+#     die "uncommittete Änderungen"-Sicherheitsprüfung, die `git worktree
+#     remove` sonst hätte. Fix: worktree_is_dirty() prüft VOR jedem Force-
+#     Remove (auch beim Wiederaufsetzen eines liegengebliebenen Worktrees in
+#     select_and_claim_loop) — ein dirty Worktree wird NIE automatisch
+#     entfernt, sondern bleibt mit Klartext-Warnung stehen. Zweite,
+#     unabhängige Sicherheitsebene zu Bug 1 (Verteidigung in der Tiefe).
+#
 # Exit-Codes:
 #   0  = Runde sauber beendet (Done, Blocked, leeres Board, Claim-Budget
 #        erschöpft — jeweils per Log-Ausgabe unterscheidbar)
@@ -133,8 +149,38 @@ write_round_state() {
   } > "$ROUND_STATE_FILE" 2>/dev/null || true
 }
 
+# worktree_is_dirty <path> — Exit 0 wenn <path> ein EXISTIERENDES Verzeichnis
+# mit unversicherten (uncommitteten) Änderungen ist, sonst Exit 1 (auch wenn
+# <path> gar nicht existiert). Gemeinsame Prüfung für JEDEN Force-Remove-
+# Kandidaten in diesem Skript (Bug-2-Fix, S-130 — Datenverlust-Vorfall
+# 2026-07-29: der EXIT-Trap entfernte einen Story-Worktree mit fertiger,
+# aber nie committeter Arbeit bedingungslos per `--force`, weil `git worktree
+# remove --force` seine eigene "uncommittete Änderungen"-Sicherheitsprüfung
+# per Definition übergeht).
+worktree_is_dirty() {
+  local path="$1"
+  [[ -d "$path" ]] || return 1
+  local dirty
+  dirty="$(git -C "$path" status --porcelain 2>/dev/null || true)"
+  [[ -n "$dirty" ]]
+}
+
+# teardown_story_worktree — entfernt den Story-Worktree NUR, wenn er sauber
+# ist (I4/Bug-2-Fix). Ein Worktree mit unversicherten Änderungen wird NIE
+# automatisch entfernt (weder im EXIT-Trap noch in einem regulären
+# Erfolgspfad, s. finalize_done()/block_round()) — stattdessen bleibt er
+# stehen, mit einer klaren Log-Zeile, damit die Arbeit manuell gerettet
+# werden kann. Das ist die zweite, unabhängige Sicherheitsebene zusätzlich
+# zu commit_story_changes() (Bug-1-Fix): committet dieser Schritt aus
+# irgendeinem Grund nicht (Fehlschlag VOR dem eigentlichen Commit, oder eine
+# Nacharbeit erzeugt danach erneut Uncommittetes), verhindert dieser Guard
+# trotzdem den Datenverlust.
 teardown_story_worktree() {
   [[ -n "$STORY_WORKTREE" ]] || return 0
+  if worktree_is_dirty "$STORY_WORKTREE"; then
+    log "⚠ Story-Worktree enthält unversicherte Änderungen — NICHT entfernt, manuelle Rettung nötig: ${STORY_WORKTREE}"
+    return 0
+  fi
   git worktree remove --force "$STORY_WORKTREE" >/dev/null 2>&1 || rm -rf "$STORY_WORKTREE" 2>/dev/null || true
   git worktree prune >/dev/null 2>&1 || true
   STORY_WORKTREE=""
@@ -363,6 +409,7 @@ metric_after() {
 # AC4). I3: kein coder-Dispatch vor bestätigtem Claim-Push.
 # ============================================================================
 STORY_BRANCH=""
+STORY_TITLE=""
 SPEC_PATH=""
 IMPLEMENTS_JSON="[]"
 LABELS_JSON="[]"
@@ -464,12 +511,15 @@ select_and_claim_loop() {
   show_json="$("$BOARD_SCRIPT" show "$STORY_ID" 2>/dev/null)"
   STORY_BRANCH="$(printf '%s' "$show_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("branch") or "")')"
   [[ -n "$STORY_BRANCH" ]] || die "Story-Branch für ${STORY_ID} nach Claim nicht ermittelbar."
+  STORY_TITLE="$(printf '%s' "$show_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("title") or "")')"
   SIZE_EST="$(printf '%s' "$show_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d.get("size_est"); print(v if v else "M")')"
   EP_EST="$(printf '%s' "$show_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d.get("dispo_est"); print(v if v is not None else "null")')"
   TOK_EST="$(printf '%s' "$show_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d.get("tok_est"); print(v if v is not None else "null")')"
 
   STORY_WORKTREE="${REPO_ROOT}/.claude/worktrees/${STORY_ID}"
-  if [[ -d "$STORY_WORKTREE" ]]; then
+  if worktree_is_dirty "$STORY_WORKTREE"; then
+    die "Vorhandener Story-Worktree ${STORY_WORKTREE} (vorheriger, abgebrochener Lauf) enthält unversicherte Änderungen — NICHT automatisch entfernt (Datenverlust-Schutz, Bug-2-Fix S-130). Bitte manuell prüfen/retten (git -C ${STORY_WORKTREE} status), Worktree danach von Hand entfernen, dann erneut versuchen."
+  elif [[ -d "$STORY_WORKTREE" ]]; then
     git worktree remove --force "$STORY_WORKTREE" >/dev/null 2>&1 || rm -rf "$STORY_WORKTREE"
     git worktree prune >/dev/null 2>&1 || true
   fi
@@ -1062,9 +1112,40 @@ iterate_or_block() {
   write_trace "ITERATE" "CODE" "N++ (N=${ITER} <= 3) -> Retry"
 }
 
+# commit_story_changes — Bug-1-Fix (S-130, Datenverlust-Vorfall 2026-07-29).
+# coder/reviewer/tester bearbeiten den Story-Worktree gemäss ihrem jeweiligen
+# Handoff-Vertrag OHNE selbst zu committen (agents/coder.md: "Editiere nur den
+# Worktree, committe NICHT" — analog reviewer/tester). board-ship.sh erwartet
+# aber laut eigenem Kopfkommentar "Vorbedingung Modus A/B: ... HEAD ist der
+# fertige, geprüfte (tester-PASS) Commit." Ohne einen expliziten Commit-
+# Schritt HIER bricht board-ship.sh's eigener L6-Guard korrekt mit "Working-
+# Tree hat uncommittete Änderungen" ab (kein Datenverlust an dieser Stelle
+# selbst) — der eigentliche Datenverlust entstand erst dadurch, dass der
+# EXIT-Trap den dadurch weiterhin dirty Story-Worktree danach bedingungslos
+# per --force entfernte (separat gefixt: teardown_story_worktree()/
+# worktree_is_dirty()). Der Story-Worktree wird laut Auftrag NUR von diesem
+# einen Story-Zyklus beschrieben (frisch von origin/<default_branch>
+# geklont) — `git add -A` ist hier daher gefahrlos, kein Fremd-
+# Kontaminationsrisiko wie im geteilten Hauptordner (REPO_ROOT).
+commit_story_changes() {
+  local dirty
+  dirty="$(git -C "$STORY_WORKTREE" status --porcelain 2>/dev/null || true)"
+  if [[ -z "$dirty" ]]; then
+    return 0
+  fi
+  local ac_csv msg
+  ac_csv="$(printf '%s' "$IMPLEMENTS_JSON" | python3 -c 'import json,sys; print(", ".join(json.load(sys.stdin) or []))' 2>/dev/null || true)"
+  msg="${STORY_ID}: ${STORY_TITLE:-Story}"
+  [[ -n "$ac_csv" ]] && msg="${msg} (${ac_csv})"
+  ( cd "$STORY_WORKTREE" && git add -A && git commit -q -m "$msg" ) \
+    || die "Commit der Story-Änderungen für ${STORY_ID} vor dem Landen fehlgeschlagen — Worktree bleibt zur manuellen Prüfung stehen."
+  log "Story-Änderungen für ${STORY_ID} committet vor dem Landen (\"${msg}\")."
+}
+
 land_and_finalize() {
   CUR_STATE="LAND"
   write_round_state
+  commit_story_changes
   set +e
   ( cd "$STORY_WORKTREE" && "$SHIP_SCRIPT" "$STORY_ID" )
   local ship_rc=$?
