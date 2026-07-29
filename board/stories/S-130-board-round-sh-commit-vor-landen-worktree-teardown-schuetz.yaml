@@ -1,0 +1,32 @@
+id: S-130
+parent: F-018
+title: 'board-round.sh: Commit vor Landen + Worktree-Teardown schützt unversicherte
+  Änderungen (Datenverlust-Fix)'
+status: To Do
+priority: P1
+spec: docs/specs/flow-deterministic-runner.md
+implements:
+- AC8
+- AC9
+- AC11
+depends: null
+labels: null
+size_est: M
+dispo_est: '3.0'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Owner-Vorfall 29.07.2026: erster echter Dogfood-Lauf gegen research-app
+  verlor die fertige, review+test-bestandene Arbeit von S-009 (research-app), weil
+  board-round.sh LAND ohne vorherigen Commit board-ship.sh aufruft (dessen L6-Guard
+  bricht korrekt ab) UND der EXIT-Trap den Story-Worktree danach trotz unversicherter
+  Änderungen force-entfernt. Zwei zusammenwirkende Bugs, direkt diagnostiziert
+  (kein estimator-Dispatch nötig — Ursache eindeutig, Fix eng umrissen).'
+confidence: high
+tok_est: '5303333'
+branch: null
+pr: null
+blocked_reason: null
+wait_reason: null
+created_at: '2026-07-29T09:15:00Z'
+updated_at: '2026-07-29T09:15:00Z'
+done_at: null
