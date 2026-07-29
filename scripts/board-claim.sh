@@ -74,9 +74,20 @@ die() { echo "FEHLER [board-claim]: $*" >&2; exit 1; }
 
 # --- L6-Guard: niemals mit uncommitteten Änderungen destruktiv git-operieren
 # (identisches Muster zu board-ship.sh guard_clean_or_die) ---
+# Schliesst .claude/worktrees/ per Git-Pathspec-Exclude explizit aus der
+# Prüfung aus (S-131-Fix, Iteration 2 — dieselbe Fehlerklasse wie
+# board-round.sh guard_repo_root_clean()): läuft dieses Skript im
+# REPO_ROOT (der reguläre Aufrufkontext von board-round.sh VOR dem Anlegen
+# des Story-Worktrees der aktuellen Runde), taucht ein liegengebliebener
+# Story-Worktree einer FRÜHEREN, unterbrochenen Runde (teardown_story_
+# worktree() entfernt ihn bewusst NICHT, wenn er dirty ist, S-130) sonst als
+# scheinbar fremder uncommitteter Inhalt auf und bricht JEDEN neuen
+# Claim-Versuch für eine ANDERE Story ab — universeller Fix, unabhängig
+# davon, ob das Zielprojekt .claude/worktrees/ in seiner eigenen .gitignore
+# führt.
 guard_clean_or_die() {
   local dirty
-  dirty="$(git status --porcelain)"
+  dirty="$(git status --porcelain -- . ':(exclude).claude/worktrees/')"
   if [[ -n "$dirty" ]]; then
     die "Working-Tree hat uncommittete Änderungen — STOPP vor jedem Claim-Versuch.
 Commit oder stash zuerst, dann erneut aufrufen. Betroffene Dateien:

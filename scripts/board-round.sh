@@ -118,9 +118,17 @@ log() { echo "[board-round] $*"; }
 die() { echo "FEHLER [board-round]: $*" >&2; exit 1; }
 
 # --- L6-Guard (analog board-ship.sh/board-claim.sh) ---
+# Schliesst .claude/worktrees/ per Git-Pathspec-Exclude explizit aus der
+# Prüfung aus (S-131-Fix, Owner-Vorfall 2026-07-29): der Runner legt für die
+# aktuelle Story dort selbst einen eigenen Story-Worktree an (Zeile ~519/528).
+# Auf Projekten, deren EIGENE .gitignore .claude/worktrees/ nicht führt
+# (anders als agent-flow selbst), taucht dieser Story-Worktree sonst als
+# scheinbar fremder uncommitteter Inhalt im REPO_ROOT-Status auf und blockiert
+# JEDE Runde nach dem Test-Gate. Der Pathspec-Exclude wirkt unabhängig davon,
+# ob das Zielprojekt eine passende .gitignore hat (universeller Fix).
 guard_repo_root_clean() {
   local dirty
-  dirty="$(git -C "$REPO_ROOT" status --porcelain)"
+  dirty="$(git -C "$REPO_ROOT" status --porcelain -- . ':(exclude).claude/worktrees/')"
   if [[ -n "$dirty" ]]; then
     die "REPO_ROOT (${REPO_ROOT}) hat uncommittete Änderungen — STOPP vor jedem Board-Meta-Schreibvorgang.
 ${dirty}"
