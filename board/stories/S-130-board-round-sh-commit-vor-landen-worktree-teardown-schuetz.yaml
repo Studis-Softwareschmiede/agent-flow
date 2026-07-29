@@ -2,7 +2,7 @@ id: S-130
 parent: F-018
 title: 'board-round.sh: Commit vor Landen + Worktree-Teardown schützt unversicherte
   Änderungen (Datenverlust-Fix)'
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/flow-deterministic-runner.md
 implements:
@@ -19,14 +19,16 @@ estimate_note: 'Owner-Vorfall 29.07.2026: erster echter Dogfood-Lauf gegen resea
   verlor die fertige, review+test-bestandene Arbeit von S-009 (research-app), weil
   board-round.sh LAND ohne vorherigen Commit board-ship.sh aufruft (dessen L6-Guard
   bricht korrekt ab) UND der EXIT-Trap den Story-Worktree danach trotz unversicherter
-  Änderungen force-entfernt. Zwei zusammenwirkende Bugs, direkt diagnostiziert
-  (kein estimator-Dispatch nötig — Ursache eindeutig, Fix eng umrissen).'
+  Änderungen force-entfernt. Zwei zusammenwirkende Bugs, direkt diagnostiziert (kein
+  estimator-Dispatch nötig — Ursache eindeutig, Fix eng umrissen).'
 confidence: high
 tok_est: '5303333'
-branch: null
+branch: feat/S-130-board-round-landfix
 pr: null
 blocked_reason: null
 wait_reason: null
 created_at: '2026-07-29T09:15:00Z'
-updated_at: '2026-07-29T09:15:00Z'
+updated_at: '2026-07-29T07:04:17Z'
 done_at: null
+claimed_by: MacBook-Pro-von-Alexander.local-21906-1785308645-3978-S-130
+claimed_at: '2026-07-29T07:04:11Z'
