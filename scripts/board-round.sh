@@ -634,6 +634,33 @@ BASE_SHA: ${BASE_SHA}${model_line}${extra}
 PROMPT
 }
 
+# build_nudge_prompt — S-132 (Owner-Vorfall 2026-07-29, 3x reproduziert:
+# S-014/S-015/S-016, --cost low — coder-Arbeit vollständig+korrekt, nur die
+# Pflicht-Zeile `Review-Handoff: REVIEW REQUIRED` fehlte im Handoff-Text).
+# GENAU EIN mechanischer Redispatch, bevor block_round greift (s. build_loop
+# CODE-Zustand). Bewusst ENG: fragt NUR nach der fehlenden Zeile — kein neuer
+# Auftrag, keine neue Iteration, kein Re-Implementieren. Der coder MUSS die
+# Zeile über eine echte Working-Tree-Selbstprüfung verifizieren statt sie
+# blind zu behaupten (analog coder/R03 Handoff-Claim-Selbstverifikation) —
+# das erhält den Zweck des Pflicht-Markers (kein stilles Raten, K1) und
+# adressiert nur das enge, real beobachtete Vergessens-Muster.
+build_nudge_prompt() {
+  local model model_line=""
+  model="$(resolve_model coder)"
+  [[ -n "$model" ]] && model_line=$'\n'"MODEL-OVERRIDE: ${model}"
+  cat <<PROMPT
+ROLE: coder
+STORY: ${STORY_ID}
+BASE_SHA: ${BASE_SHA}${model_line}
+
+Dein letzter Handoff für diese Story enthielt NICHT die Pflicht-Zeile 'Review-Handoff: REVIEW REQUIRED' am Zeilenanfang. Das ist die EINZIGE Frage hier — kein neuer Auftrag, keine neue Iteration, kein Re-Implementieren.
+
+Prüfe SELBST anhand des Working-Tree (z.B. \`git status\`, \`git diff ${BASE_SHA}\`) und deiner eigenen letzten Antwort, ob deine Arbeit für dieses Item tatsächlich abgeschlossen ist — behaupte die Zeile NICHT blind:
+- Ist sie fertig → gib GENAU die Zeile 'Review-Handoff: REVIEW REQUIRED (#<n>, Iteration ${ITER})' aus.
+- Ist sie NICHT fertig, oder liegt eine strukturelle Spec-Lücke vor → gib stattdessen eine Zeile beginnend mit 'Spec: SPEC-LÜCKE: <Begründung>' aus.
+PROMPT
+}
+
 # dispatch_agent — Critical-1-Fix (Review-Iteration 3, HART): MUSS als
 # eigenständige Anweisung aufgerufen werden -- NIEMALS über
 # `var="$(dispatch_agent ...)"`. Bash dokumentiert explizit: "If bash is
@@ -1217,8 +1244,38 @@ build_loop() {
     # den Pflicht-Marker wurde nie erkannt (stilles Raten). Jetzt wird der
     # Pflicht-Marker `Review-Handoff: REVIEW REQUIRED` (Architektur §2/§3)
     # explizit verlangt — fehlt er, eskaliert der Runner statt weiterzulaufen.
+    #
+    # S-132-Fix (Owner-Vorfall 2026-07-29, 3x reproduziert: S-014/S-015/
+    # S-016, --cost low — coder-Arbeit jeweils vollständig+korrekt, nur die
+    # Pflicht-Zeile vergessen). Die Marker-Prüfung selbst bleibt UNVERÄNDERT
+    # hart (bewusster Sicherheitsmechanismus gegen stilles Raten) — aber
+    # GENAU EIN mechanischer Nudge-Redispatch (derselbe STORY_WORKTREE,
+    # KEIN ITER-Increment — das ist kein Review-Loop-Durchgang) fragt gezielt
+    # NUR nach der fehlenden Zeile, bevor block_round greift. Der coder prüft
+    # dabei selbst per Working-Tree-Inspektion, ob die Arbeit tatsächlich
+    # fertig ist (build_nudge_prompt()), statt die Zeile blind zu behaupten.
+    # Fehlt der Marker AUCH nach diesem einen Nudge → block_round exakt wie
+    # zuvor (kein zweiter Nudge, kein Loop, kein Raten — K1).
     if ! printf '%s' "$coder_out" | grep -qE '^Review-Handoff: REVIEW REQUIRED'; then
-      block_round "coder-Handoff uneindeutig — kein 'Review-Handoff: REVIEW REQUIRED'-Marker gefunden (Iteration ${ITER})"
+      log "coder-Handoff ohne Pflicht-Marker (Iteration ${ITER}) — genau ein mechanischer Nudge-Redispatch (kein Iterationszähler-Increment)."
+      write_trace "CODE" "CODE" "Pflicht-Marker fehlt — mechanischer Nudge-Redispatch, kein ITER-Increment (Iteration ${ITER})"
+      local nudge_prompt
+      nudge_prompt="$(build_nudge_prompt)"
+      metric_before
+      dispatch_agent coder "$nudge_prompt"
+      coder_out="$DISPATCH_OUT"
+      metric_after coder "null" 0 0
+
+      if [[ -z "$coder_out" ]]; then
+        block_round "coder-Nudge-Redispatch lieferte keinen Handoff (Iteration ${ITER}) — Abbruch, manuelle Prüfung nötig"
+      fi
+      if printf '%s' "$coder_out" | grep -q 'SPEC-LÜCKE'; then
+        block_round "Spec unvollständig — /requirement nötig"
+      fi
+      if ! printf '%s' "$coder_out" | grep -qE '^Review-Handoff: REVIEW REQUIRED'; then
+        block_round "coder-Handoff uneindeutig — kein 'Review-Handoff: REVIEW REQUIRED'-Marker gefunden, auch nach einem Nudge-Retry (Iteration ${ITER})"
+      fi
+      write_trace "CODE" "CODE" "Nudge-Retry erfolgreich — Pflicht-Marker jetzt vorhanden (Iteration ${ITER})"
     fi
 
     write_trace "CODE" "REVIEW" "coder-Handoff: 'Review-Handoff: REVIEW REQUIRED'-Marker gefunden (Iteration ${ITER})"

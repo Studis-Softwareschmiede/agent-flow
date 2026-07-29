@@ -61,10 +61,19 @@
 #   Test 14 (I3)            — Invariante I3: kein coder-Dispatch vor
 #     bestätigtem Claim-Push (fremd+frischer Claim -> Board leer -> kein
 #     einziger `claude`-Aufruf).
-#   Test 15 (Critical-3-Fix, AC7, Review-Iteration 2) — coder-Handoff OHNE
-#     den Pflicht-Marker `Review-Handoff: REVIEW REQUIRED` (aber auch ohne
-#     SPEC-LÜCKE, nicht leer) -> Blocked, reviewer wird NICHT dispatcht
-#     (Allow-Listing statt Deny-Listing, kein stilles Weiterlaufen).
+#   Test 15 (Critical-3-Fix, AC7, Review-Iteration 2; S-132 Nudge-Retry) —
+#     coder-Handoff OHNE den Pflicht-Marker `Review-Handoff: REVIEW
+#     REQUIRED` (aber auch ohne SPEC-LÜCKE, nicht leer) beim ERSTEN
+#     Dispatch -> GENAU EIN mechanischer Nudge-Redispatch (kein
+#     ITER-Increment) -> Marker im Nudge-Handoff vorhanden -> Runde läuft
+#     normal weiter (Review/Test) -> Done. Belegt: coder wird genau zweimal
+#     dispatcht (Original + Nudge), reviewer erst NACH dem erfolgreichen
+#     Nudge.
+#   Test 20 (S-132, AC7/AC9/AC11) — Gegenprobe: Pflicht-Marker fehlt AUCH im
+#     Nudge-Redispatch (`MOCK_CODER_NO_MARKER_PERSIST`) -> block_round greift
+#     UNVERÄNDERT wie vor dem Nudge-Fix (kein zweiter Nudge, kein Loop, kein
+#     Raten), reviewer wird NICHT dispatcht, coder wird exakt zweimal
+#     dispatcht (Original + der eine Nudge, kein dritter Versuch).
 #   Test 16 (Critical-1-Fix, I4/AC8, Review-Iteration 2) — ECHTER `kill
 #     -TERM` auf die echte Runner-PID (kein Mock, kein simuliertes Signal):
 #     State-Datei liegt am korrekten, ABSOLUTEN Ort mit plausiblem
@@ -338,6 +347,27 @@ case "$ROLE" in
     # wohlgeformt aussehenden, aber UNVOLLSTAENDIGEN Output OHNE den
     # Pflicht-Marker "Review-Handoff: REVIEW REQUIRED" -- muss eskalieren,
     # NICHT stillschweigend als "bereit fuer Review" durchgehen.
+    #
+    # S-132-Fixture: seit dem Nudge-Retry-Fix wird der Marker nach EINEM
+    # fehlenden Vorkommen mechanisch nachgefragt (build_nudge_prompt()). Zwei
+    # Varianten:
+    #  - MOCK_CODER_NO_MARKER=1        -- Marker fehlt NUR beim allerersten
+    #    Dispatch (idx==1); der nachfolgende Nudge-Redispatch (idx==2) faellt
+    #    durch in den Default-Zweig unten (MIT Marker) -- Nudge hilft, Runde
+    #    laeuft normal weiter.
+    #  - MOCK_CODER_NO_MARKER_PERSIST=1 -- Marker fehlt bei JEDEM Dispatch
+    #    (auch beim Nudge-Redispatch) -- Nudge hilft NICHT, block_round muss
+    #    unveraendert greifen (kein zweiter Nudge, kein Loop).
+    if [[ "${MOCK_CODER_NO_MARKER_PERSIST:-0}" == "1" ]]; then
+      echo "mock coder iteration ${idx} (no marker, persist)" >> mock-impl.txt
+      git add -A
+      git commit -q -m "mock coder iteration ${idx} (no marker, persist)"
+      echo "Done: mock implementation (iter ${idx}, unvollstaendiger Handoff, persist)"
+      echo "Files: mock-impl.txt"
+      echo "Spec: unveraendert"
+      echo "Self-Test: ok"
+      exit 0
+    fi
     if [[ "${MOCK_CODER_NO_MARKER:-0}" == "1" && "$idx" == "1" ]]; then
       echo "mock coder iteration ${idx} (no marker)" >> mock-impl.txt
       git add -A
@@ -1135,29 +1165,62 @@ fi
 
 # ===========================================================================
 echo ""
-echo "--- Test 15 (Critical-3, AC7): coder-Handoff ohne Pflicht-Marker -> Blocked (kein stilles Weiterlaufen) ---"
+echo "--- Test 15 (Critical-3, AC7; S-132 Nudge-Retry): coder-Handoff ohne Pflicht-Marker beim 1. Dispatch -> genau EIN Nudge-Redispatch -> Marker vorhanden -> Done ---"
 T15_DIR="${TEST_WORK_DIR}/t15"
 T15_WORK="$(setup_fixture "$T15_DIR")"
 add_story "$T15_WORK" "S-965" "null"
 
 run_round "$T15_WORK" MOCK_CODER_NO_MARKER=1
 if [[ "$ROUND_RC" -eq 0 ]]; then
-  pass "Test 15a: Exit 0 (Blocked ist regulärer Abschluss)"
+  pass "Test 15a: Exit 0"
 else
   fail "Test 15a: erwartete Exit 0, bekam ${ROUND_RC} -- Output:
 ${ROUND_OUT}"
 fi
-T15_SHOW="$(cd "$T15_WORK" && BOARD_DIR=board "$BOARD_SCRIPT" show S-965)"
-if echo "$T15_SHOW" | grep -q '"status": "Blocked"' && echo "$T15_SHOW" | grep -q "REVIEW REQUIRED"; then
-  pass "Test 15b: S-965 Blocked mit Hinweis auf den fehlenden 'REVIEW REQUIRED'-Marker"
+T15_STATUS="$(git --git-dir="${T15_DIR}/origin.git" show main:board/stories/S-965-mock.yaml | grep '^status:')"
+if [[ "$T15_STATUS" == "status: Done" ]]; then
+  pass "Test 15b: S-965 remote 'Done' -- der eine Nudge-Redispatch hat den fehlenden Marker nachgeliefert"
 else
-  fail "Test 15b: unerwarteter Board-Zustand (erwartete Blocked wegen fehlendem Marker): ${T15_SHOW}"
+  fail "Test 15b: unerwarteter remote-Status (erwartete Done nach erfolgreichem Nudge): ${T15_STATUS}"
+fi
+T15_CODER_DISPATCHES="$(printf '%s\n' "$ROUND_OUT" | grep -c 'agent=coder' || true)"
+if [[ "$T15_CODER_DISPATCHES" -eq 2 ]]; then
+  pass "Test 15c: coder wurde genau zweimal dispatcht (Original ohne Marker + der EINE Nudge-Redispatch)"
+else
+  fail "Test 15c: erwartete 2 coder-Dispatches, gezählt ${T15_CODER_DISPATCHES} -- Output:
+${ROUND_OUT}"
 fi
 T15_REVIEWER_CALLS="$(printf '%s\n' "$ROUND_OUT" | grep -c 'agent=reviewer' || true)"
-if [[ "$T15_REVIEWER_CALLS" -eq 0 ]]; then
-  pass "Test 15c: reviewer wurde NICHT dispatcht (Eskalation erfolgte VOR dem Review-Schritt)"
+if [[ "$T15_REVIEWER_CALLS" -eq 1 ]]; then
+  pass "Test 15d: reviewer wurde genau einmal dispatcht (erst NACH dem erfolgreichen Nudge)"
 else
-  fail "Test 15c: reviewer wurde trotz fehlendem Marker dispatcht (${T15_REVIEWER_CALLS}x) -- stilles Weiterlaufen"
+  fail "Test 15d: erwartete genau 1 reviewer-Dispatch, gezählt ${T15_REVIEWER_CALLS} -- Output:
+${ROUND_OUT}"
+fi
+
+# Decision-Trace: der Nudge-Versuch MUSS als eigener, von einer normalen
+# Iteration unterscheidbarer Übergang sichtbar sein (CODE -> CODE, "Nudge"
+# im Trigger-Text) UND darf den Iterationszähler NICHT erhöht haben
+# (iteration bleibt 1 in jeder Nudge-Trace-Zeile — kein Review-Loop-Durchgang).
+T15_TRACE_FILE="${T15_WORK}/board/runs/round-S-965.trace"
+T15_NUDGE_STATS="$(python3 -c '
+import json
+count = 0
+bad_iter = 0
+with open("'"$T15_TRACE_FILE"'") as f:
+    for l in f:
+        e = json.loads(l)
+        if "Nudge" in (e.get("trigger") or ""):
+            count += 1
+            if e.get("iteration") != 1:
+                bad_iter += 1
+print(f"{count},{bad_iter}")
+' 2>/dev/null)" || true
+if [[ "$T15_NUDGE_STATS" == "2,0" ]]; then
+  pass "Test 15e: Trace zeigt genau 2 Nudge-bezogene Übergänge (Marker fehlt + Nudge erfolgreich), jeweils ohne ITER-Increment"
+else
+  fail "Test 15e: unerwartete Nudge-Trace-Statistik (count,bad_iter) -- erwartet '2,0', bekam '${T15_NUDGE_STATS}':
+$(cat "$T15_TRACE_FILE" 2>/dev/null || echo '<fehlt>')"
 fi
 
 # ===========================================================================
@@ -1461,6 +1524,40 @@ if [[ "$T19G_STATUS" == "status: In Progress" ]]; then
   pass "Test 19f: S-972 bleibt 'In Progress' (Guard griff VOR jedem Board-Status-Schreibvorgang, wie Test 18g)"
 else
   fail "Test 19f: unerwarteter remote-Status: ${T19G_STATUS}"
+fi
+
+# ===========================================================================
+echo ""
+echo "--- Test 20 (S-132, AC7/AC9/AC11): Pflicht-Marker fehlt AUCH im Nudge-Redispatch -> block_round unveraendert wie vor dem Nudge-Fix ---"
+T20_DIR="${TEST_WORK_DIR}/t20"
+T20_WORK="$(setup_fixture "$T20_DIR")"
+add_story "$T20_WORK" "S-973" "null"
+
+run_round "$T20_WORK" MOCK_CODER_NO_MARKER_PERSIST=1
+if [[ "$ROUND_RC" -eq 0 ]]; then
+  pass "Test 20a: Exit 0 (Blocked ist regulärer Abschluss)"
+else
+  fail "Test 20a: erwartete Exit 0, bekam ${ROUND_RC} -- Output:
+${ROUND_OUT}"
+fi
+T20_SHOW="$(cd "$T20_WORK" && BOARD_DIR=board "$BOARD_SCRIPT" show S-973)"
+if echo "$T20_SHOW" | grep -q '"status": "Blocked"' && echo "$T20_SHOW" | grep -q "Nudge-Retry"; then
+  pass "Test 20b: S-973 Blocked mit Hinweis auf den weiterhin fehlenden Marker nach dem Nudge-Retry"
+else
+  fail "Test 20b: unerwarteter Board-Zustand (erwartete Blocked mit Nudge-Retry-Hinweis): ${T20_SHOW}"
+fi
+T20_CODER_DISPATCHES="$(printf '%s\n' "$ROUND_OUT" | grep -c 'agent=coder' || true)"
+if [[ "$T20_CODER_DISPATCHES" -eq 2 ]]; then
+  pass "Test 20c: coder wurde genau zweimal dispatcht (Original + der EINE Nudge-Redispatch, kein dritter Versuch)"
+else
+  fail "Test 20c: erwartete genau 2 coder-Dispatches, gezählt ${T20_CODER_DISPATCHES} -- Output:
+${ROUND_OUT}"
+fi
+T20_REVIEWER_CALLS="$(printf '%s\n' "$ROUND_OUT" | grep -c 'agent=reviewer' || true)"
+if [[ "$T20_REVIEWER_CALLS" -eq 0 ]]; then
+  pass "Test 20d: reviewer wurde NICHT dispatcht (Eskalation erfolgte VOR dem Review-Schritt, auch nach dem Nudge)"
+else
+  fail "Test 20d: reviewer wurde trotz weiterhin fehlendem Marker dispatcht (${T20_REVIEWER_CALLS}x) -- stilles Weiterlaufen"
 fi
 
 # ===========================================================================
