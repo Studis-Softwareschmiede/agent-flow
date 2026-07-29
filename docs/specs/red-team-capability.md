@@ -67,6 +67,84 @@ Allowlist bleiben unverändert HART.
 - **AC14 — Grenzen unverändert.** Feuer-Freigabe-Gate, Allowlist (Default deny), kein destruktives Ausnutzen, immer PR —
   alles bleibt hart. **Kein Auto-Feuern:** jeder scharfe Lauf braucht die per-Lauf-Freigabe.
 
+## Phase B — Strix gegen Wegwerf-Kopie (aktives Ausnutzen auf isolierter lokaler Kopie — F-035)
+
+> **Erweitert den Lauf um eine zweite Phase im SELBEN Aufruf.** Der bestehende Nuclei-Pfad wird zu **Phase A** und
+> bleibt **HART unverändert** (AC9–AC14, Allowlist, „kein destruktives Ausnutzen gegen Produktion"). **Phase B** feuert
+> zusätzlich das Exploit-fähige, externe **Strix**-CLI (`usestrix/strix`) — aber **ausschliesslich gegen eine
+> wegwerfbare, isolierte lokale Kopie** der App (über `/agent-flow:preview`), auf der aktives Ausnutzen unbedenklich
+> ist. Rahmen: `docs/architecture/red-team-subsystem.md` §9. Beide Phasen fliessen in dieselben drei Lernkreis-Ausgänge,
+> jeder Fund mit **Quelle-Markierung**. Strix ist eine **externe Abhängigkeit** (eigenes Docker-Image, eigener
+> LLM-API-Key) — **gepinnt**, bewusst gebumpt über `/agent-flow:upgrade`.
+
+- **AC15 — Zwei Phasen in EINEM Aufruf.** Ein `/agent-flow:red-team`-Aufruf führt **Phase A** (Nuclei gegen die echte
+  laufende Produktions-App, AC9–AC14, unverändert) und **danach Phase B** (Strix) aus — **kein** zweiter Skill/Auslöser,
+  **kein** manueller Zwischenschritt für den Owner. Ein Knopfdruck/Aufruf löst beide Phasen aus.
+- **AC16 — Phase A unangetastet (HART).** Nuclei-Pfad, Ziel-Allowlist (AC3/AC12), URL↔Ziel-Bindung und
+  „**kein destruktives Ausnutzen** gegen Produktion" (AC10) bleiben **exakt** wie bisher. Phase B ändert daran nichts;
+  sie läuft **additiv danach** und niemals gegen die Produktions-Adresse.
+- **AC17 — Wegwerf-Kopie via `preview` (HART).** Phase B startet die App zuerst als **isolierte lokale Kopie** über
+  `/agent-flow:preview up` (produktives ghcr-Image, **frische/leere migrierte Test-DB**, eigenes Docker-Network/Volume —
+  `skills/preview/SKILL.md`) und richtet Strix **ausschliesslich** gegen die lokale Preview-Adresse
+  (`http://localhost:<preview_port>`). Strix erhält **nie** die Produktions-Adresse — die Ziel-Bindung ist konstruktiv
+  auf die Preview-URL beschränkt.
+- **AC18 — Aufräum-Garantie (HART).** Nach Phase B läuft **immer** `/agent-flow:preview down` — auch bei
+  Strix-Fehler/Abbruch/Timeout (Cleanup im Fehlerpfad, z.B. `trap`/`finally`-Muster). Es bleiben **keine verwaisten**
+  Preview-Container/Volumes/Netze zurück.
+- **AC19 — Aktives Ausnutzen NUR auf der Kopie.** Auf der Wegwerf-Kopie **DARF** Strix aktiv ausnutzen (funktionierende
+  PoC-Exploits: SQLi, RCE, XSS, Business-Logic etc.), weil **keine echten Daten** und **keine Produktion** betroffen
+  sind. Die „kein destruktives Ausnutzen"-Grenze der Basis-Spec (AC10) gilt **unverändert** für Phase A/Produktion —
+  Phase B **unterläuft sie nicht**; sie greift auf der isolierten Kopie schlicht nicht.
+- **AC20 — Strix-Version gepinnt (HART).** Strix läuft auf einer **fest gepinnten** Version (**kein** „immer neueste").
+  Die gepinnte Version steht an genau **EINER** dokumentierten Stelle (Konstante im red-team-Subsystem/Skill,
+  `red-team-subsystem.md` §9) und wird **nur bewusst** über `/agent-flow:upgrade` gebumpt (AC29). Ein Lauf zieht
+  **nie** automatisch eine neuere Strix-Version (Risiko: eine neue Version könnte sich unbemerkt aggressiver verhalten).
+- **AC21 — Strix-LLM-Key als Secret (HART).** Strix' **eigener** LLM-API-Key (getrennt von den Fabrik-Modellcalls)
+  kommt aus dem **bestehenden** Secret-Handling (`.env.gpg` via `scripts/load-env.sh`; Key-Name `STRIX_LLM_API_KEY`)
+  und wird als **Env-Variable** in den Strix-Container gereicht — **nie** Klartext auf Platte, in Logs, in der Ausgabe
+  oder in Commits (maskiert, analog dem übrigen Secret-Umgang der Fabrik).
+- **AC22 — Graceful Skip (kein harter Abbruch).** Fehlt **Docker**, fehlt **`STRIX_LLM_API_KEY`**, oder ist der Lauf
+  **repo-los** (kein Profil / kein ghcr-Image für `preview`) → **Phase B wird sauber übersprungen**; **Phase A läuft
+  normal weiter**. Eine sichtbare **Warn-Zeile** erscheint im Protokoll-Block **und** im headless-JSON
+  (`phase_b: skipped` mit Grund). Der Gesamtlauf bricht **nicht** ab.
+- **AC23 — Expliziter Opt-out.** Das Skill-Argument **`phase_b=aus`** deaktiviert Phase B **bewusst** (nur Phase A).
+  Default **`phase_b=an`**. Ein unzulässiger Wert → klarer Abbruch der Signatur-Prüfung, **kein** Dispatch (Muster der
+  bestehenden `modus=`-Validierung).
+- **AC24 — Quelle-Markierung in allen drei Ausgängen (HART).** Jeder Fund trägt **klar** seine Quelle, weil beide
+  unterschiedlich zu werten sind:
+  - **„Produktion (Nuclei)"** → *real bestätigt, nicht ausgenutzt* (belegte Ausnutzbarkeit gegen die echte App).
+  - **„Wegwerf-Kopie (Strix)"** → *aktiv ausgenutzt/bewiesen, aber nur auf der lokalen Kopie geprüft — **nicht**
+    zwingend schon über die echte Produktions-Adresse verifiziert*.
+  Die Markierung erscheint in **allen drei** Ausgängen: Protokoll-Block, Board-Items **und** Lessons.
+- **AC25 — Protokoll-Blockformat erweitert.** Der **eine** Block pro Lauf (`docs/red-team-audit.md`, AC5) bekommt
+  getrennte Abschnitte **Phase A** / **Phase B** mit der Quelle-Kennzeichnung (AC24); ein **No-Op je Phase** wird
+  **getrennt** ausgewiesen. Es bleibt bei **genau EINEM** Block pro Lauf (append-only, auch bei No-Op beider Phasen).
+- **AC26 — Headless-JSON erweitert (rückwärtskompatibel).** Das End-JSON (`skills/red-team/SKILL.md` §5) bekommt ein
+  **`phase_b`**-Objekt: `{"status": "ran"|"skipped"|"blocked", "reason": <str|null>, "findings_count": <int>}`. Die
+  bestehenden Top-Level-Felder (`status`, `pr`, `findings_count`, `audit_block`, `retro_recommended`) bleiben
+  **unverändert**; `findings_count` top-level = Summe der als Board-Items angelegten bestätigten Funde **beider** Phasen.
+- **AC27 — Board-Items je Phase mit Quelle.** Bestätigte Lücken **beider** Phasen werden weiterhin als **To-Do**-Items
+  angelegt (AC6), jedes mit **Quelle-Vermerk** (AC24). Strix-Funde tragen zusätzlich den Hinweis „**auf Wegwerf-Kopie
+  bewiesen — Produktions-Verifikation offen**", damit `/flow` die andere Beweislage kennt.
+- **AC28 — Kosten-Hinweis.** Da Strix **eigene** LLM-Calls macht (separate, vom Fabrik-Budget **getrennte** Kosten),
+  weist der Lauf **vor** Phase B einen **Kosten-Hinweis** aus (interaktive Ausgabe **und** Protokoll-Block).
+- **AC29 — `/upgrade`-Bump-Pfad.** Die gepinnte Strix-Version (AC20) ist als **bewusst bumpbare externe Abhängigkeit**
+  über `/agent-flow:upgrade` behandelbar; ein Bump ist **immer ein PR** (kein Self-Merge, kein stiller Sprung).
+  `docs/architecture/upgrade-subsystem.md` nennt Strix als solche **gepinnte Tool-Abhängigkeit**.
+
+### Phase B — Edge-Cases & NFR
+
+- **Preview startet nicht** (Image-Pull scheitert, Smoke ≠ 200) → Phase B gilt als **skipped** mit Grund (AC22), Phase A
+  bleibt gültig; kein verwaister Stack (AC18-Cleanup greift auch hier).
+- **Strix-Timeout / Hänger** → hartes Zeitlimit für den Strix-Lauf; danach Cleanup + `phase_b: {"status":"ran"}` mit
+  Teil-Funden bzw. `skipped`-Grund „timeout", nie ein blockierter Gesamtlauf.
+- **Doppelte Funde** (dieselbe Klasse in Phase A *und* B) werden **nicht** dedupliziert — die unterschiedliche Quelle/
+  Beweislage (AC24) ist bedeutungstragend und bleibt sichtbar.
+- **NFR Sicherheit:** Strix bekommt **nur** die Preview-URL (AC17) — konstruktiv unmöglich, dass es die Produktions-App
+  ausnutzt. Der LLM-Key bleibt maskiert (AC21).
+- **NFR Kosten:** Phase B ist optional abschaltbar (AC23) und wird bei fehlenden Voraussetzungen übersprungen (AC22) —
+  keine überraschenden LLM-Kosten ohne Voraussetzung/Hinweis (AC28).
+
 ## Bewusst NICHT (Sicherheits-Grenze)
 
 - **Kein Auto-Feuern.** Das *Feuern* gegen eine laufende App bleibt eine **per-Lauf menschlich autorisierte** Aktion
@@ -75,3 +153,9 @@ Allowlist bleiben unverändert HART.
 - **Keine fremden Ziele** — konstruktiv ausgeschlossen (§AC3).
 - **Kein destruktives Ausnutzen** — Ausnutzbarkeit wird belegt, nicht ausgenutzt (AC10).
 - **Keine automatische Cloudflare-Umkonfiguration** — die Ausnahme setzt der Mensch, der Lauf prüft sie nur (AC13).
+- **Kein Strix gegen Produktion (HART, Phase B).** Strix erhält konstruktiv **nur** die lokale Preview-URL (AC17) —
+  aktives Ausnutzen findet **ausschliesslich** auf der wegwerfbaren Kopie statt, nie gegen die echte laufende App.
+- **Kein Auto-Update von Strix.** Die externe Strix-Version ist **gepinnt** (AC20) und wird nur bewusst über
+  `/agent-flow:upgrade` gebumpt (AC29) — nie „immer neueste".
+- **Kein zweiter Auslöser / kein separates Plugin** — Phase B ist eine **Erweiterung** des bestehenden Red-Team-Ablaufs
+  (ein Aufruf startet beide Phasen, AC15), kein eigener Skill.

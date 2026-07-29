@@ -101,6 +101,59 @@ Wie beim Reconcile: **dünner Auslöser im dev-gui, gesamte Logik in agent-flow.
 - **Kein destruktives Ausnutzen** — die Triage beweist Ausnutzbarkeit, ohne Schaden anzurichten (kein Datenabfluss, keine Löschung).
 - **Keine tagesaktuellen CVEs im Pack** — die gehören in die self-updating Scanner-Feeds + Dependabot (§4.3).
 
+## 9. Phase B — Strix gegen Wegwerf-Kopie (F-035)
+
+> **Status:** akzeptiert (Spec `docs/specs/red-team-capability.md` AC15–AC29). Erweitert den Lauf um eine **zweite
+> Phase** im **selben** Aufruf — **kein** zweiter Skill/Auslöser, **kein** separates Plugin. Der bestehende Nuclei-Lauf
+> (§4.3, AC9–AC14) wird zu **Phase A** und bleibt **HART unverändert**.
+
+### 9.1 Grundkonflikt & Auflösung
+
+Das externe CLI **Strix** (`usestrix/strix`) weist Schwachstellen nicht nur nach, sondern **nutzt sie aktiv aus**
+(funktionierende PoC-Exploits). Es hat **keine** eingebaute Ziel-Sperrliste und **keinen** „nur erkennen"-Modus —
+Exploitation ist Standardverhalten. Das widerspricht der harten „**kein destruktives Ausnutzen**"-Grenze (§7), **wenn
+es gegen die echte Produktions-App liefe**. Auflösung: Strix feuert **nie** gegen Produktion, sondern gegen eine
+**wegwerfbare, isolierte lokale Kopie**, auf der aktives Ausnutzen unbedenklich ist.
+
+### 9.2 Zwei-Phasen-Lauf (ein Aufruf)
+
+1. **Phase A (bestehend, unverändert).** Nuclei gegen die echte laufende Produktions-App — nicht-destruktiv, über die
+   konstruktive Allowlist (§3), hinter dem Feuer-Freigabe-Gate. Exakt wie §4.3 / Spec AC9–AC14.
+2. **Phase B (neu).** Danach automatisch, ohne manuellen Zwischenschritt:
+   - **Wegwerf-Kopie hochfahren** — `/agent-flow:preview up` startet das produktive ghcr-Image mit eigener,
+     leerer/frisch migrierter Test-DB, eigenem Docker-Network/Volume (`skills/preview/SKILL.md`).
+   - **Strix feuern** — gegen `http://localhost:<preview_port>`; dort **darf** es aktiv ausnutzen (keine echten Daten).
+     Strix läuft auf einer **fest gepinnten Version** (Konstante, §9.4), zieht seinen **eigenen LLM-API-Key** aus dem
+     Secret-Handling (`STRIX_LLM_API_KEY` via `scripts/load-env.sh`) und bekommt ihn nur als Env in den Container.
+   - **Aufräumen (garantiert)** — `/agent-flow:preview down`, auch im Fehler-/Timeout-Pfad (Spec AC18).
+
+### 9.3 Berichte — dieselben drei Ausgänge, Quelle-markiert
+
+Beide Phasen fliessen in **dieselben** drei Lernkreis-Ausgänge (§4.5): Protokoll `docs/red-team-audit.md`, Board-Items,
+Lessons. **Jeder Fund trägt seine Quelle** (Spec AC24), weil beide unterschiedlich zu werten sind:
+
+| Quelle | Beweislage |
+|---|---|
+| **Produktion (Nuclei)** | real bestätigt, **nicht** ausgenutzt |
+| **Wegwerf-Kopie (Strix)** | **aktiv ausgenutzt/bewiesen**, aber nur lokal — Produktions-Verifikation offen |
+
+Der Protokoll-Block bekommt getrennte Phase-A/Phase-B-Abschnitte (AC25); das headless-JSON ein rückwärtskompatibles
+`phase_b`-Objekt (AC26).
+
+### 9.4 Externe Abhängigkeit — gepinnt, bewusst gebumpt
+
+Strix ist ein externes Docker-Image mit eigenem LLM-Call. **Kein** Auto-„immer neueste" (eine neue Version könnte sich
+unbemerkt aggressiver verhalten): die Version ist an **einer** Stelle **gepinnt** (Konstante im Subsystem/Skill) und wird
+**nur bewusst** über den `/agent-flow:upgrade`-Agenten gebumpt (immer als PR). `docs/architecture/upgrade-subsystem.md`
+nennt Strix als gepinnte Tool-Abhängigkeit.
+
+### 9.5 Graceful Skip & Opt-out
+
+Phase B verlangt **Docker** + **`STRIX_LLM_API_KEY`** + ein **preview-fähiges Repo** (Profil + ghcr-Image). Fehlt eines,
+oder ist der Lauf repo-los → Phase B wird **sauber übersprungen** (Warn-Zeile + `phase_b: skipped`), Phase A läuft normal
+weiter (Spec AC22). Das Skill-Argument `phase_b=aus` deaktiviert Phase B bewusst (AC23). Da Strix eigene LLM-Kosten
+verursacht, weist der Lauf **vor** Phase B einen Kosten-Hinweis aus (AC28).
+
 ## 8. Touchpoints
 
 - `knowledge/security.md` — zwei Lanes (§5), feste Quellen, 3-Speed-Kopfnote.
@@ -109,4 +162,7 @@ Wie beim Reconcile: **dünner Auslöser im dev-gui, gesamte Logik in agent-flow.
 - `agents/reviewer.md` — Enforcement der Lane-Trennung.
 - `skills/flow/SKILL.md` — Security-Frische-Nudge (§siehe security-pack-freshness).
 - `agents/red-team.md`, `skills/red-team/SKILL.md` — die Fähigkeit selbst.
-- `docs/red-team-audit.md` (pro Projekt) — Protokoll-Logbuch.
+- `docs/red-team-audit.md` (pro Projekt) — Protokoll-Logbuch (Phase A + Phase B, Quelle-markiert — §9.3).
+- `skills/preview/SKILL.md` — Phase B fährt die Wegwerf-Kopie hoch/runter (`up`/`down`, §9.2).
+- `scripts/load-env.sh` — liefert `STRIX_LLM_API_KEY` (Strix-eigener LLM-Key, maskiert) für Phase B (§9.2).
+- `docs/architecture/upgrade-subsystem.md` — Strix als gepinnte, bewusst bumpbare Tool-Abhängigkeit (§9.4).
