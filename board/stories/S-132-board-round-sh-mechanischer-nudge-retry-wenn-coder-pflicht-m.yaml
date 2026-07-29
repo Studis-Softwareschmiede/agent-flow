@@ -1,0 +1,31 @@
+id: S-132
+parent: F-018
+title: 'board-round.sh: mechanischer Nudge-Retry, wenn coder Pflicht-Marker vergisst'
+status: To Do
+priority: P1
+spec: docs/specs/flow-deterministic-runner.md
+implements:
+- AC9
+- AC11
+depends: null
+labels: null
+size_est: S
+dispo_est: '2'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'Owner-Vorfall 29.07.2026, dreimal reproduziert in Folge (S-014/S-015/S-016,
+  research-app, --cost low): coder liefert vollstaendige, korrekte Arbeit, vergisst
+  aber die Pflicht-Zeile ''Review-Handoff: REVIEW REQUIRED'' -> board-round.sh blockt
+  hart (korrekt, kein Datenverlust), Owner musste 3x manuell reviewer/tester/ship
+  nachziehen. Eng umrissener, mechanischer Fix: EIN automatischer Nudge-Redispatch
+  (gleicher STORY_WORKTREE, kein Review-Reset) genau dann, wenn der Marker fehlt,
+  bevor block_round greift. Kein Aufweichen der Marker-Pruefung selbst.'
+confidence: high
+tok_est: null
+branch: null
+pr: null
+blocked_reason: null
+wait_reason: null
+created_at: '2026-07-29T20:41:06Z'
+updated_at: '2026-07-29T20:41:35Z'
+done_at: null
