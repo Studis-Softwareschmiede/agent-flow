@@ -9,6 +9,12 @@ namespaces:
       status: released
       reserved_at: '2026-07-26T21:29:35Z'
       high_water: null
+    - feature_id: F-031
+      range_start: 1
+      range_end: 10
+      status: active
+      reserved_at: '2026-08-04T06:34:06Z'
+      high_water: null
   ADR:
     block_size: 10
     reservations:
