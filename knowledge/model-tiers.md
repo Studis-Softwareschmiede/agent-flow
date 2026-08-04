@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** 2026-07-03 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-08-04 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -146,3 +146,20 @@ dieser Einbindung aufgelöst.)*
 Quelle: [Models overview — Latest models comparison](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison)
 (Tabellen-Zeilen „Extended thinking"/„Adaptive thinking": Fable 5 = No/Yes(always on), Opus 4.8 =
 No/Yes) · [Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing).
+
+**Frischelauf-Notiz (`/train model-tiers`-Zyklus 2026-08-04, kein Klassen-/Tier-Trigger i.S.v. AC3):**
+Models overview führt inzwischen **Claude Opus 5** (`claude-opus-5`) und **Claude Sonnet 5**
+(`claude-sonnet-5`) als aktuelle Top-Vertreter der Klassen `opus`/`sonnet` (Opus 4.8 in „Legacy
+models"-Accordion verschoben, weiterhin aktiv). Beide sind **Punktversionen bestehender Klassen**
+(AC4) — kein Matrix-Delta: Opus 5 bleibt bei $5/$25 MTok (identisch zu Opus 4.8), Sonnet 5 bei
+$3/$15 MTok Standardpreis ab 1. September 2026 (befristeter Einführungspreis $2/$10 bis
+31. August 2026) — identisch zur bisherigen Sonnet-Preisklasse. Extended/Adaptive-Thinking-Profil
+unverändert (Opus 5 = No/Yes, Sonnet 5 = No/Yes, Fable 5 = No/Yes(always on), Haiku 4.5 = Yes/No).
+Model deprecations führt `claude-opus-4-1-20250805` als deprecated seit 2026-06-05, Retirement
+5. August 2026 — ebenfalls nur ein ID-Wechsel innerhalb der `opus`-Klasse, kein Klassen-Trigger.
+Neu sichtbar: `claude-mythos-5`/`claude-mythos-preview` (Project Glasswing) — laut Models overview
+**invitation-only** / limited availability, nicht „widely released"; keine dispatchbare Klasse,
+daher kein (a)-Trigger. Relative Preisordnung `haiku < sonnet < opus < fable` unverändert.
+Quellen: [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) ·
+[Model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations#model-status) ·
+[Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing).
