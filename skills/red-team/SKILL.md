@@ -1,9 +1,9 @@
 ---
 name: red-team
-description: Startet den red-team-Agenten — testet eine AUTORISIERTE eigene App des Owners (Allowlist „läuft auf eigenem VPS" ∩ „eigenes Org-Repo") mit einem etablierten Scanner, triagiert die Funde agentisch und liefert die drei Ausgänge des Sicherheits-Lernkreises (Protokoll in docs/red-team-audit.md, Board-Items für /flow, retro-lesbare Lessons). Reines Dispatch — die gesamte Angriffs-/Triage-/Auslieferungs-Logik liegt im Agenten (agents/red-team.md, Task-Tool); der Skill ist der dünne Auslöser (Muster reconcile). Kein Freitext-Ziel: die Ziel-Kennung wird gegen die konstruktiv erzwungene Allowlist geprüft, ein Ziel ausserhalb → sofort STOPP (Default deny). Keine Detection-Evasion — Cloudflare-Koordination (Freischalten vor Lauf, Scharfstellen danach) ist ein menschlich bestätigter Schritt, kein stiller Automatismus. Liefert IMMER als EIN PR (kein Self-Merge, kein Auto-Feuern); ohne Remote/Auth committeter lokaler Branch als Fallback. Headless-konsumierbar (claude -p): läuft der Skill nicht-interaktiv, endet er mit genau EINEM maschinenlesbaren End-JSON (Muster from-notes/regression-define). Scharfer Betrieb (F-032): der Agent führt einen ECHTEN, nicht-destruktiven Nuclei-Lauf (frische Templates pro Lauf) HINTER dem Feuer-Freigabe-Gate aus — kein Trockenlauf mehr, aber nie Auto-Feuern. Standard-Modus direkt (gegen den Origin) braucht keine Cloudflare-Änderung; durch-cloudflare/beide setzen eine vorab menschlich gesetzte Ausnahme voraus, die der Lauf nur PRÜFT (nie selbst setzt). Ziel-URL wird server-seitig aus dem Allowlist-Eintrag abgeleitet (kein Client-Freitext). Im Ziel-Projekt-Repo ausführen. Aufruf: /agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>].
+description: Startet den red-team-Agenten — testet eine AUTORISIERTE eigene App des Owners (Allowlist „läuft auf eigenem VPS" ∩ „eigenes Org-Repo") mit einem etablierten Scanner, triagiert die Funde agentisch und liefert die drei Ausgänge des Sicherheits-Lernkreises (Protokoll in docs/red-team-audit.md, Board-Items für /flow, retro-lesbare Lessons). Reines Dispatch — die gesamte Angriffs-/Triage-/Auslieferungs-Logik liegt im Agenten (agents/red-team.md, Task-Tool); der Skill ist der dünne Auslöser (Muster reconcile). Kein Freitext-Ziel: die Ziel-Kennung wird gegen die konstruktiv erzwungene Allowlist geprüft, ein Ziel ausserhalb → sofort STOPP (Default deny). Keine Detection-Evasion — Cloudflare-Koordination (Freischalten vor Lauf, Scharfstellen danach) ist ein menschlich bestätigter Schritt, kein stiller Automatismus. Liefert IMMER als EIN PR (kein Self-Merge, kein Auto-Feuern); ohne Remote/Auth committeter lokaler Branch als Fallback. Headless-konsumierbar (claude -p): läuft der Skill nicht-interaktiv, endet er mit genau EINEM maschinenlesbaren End-JSON (Muster from-notes/regression-define). Scharfer Betrieb (F-032): der Agent führt einen ECHTEN, nicht-destruktiven Nuclei-Lauf (frische Templates pro Lauf) HINTER dem Feuer-Freigabe-Gate aus — kein Trockenlauf mehr, aber nie Auto-Feuern. Standard-Modus direkt (gegen den Origin) braucht keine Cloudflare-Änderung; durch-cloudflare/beide setzen eine vorab menschlich gesetzte Ausnahme voraus, die der Lauf nur PRÜFT (nie selbst setzt). Ziel-URL wird server-seitig aus dem Allowlist-Eintrag abgeleitet (kein Client-Freitext). Im Ziel-Projekt-Repo ausführen. Aufruf: /agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>] [access_header=cf-access].
 ---
 
-# /agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>]
+# /agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>] [access_header=cf-access]
 
 cwd = Ziel-Projekt-Repo (das eigene Org-Repo der zu testenden App).
 
@@ -16,7 +16,7 @@ Auslieferungs-Logik — die gesamte Fachlogik (Pack lesen, Scanner steuern, Fund
 liefern, PR öffnen) liegt im Agenten (Muster `reconcile`: dünner Auslöser, Logik in der Fabrik).
 
 Bindender Rahmen: `docs/architecture/red-team-subsystem.md` (§2 Grundhaltung, §3 Allowlist, §4 Ablauf, §6 Repo-Aufteilung) +
-`docs/specs/red-team-capability.md` (AC1–AC14). **Sicherheits-Grenze (Spec „Bewusst NICHT"):** der Betrieb ist
+`docs/specs/red-team-capability.md` (AC1–AC14; **AC15** Cloudflare-Access-Service-Token-Protokoll). **Sicherheits-Grenze (Spec „Bewusst NICHT"):** der Betrieb ist
 **scharf** (echter, nicht-destruktiver Nuclei-Lauf, F-032/AC9–AC14) — aber **hinter dem Feuer-Freigabe-Gate**, nie
 **Auto-Feuern**. Der Skill/Agent ändert **nie** die Cloudflare-Konfiguration (Standard-Modus `direkt` braucht keine);
 jeder Lauf gegen eine laufende App bleibt eine per-Lauf menschlich autorisierte Aktion.
@@ -39,7 +39,7 @@ jeder Lauf gegen eine laufende App bleibt eine per-Lauf menschlich autorisierte 
 ## 1. Aufruf-Signatur parsen (AC2)
 
 ```
-/agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>]
+/agent-flow:red-team ziel=<app-slug> [modus=direkt|durch-cloudflare|beide] [url=<origin-url>] [url_edge=<public-url>] [access_header=cf-access]
 ```
 
 - **`ziel=<app-slug>`** ist **Pflicht** und ist eine **Ziel-Kennung** (Slug/Identifikator), **KEIN Freitext-Ziel**
@@ -57,6 +57,12 @@ jeder Lauf gegen eine laufende App bleibt eine per-Lauf menschlich autorisierte 
   `ziel`. So bleibt die konstruktive Allowlist gewahrt — die URL gehört **immer** zum geprüften Ziel. Für einen
   **scharfen** Lauf ist `url=` **Pflicht**; fehlt sie → `status: blocked` (kein Raten, Spec AC12). Im Standalone-CLI
   liefert der (vertrauenswürdige) Owner die zum Ziel gehörende URL.
+- **`access_header=cf-access`** ist **optional** (Spec AC15a) — ein reiner **Signal-Marker**, **kein Geheimnis**: er
+  meldet, dass das Ziel hinter einer **Cloudflare-Access-Wall** steht und der scharfe Nuclei-Lauf die Access-Header
+  mitschicken soll (Agent Schritt 3, AC15b). **Enum-Guard wie bei `modus=`:** **einziger** zulässiger Wert ist
+  `cf-access`; jeder andere Wert → klarer Abbruch „`access_header=cf-access` ist der einzige zulässige Wert", **kein**
+  Dispatch. **Fehlt** der Marker (Normalfall, alle heutigen Aufrufe) → **kein Regress** (AC15e): das Feld wird als
+  `(none)` an den Agenten durchgereicht, Verhalten bit-identisch zu vorher.
 
 ## 2. Allowlist-Gate — Default deny (AC3, HART)
 
@@ -83,13 +89,17 @@ ziel: <app-slug>
 modus: direkt | durch-cloudflare | beide     (Default direkt)
 url: <origin-url>                            (server-seitig aus dem Allowlist-Eintrag abgeleitet, AC12)
 url_edge: <public-url>                        (nur bei modus=beide)
+access_header: cf-access | (none)             (aus §1, AC15a — Signal-Marker, kein Geheimnis; (none) = Normalfall)
 headless: <true|false>            (aus HEADLESS_JSON, §0 — der AGENT emittiert dann das End-JSON, §5)
 default_branch: <aus profile>
 ```
 
 Der Agent liest `knowledge/security.md`, steuert den etablierten Scanner (Nuclei/OWASP ZAP; Angriffs-Vorlagen frisch
 aus dem offiziellen Feed), triagiert die Roh-Funde **ohne destruktives Ausnutzen** (Ausnutzbarkeit wird belegt, nicht
-ausgenutzt — kein Datenabfluss, keine Löschung) und liefert die **drei Ausgänge** (§4 der Architektur):
+ausgenutzt — kein Datenabfluss, keine Löschung) und liefert die **drei Ausgänge** (§4 der Architektur). Ist
+`access_header: cf-access` gesetzt, injiziert der Agent im Nuclei-Lauf (Schritt 3) die Cloudflare-Access-Header aus
+der Prozess-Umgebung, oder degradiert bei fehlendem Token zu `status: blocked` (Spec AC15b/c) — Details liegen im
+Agenten, nicht im Skill.
 
 - **Protokoll** — genau **ein** Block in `docs/red-team-audit.md` (ein Dokument pro Projekt, analog `spec-audit.md`):
   „was versucht / hat gegriffen / wurde abgewehrt" (+ Cloudflare-Differenz bei `modus=beide`). Auch ein **No-Op-Lauf**
@@ -133,7 +143,7 @@ maschinenlesbaren JSON-Objekt als **letzter Ausgabe** — **kein** Fliesstext da
 - **`status`**:
   - `done` — Lauf durch, mind. ein Ausgang erzeugt (Board-Items/Lessons), als PR (oder Fallback-Branch) ausgeliefert.
   - `no-op` — Lauf durch, **keine** bestätigten Funde (Protokoll-Block trotzdem geschrieben, `findings_count: 0`).
-  - `blocked` — harter **Pre-Scan**-Abbruch: **Allowlist-Gate abgewiesen** (Architektur §3, Ziel ausserhalb der Schnittmenge), **fehlende Feuer-Freigabe/Cloudflare-Bestätigung** (Agent Schritt 3), oder Aufruf-/Signaturfehler; `pr: null`, `audit_block: false`.
+  - `blocked` — harter **Pre-Scan**-Abbruch: **Allowlist-Gate abgewiesen** (Architektur §3, Ziel ausserhalb der Schnittmenge), **fehlende Feuer-Freigabe/Cloudflare-Bestätigung** (Agent Schritt 3), **fehlendes Access-Token bei `access_header=cf-access`** (Agent Schritt 3, Spec AC15c), oder Aufruf-/Signaturfehler; `pr: null`, `audit_block: false`.
   - `needs-auth` — Lauf lief durch, aber **PR-Auslieferung** ohne Remote/Auth → Fallback-Branch (`pr: null`), Mensch zieht nach (§4).
 - **`pr`** — PR-URL bei erfolgreicher Auslieferung, sonst `null`.
 - **`findings_count`** — Anzahl bestätigter (triagierter) Lücken, die als Board-Items angelegt wurden.
@@ -173,3 +183,6 @@ Freigabe: <PR-Link | "Kein PR — Fallback: committeter lokaler Branch (Grund: <
 - **Keine automatische Cloudflare-Umkonfiguration (AC13)** — `durch-cloudflare|beide` setzen eine **vorab menschlich
   gesetzte** Ausnahme voraus; der Lauf **prüft** sie, **setzt sie nie** selbst.
 - **Kein** Board-**Status**-Schreiben — Items entstehen als **To Do** (Hoheit `/flow`).
+- **`access_header=cf-access` ist ein Signal-Marker, kein Geheimnis (AC15)** — der Skill parst/reicht ihn nur durch;
+  **kein** Token-Beschaffen/-Rotieren; die Access-Token-**Werte** liest ausschliesslich der Agent aus der
+  Prozess-Umgebung (AC15b), nie der Skill. Fehlt der Marker → **kein** Regress (AC15e, bit-identisch zu vorher).
