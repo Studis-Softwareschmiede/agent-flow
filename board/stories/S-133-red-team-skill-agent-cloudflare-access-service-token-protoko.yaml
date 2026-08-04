@@ -1,0 +1,31 @@
+id: S-133
+parent: F-031
+title: 'red-team Skill+Agent: Cloudflare-Access-Service-Token-Protokoll (access_header=cf-access)
+  konsumieren — Marker parsen/durchreichen (SKILL.md §1/§3), CF-Access-Header aus
+  Env im Nuclei-Lauf injizieren (agents/red-team.md Schritt 3), Graceful-Blocked ohne
+  Token, Security-Floor'
+status: To Do
+priority: P1
+spec: docs/specs/red-team-capability.md
+implements:
+- AC15
+depends: null
+labels:
+- security
+- agent
+- skill
+size_est: M
+dispo_est: '3.0'
+dispo_act: null
+dispo_forecast: null
+estimate_note: 'M-Heuristik (score 4: 1 AC + 2 Dateien SKILL.md/agents/red-team.md
+  + security-Label); dispo_est/tok_est aus baseline md|balanced|M'
+confidence: medium
+tok_est: '5303333'
+branch: null
+pr: null
+blocked_reason: null
+wait_reason: null
+created_at: '2026-08-04T06:32:18Z'
+updated_at: '2026-08-04T06:32:42Z'
+done_at: null

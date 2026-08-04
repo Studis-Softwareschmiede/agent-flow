@@ -67,6 +67,40 @@ Allowlist bleiben unverändert HART.
 - **AC14 — Grenzen unverändert.** Feuer-Freigabe-Gate, Allowlist (Default deny), kein destruktives Ausnutzen, immer PR —
   alles bleibt hart. **Kein Auto-Feuern:** jeder scharfe Lauf braucht die per-Lauf-Freigabe.
 
+## Scan hinter der Cloudflare-Access-Wall (Service-Token-Protokoll — F-032-Erweiterung)
+
+Manche autorisierten Ziele stehen hinter einer **Cloudflare-Access-Wall**: ein anonymer Nuclei-Lauf gegen die
+öffentliche URL trifft nur die Access-Login-Seite, nie die App. Damit ein scharfer Lauf diese Wall **legitim**
+(Koordination statt Tarnung, AC4) passieren kann, führt der Konsument (dev-gui, `docs/specs/red-team-scan-access-token.md`
+Story **S-407** — Auftraggeber/Gegenstück dieses Vertrags) ein **Cloudflare-Access-Service-Token-Protokoll** ein. Diese
+AC hält die agent-flow-Seite (Konsum) dieses Protokolls bindend fest. Sie ist **rein additiv** — ohne den Marker bleibt
+das Verhalten aus AC1–AC14 **bit-identisch** (kein Regress).
+
+- **AC15 — Cloudflare-Access-Service-Token-Protokoll konsumieren (HART).**
+  - **(a) Marker parsen + durchreichen (Skill).** `skills/red-team/SKILL.md` akzeptiert einen **optionalen** argv-Token
+    `access_header=cf-access`. Er ist **kein Geheimnis**, nur ein Signal-Marker. Der Skill parst ihn (§1) und reicht ihn
+    im Dispatch-Block (§3) als zusätzliches Feld an den Agenten durch: `access_header: cf-access | (none)`. **Enum-Guard**
+    wie bei `modus=`: **einziger** zulässiger Wert ist `cf-access`; jeder andere Wert → **klarer Abbruch, kein Dispatch**.
+    Fehlt der Marker (Normalfall, alle heutigen Aufrufe) → Feld `(none)`, Verhalten unverändert.
+  - **(b) Header injizieren (Agent, Nuclei-Lauf).** Ist `access_header: cf-access` im Dispatch gesetzt, schickt der echte
+    Nuclei-Lauf (`agents/red-team.md` §Vorgehen Schritt 3, AC9/AC10) **zwei zusätzliche HTTP-Header** mit:
+    `CF-Access-Client-Id` und `CF-Access-Client-Secret`. Deren Werte liest der Lauf **ausschliesslich aus der
+    Prozess-Umgebung** (`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`, vom Konsumenten als Pro-Lauf-Env-Override
+    injiziert). Die Werte werden **NIE** in die Kommandozeile selbst eingebettet, geloggt oder über `set -x`/Debug-Ausgabe
+    sichtbar gemacht — sie erscheinen **nur** als ausgehende Request-Header. Der übrige Nuclei-Aufruf (Ziel-URL,
+    `-exclude-tags dos,intrusive,fuzz`, Rate-Limit, Timeout, JSONL-Ausgabe) bleibt unverändert (AC9/AC10 gelten fort).
+  - **(c) Graceful-Blocked statt ungeschütztem Scan (HART).** Ist `access_header: cf-access` gesetzt, aber
+    `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` sind in der Prozess-Umgebung **nicht vorhanden** (leer/fehlend) → der
+    Agent bricht **nicht** den ganzen Lauf ab, sondern degradiert klar zu `status: blocked` (Muster: `url=`-Pflichtfeld-
+    Blockade AC12) mit dem Grund **„Cloudflare-Access-Header angefordert, aber kein Token in der Umgebung — Scan hinter der
+    Wall nicht möglich"**. **Kein stiller Fallback** auf einen anonymen/ungeschützten Scan gegen die Wall.
+  - **(d) Security-Floor für die Token-Werte (HART, wie AC5/AC10/AC14).** Die beiden Token-Werte
+    (`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`) dürfen **NIEMALS** erscheinen in: `docs/red-team-audit.md`, den drei
+    Lernkreis-Ausgängen (Protokoll/Board-Items/Lessons), dem headless End-JSON, Board-Items oder **irgendeiner**
+    Bash-Ausgabe/Log-Zeile — **ausschliesslich** als ausgehende HTTP-Request-Header (b).
+  - **(e) Kein Regress ohne Marker.** Ohne `access_header=cf-access` (Normalfall) werden weder die Env-Header noch die
+    Blocked-Prüfung aus (c) aktiv; jeder heutige Aufruf verhält sich **bit-identisch** zu AC1–AC14.
+
 ## Bewusst NICHT (Sicherheits-Grenze)
 
 - **Kein Auto-Feuern.** Das *Feuern* gegen eine laufende App bleibt eine **per-Lauf menschlich autorisierte** Aktion
@@ -75,3 +109,7 @@ Allowlist bleiben unverändert HART.
 - **Keine fremden Ziele** — konstruktiv ausgeschlossen (§AC3).
 - **Kein destruktives Ausnutzen** — Ausnutzbarkeit wird belegt, nicht ausgenutzt (AC10).
 - **Keine automatische Cloudflare-Umkonfiguration** — die Ausnahme setzt der Mensch, der Lauf prüft sie nur (AC13).
+- **Kein Token-Beschaffen / -Rotieren durch den Agenten (AC15).** Der Agent **konsumiert** nur die vom Konsumenten
+  (dev-gui) als Pro-Lauf-Env injizierten Access-Service-Token-Werte; er erzeugt, rotiert oder persistiert sie nie und
+  gibt sie nie über einen anderen Kanal als die zwei ausgehenden HTTP-Header weiter. Ohne Token in der Umgebung →
+  `status: blocked` (AC15c), **nie** ein anonymer Scan gegen die Access-Wall (keine Tarnung).
