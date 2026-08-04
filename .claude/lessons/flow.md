@@ -1,3 +1,21 @@
+## flow/L09 — S-133 (2026-08-04): `board set <id> status …` ohne `BOARD_WRITER=flow` schlägt STILL fehl — die anderen `set`-Aufrufe im selben Claim-Block laufen trotzdem durch
+Der Claim-Block in §2 ruft `board set` **viermal in Folge** auf (`status`,
+`claimed_by`, `claimed_at`, `branch`). Fehlt vor dem Block `export
+BOARD_WRITER=flow`, weist die CLI **nur** den `status`-Aufruf mit `FEHLER: set:
+nur /flow darf Story-Status setzen (BOARD_WRITER=flow fehlt)` zurück — die drei
+übrigen `set`-Aufrufe (claimed_by/claimed_at/branch) laufen unbeeindruckt
+weiter und liefern `S-133` als Erfolgs-Echo. Ergebnis: ein Claim-Commit, der
+aussieht wie ein normaler Claim, aber `status: To Do` behält — ein
+Geist-Zustand (claimed, aber nicht In Progress), der beim nächsten `board
+next` erneut als Kandidat auftaucht. Wurde erst beim manuellen Nachschauen
+der YAML nach dem Commit auffällig (Exit-Code des Gesamtblocks war 0, kein
+Bash-`set -e`-Abbruch, da jeder `board set`-Aufruf einzeln evaluiert wird).
+**Fix:** `export BOARD_WRITER=flow` **vor** dem gesamten Claim-Block setzen
+(nicht nur vor dem `status`-Aufruf) — gilt ebenso für jeden späteren `board
+set status …`-Aufruf dieser Session (Blocked/Done). Nach dem Claim-Commit vor
+dem Push kurz `grep status board/stories/<id>-*.yaml` gegen den erwarteten
+Wert verifizieren, bevor committet wird.
+
 ## flow/L08 — S-123 (2026-07-26): /flow --parent im Feature-Worktree — Claim + Ship gehören auf den Feature-Branch
 Läuft `/flow --parent F-###` direkt in einem Feature-Worktree, der bereits
 `feature/F-###` ausgecheckt hat (board-feature-drain-Modell): (a) der
