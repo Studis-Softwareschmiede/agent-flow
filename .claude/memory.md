@@ -2,33 +2,29 @@
 > Kuratiert von /flow am Ende jeder Session. Max. 60 Zeilen.
 
 ## Aktueller Stand
-Board leer (27.07.2026). S-123 (Story-Status `Waiting`) ist als letzte
-F-017-Story in `feature/F-017` gelandet (PR #442) — der finale Merge des
-Feature-Branches nach main steht noch aus (macht board-feature-drain.sh
-gebündelt via board-ship.sh --merge-feature, nicht die Einzel-Session).
-S-117 (Graphify-Pilot) steht jetzt korrekt auf `Waiting` mit wait_reason
-(nicht mehr Blocked) — wartet weiter auf den nächsten großen /adopt-Fall,
-alarmiert aber nicht mehr als Dauer-Blocker. Nachtwächter ist AUS
-(Owner-Entscheid — bei Bedarf in der dev-gui wieder aktivieren).
+F-031 (rot-team Cloudflare-Access-Service-Token-Protokoll) läuft: S-133
+gelandet in `feature/F-031` (PR #454) — war die einzige bereite Story dieses
+Batches, weitere F-031-Stories ggf. noch offen. Feature-Merge nach main folgt
+gebündelt am Feature-Ende (board-feature-drain.sh --merge-feature), nicht
+diese Einzel-Session. F-017 wartet weiterhin auf denselben finalen Merge.
+Nachtwächter ist AUS (Owner-Entscheid).
 
 ## Letzte Arbeiten
-- S-123 (Waiting-Status: Enum + wait_reason + CLI-Guard + next/rollup/
-  Drain-Gate + Erst-Anwendung S-117) gelandet PR #442 → feature/F-017;
-  1 Iteration, Review + Test PASS ohne Befund, ep_act 3 = ep_est 3.0.
-- S-122 (board-ship PR-Merge worktree-fest) gelandet PR #441 — Fix bewies
-  sich an der eigenen Landung (Exit 0 bei belegtem main).
+- S-133 (red-team Skill+Agent konsumiert access_header=cf-access, AC15:
+  Marker-Guard, Header-Injektion nur per Env-Referenz, Graceful-Blocked,
+  Security-Floor) gelandet PR #454 → feature/F-031; 1 Iteration, Review +
+  Test PASS ohne Critical/Important, ep_act 3 = ep_est 3.0.
+- S-123 (Waiting-Status) gelandet PR #442 → feature/F-017; 1 Iteration.
+- S-122 (board-ship PR-Merge worktree-fest) gelandet PR #441.
 - S-120 (Claim-Lock) PR #439, S-121 (git-Auth) PR #440 — je 3 Iterationen.
-- Branch-Großputz: 19 remote + 11 lokal gelöscht.
 
 ## Offene Fäden
-- feature/F-017 nach main mergen (board-ship.sh --merge-feature) — sobald
-  der Drain das Feature-Ende erkennt; danach Worktree wt-run-f017 abbauen.
+- feature/F-017 UND feature/F-031 nach main mergen (board-ship.sh
+  --merge-feature) — sobald der jeweilige Drain das Feature-Ende erkennt.
+- AGENTS.md §10 zeigt die red-team-Aufruf-Signatur noch ohne
+  access_header=cf-access (Reviewer-Suggestion aus S-133, kein Blocker).
 - tests/board-feature-drain: 2 vorbestehende FAILs (13b/13c,
-  Dossier-Sentinel) — dreifach per stash als S-123-unabhängig verifiziert;
-  eigener Fix-Kandidat.
-- dev-gui S-428 (Schwester-Story Waiting-Status in BoardAggregator/
-  Ansichten/Drain) ist separat — dev-gui kennt Waiting/claimed_by noch nicht.
-- estimator-Bias md|balanced|L/XL fraglich (S-120–S-122); S-123 (S-Klasse,
-  requirement-Heuristik) traf dagegen exakt — Kandidat für retro Modus E.
+  Dossier-Sentinel) — eigener Fix-Kandidat.
+- dev-gui S-428 (Schwester-Story Waiting-Status) ist separat.
 - gh-App-Token läuft nach ~1h ab; ensure-gh-auth.sh vor git-Push-Serien
   erneut ausführen.
