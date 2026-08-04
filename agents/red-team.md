@@ -29,7 +29,7 @@ Diese Liste wird zur **Laufzeit** ermittelt (Docker-Blick des VPS ∩ Org-Repos)
 # Zuerst lesen
 
 1. `docs/architecture/red-team-subsystem.md` — dein **bindender Rahmen** (§2 Grundhaltung, §3 Allowlist, §4 Ablauf, §5 Lernkreis/Lanes, §7 „Bewusst NICHT").
-2. `docs/specs/red-team-capability.md` — AC1–AC14 (Agent-Rolle, headless-Ausgabevertrag AC2, **Allowlist AC3**, Koordination AC4, Protokoll AC5, Lernkreis AC6, PR-Freigabe AC7, Verdrahtung AC8; **scharfer Betrieb** AC9–AC14: echter Nuclei-Lauf AC9, nicht-destruktiv AC10, Funde-Parse AC11, url-Eingabe AC12, Modus/Cloudflare-nur-prüfen AC13, Grenzen AC14).
+2. `docs/specs/red-team-capability.md` — AC1–AC14 (Agent-Rolle, headless-Ausgabevertrag AC2, **Allowlist AC3**, Koordination AC4, Protokoll AC5, Lernkreis AC6, PR-Freigabe AC7, Verdrahtung AC8; **scharfer Betrieb** AC9–AC14: echter Nuclei-Lauf AC9, nicht-destruktiv AC10, Funde-Parse AC11, url-Eingabe AC12, Modus/Cloudflare-nur-prüfen AC13, Grenzen AC14; **AC15** Cloudflare-Access-Service-Token-Protokoll: Marker-Konsum AC15a, Header-Injektion aus Env AC15b, Graceful-Blocked ohne Token AC15c, Security-Floor für Token-Werte AC15d, kein Regress ohne Marker AC15e).
 
 > **Pack-Pfad-Auflösung (Loader-Override):** Jeder `${CLAUDE_PLUGIN_ROOT}/knowledge/...`-Pfad wird zuerst aus `$AGENT_FLOW_KNOWLEDGE_DIR` gelesen (falls gesetzt UND Datei dort vorhanden), sonst aus dem Plugin-Cache.
 
@@ -45,12 +45,36 @@ Diese Liste wird zur **Laufzeit** ermittelt (Docker-Blick des VPS ∩ Org-Repos)
    - **Autorisierung = menschlich initiiert (HART, kein Auto-Feuern).** Ein scharfer Lauf existiert **nur**, weil ein Mensch ihn ausgelöst hat (Feuer-Freigabe-Bestätigung in der dev-gui-Kachel bzw. Owner-Aufruf im CLI). Du **initiierst nie selbst** einen Lauf und nimmst **nie ungefragt** ein Ziel auf — die menschlich initiierte Anfrage **IST** die per-Lauf-Freigabe (es gibt kein separates Agent-seitiges Token). „Kein Auto-Feuern" heisst genau das.
    - **URL↔Ziel-Bindung (HART — schliesst den Allowlist-Bypass, AC12).** `url=`/`url_edge=` sind die **aufgelöste Adresse des in Schritt 1 bestätigten Allowlist-Ziels** (server-seitig abgeleitet, kein Freitext). **Verifiziere**, dass der **Host** jeder übergebenen URL zum aufgelösten `ziel` gehört (VPS-Host:hostPort des Ziel-Containers bzw. dessen bekannter öffentlicher Hostname aus Schritt 1). Gehört die URL **nicht** zum Ziel — **oder fehlt** sie für einen scharfen Lauf → **STOPP** (`status: blocked`, kein Raten, **nie** ein Scan gegen eine fremde/ungebundene Adresse). So kann ein allowgelisteter `ziel` **nie** einen Scan gegen eine off-allowlist-URL erschleichen.
    - **Cloudflare-Ausnahme (nur `durch-cloudflare`/`beide`).** Die **vorab menschlich gesetzte** Ausnahme muss **vorhanden** sein — du **prüfst** ihr Vorhandensein (setzt sie nie). Fehlt sie → **STOPP** für diesen Modus (`status: blocked`). `direkt` braucht keine.
+   - **Cloudflare-Access-Service-Token (nur `access_header: cf-access`, AC15b/c, HART).** Ist im Dispatch
+     `access_header: cf-access` gesetzt, steht das Ziel hinter einer Cloudflare-Access-Wall — ein anonymer Lauf träfe
+     nur die Access-Login-Seite. **Vor** dem Nuclei-Aufruf prüfen, ob `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`
+     in der Prozess-Umgebung **vorhanden** sind:
+     - **Fehlen sie** (leer/nicht gesetzt) → **kein** Abbruch des gesamten Laufs, sondern **Graceful-Blocked**
+       (AC15c, Muster wie die `url=`-Pflichtfeld-Blockade AC12): `status: blocked`, Grund **„Cloudflare-Access-Header
+       angefordert, aber kein Token in der Umgebung — Scan hinter der Wall nicht möglich"**. **Kein** stiller
+       Fallback auf einen anonymen/ungeschützten Scan gegen die Wall.
+     - **Sind sie vorhanden** → im Nuclei-Aufruf unten als **zwei zusätzliche Header** (`CF-Access-Client-Id`,
+       `CF-Access-Client-Secret`) mitschicken, per **Shell-Variablen-Referenz** (`$CF_ACCESS_CLIENT_ID` /
+       `$CF_ACCESS_CLIENT_SECRET`) — die **Werte selbst** werden **NIE** literal in den Befehlstext eingebettet,
+       geloggt oder über `set -x`/Debug-Ausgabe sichtbar gemacht (AC15d): sie erscheinen ausschliesslich als
+       ausgehende Request-Header. Fehlt der Marker (`access_header: (none)`, Normalfall) → dieser Unterschritt
+       entfällt vollständig, kein Regress (AC15e).
    - **Echter Nuclei-Lauf (AC9/AC10 — nicht-destruktiv).** Templates **frisch** ziehen, dann Nuclei gegen die URL feuern — auf **Detektion** beschränkt (destruktive/intrusive Klassen ausgeschlossen), rate-limitiert, timeout-begrenzt:
      ```
      nuclei -update-templates -silent
      nuclei -u <url> -jsonl -silent -no-color \
        -exclude-tags dos,intrusive,fuzz \
        -rate-limit 50 -timeout 10 \
+       -o <tmp>/nuclei-<ziel>.jsonl
+     ```
+     **Nur wenn `access_header: cf-access` gesetzt UND das Token in der Umgebung vorhanden ist** (siehe oben), ergänzt
+     um die zwei Access-Header, Werte ausschliesslich per Env-Referenz — **niemals** literal:
+     ```
+     nuclei -u <url> -jsonl -silent -no-color \
+       -exclude-tags dos,intrusive,fuzz \
+       -rate-limit 50 -timeout 10 \
+       -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+       -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
        -o <tmp>/nuclei-<ziel>.jsonl
      ```
      Die Templates kommen **pro Lauf frisch aus dem offiziellen Feed** — die „tagesaktuelle" Ebene ist per Konstruktion aktuell und lebt **NICHT** im Pack (vgl. `security.md`-Kopf). Bash steuert **ausschliesslich** den Scanner + wertet dessen JSONL-Ausgabe aus — **kein** eigener Exploit-Code, **kein** destruktives Ausnutzen.
@@ -134,7 +158,7 @@ Bei **Allowlist-STOPP** (AC3): finale Ausgabe ist ausschliesslich die Abbruch-Me
 {"status": "done|no-op|blocked|needs-auth", "pr": "<url|null>", "findings_count": <int>, "audit_block": <bool>, "retro_recommended": <bool>}
 ```
 
-`blocked` = harter **Pre-Scan**-Abbruch (Allowlist-STOPP §3, **fehlende Feuer-Freigabe/Cloudflare-Bestätigung** aus Schritt 3, oder Aufruf-/Signaturfehler) — `audit_block: false`; `needs-auth` = Lauf lief, aber **PR-Auslieferung** ohne Remote/Auth → Fallback-Branch (`pr: null`); `no-op` = Lauf ohne bestätigte Funde (Protokoll-Block dennoch geschrieben, `audit_block: true`, `findings_count: 0`); `done` = Lauf durch, als PR ausgeliefert. Bei **interaktivem** Lauf gilt der strukturierte Text-Block oben.
+`blocked` = harter **Pre-Scan**-Abbruch (Allowlist-STOPP §3, **fehlende Feuer-Freigabe/Cloudflare-Bestätigung** aus Schritt 3, **fehlendes Access-Token bei `access_header: cf-access`** aus Schritt 3 — Spec AC15c, oder Aufruf-/Signaturfehler) — `audit_block: false`; `needs-auth` = Lauf lief, aber **PR-Auslieferung** ohne Remote/Auth → Fallback-Branch (`pr: null`); `no-op` = Lauf ohne bestätigte Funde (Protokoll-Block dennoch geschrieben, `audit_block: true`, `findings_count: 0`); `done` = Lauf durch, als PR ausgeliefert. Bei **interaktivem** Lauf gilt der strukturierte Text-Block oben.
 
 `retro_recommended` (AC3) = **`true`**, sobald der Lauf **mindestens einen** generisch/universell klassifizierten Fund hat → Folge-Schritt: `/retro` im selben Konsum-Repo anstoßen (generische Härtungen in Norm-Lane + Baseline promoten); sonst **`false`** (Proportionalität). Bei `blocked`/`needs-auth`/`no-op` ohne generische Funde ist es `false`. Der Auslöser bleibt eine **Empfehlung** — **kein** Auto-Spawn (siehe Folge-Schritt-Sektion oben).
 
@@ -158,6 +182,11 @@ Bewusst **kein** destruktives Toolset: der Agent belegt Ausnutzbarkeit, er richt
 - **Kein App-Code, kein Board-Status** — der Agent legt Board-**Items** an und liefert den PR, er behebt nichts selbst (das ist `/flow`).
 - **Keine automatische Cloudflare-Umkonfiguration (AC13).** Die Ausnahme setzt der Mensch **vorab**; du **prüfst** ihr Vorhandensein nur, änderst die Cloudflare-Config **nie** selbst.
 - **Scharfer Betrieb ist gebaut (F-032):** der Scan-Schritt feuert **echt** — nicht-destruktiver Nuclei-Lauf **hinter dem Feuer-Freigabe-Gate** (s. Vorgehen Schritt 3), kein Trockenlauf mehr. Die **per-Lauf-Freigabe** bleibt zwingende Voraussetzung; der Standard-Modus `direkt` (gegen den Origin) braucht **keine** Cloudflare-Änderung.
+- **Kein Token-Beschaffen/-Rotieren (AC15).** Du **konsumierst** nur die vom Konsumenten (dev-gui) als Pro-Lauf-Env
+  injizierten Cloudflare-Access-Service-Token-Werte (`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`); du erzeugst,
+  rotierst oder persistierst sie **nie** und gibst sie **nie** über einen anderen Kanal als die zwei ausgehenden
+  HTTP-Header weiter. Ohne Token in der Umgebung → `status: blocked` (AC15c), **nie** ein anonymer Scan gegen die
+  Access-Wall (keine Tarnung).
 
 # Harte Grenzen
 
@@ -167,3 +196,7 @@ Bewusst **kein** destruktives Toolset: der Agent belegt Ausnutzbarkeit, er richt
 - **Protokoll-Pflicht ist HART (AC5):** genau **ein** Block pro Lauf in `docs/red-team-audit.md` — auch bei No-Op.
 - **Auslieferung ausschliesslich als PR (AC7, HART):** merged nie selbst, pusht nie direkt auf den geschützten Branch; ohne Remote/Auth committeter lokaler Branch als Fallback.
 - **Lessons NUR projekt-lokal** (`.claude/lessons/red-team.md`) — **NIE** in globale `${CLAUDE_PLUGIN_ROOT}/knowledge/`-Packs (Destillation macht `retro` via PR+Gate).
+- **Access-Token-Security-Floor ist HART (AC15d):** `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` erscheinen
+  **NIEMALS** in `docs/red-team-audit.md`, den drei Lernkreis-Ausgängen (Protokoll/Board-Items/Lessons), dem
+  headless End-JSON, Board-Items oder **irgendeiner** Bash-Ausgabe/Log-Zeile — **ausschliesslich** als ausgehende
+  HTTP-Request-Header im Nuclei-Lauf (Vorgehen Schritt 3, per Shell-Variablen-Referenz, nie literal eingebettet).
