@@ -4,7 +4,7 @@ title: 'red-team Skill+Agent: Cloudflare-Access-Service-Token-Protokoll (access_
   konsumieren — Marker parsen/durchreichen (SKILL.md §1/§3), CF-Access-Header aus
   Env im Nuclei-Lauf injizieren (agents/red-team.md Schritt 3), Graceful-Blocked ohne
   Token, Security-Floor'
-status: To Do
+status: In Progress
 priority: P1
 spec: docs/specs/red-team-capability.md
 implements:
@@ -27,7 +27,7 @@ pr: null
 blocked_reason: null
 wait_reason: null
 created_at: '2026-08-04T06:32:18Z'
-updated_at: '2026-08-04T06:35:48Z'
+updated_at: '2026-08-04T06:35:59Z'
 done_at: null
 claimed_by: MacBook-Pro-von-Alexander.local-13135-1785825341-25365
 claimed_at: '2026-08-04T06:35:43Z'
