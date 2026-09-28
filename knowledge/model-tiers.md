@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** 2026-08-04 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-09-28 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -163,3 +163,28 @@ daher kein (a)-Trigger. Relative Preisordnung `haiku < sonnet < opus < fable` un
 Quellen: [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) ·
 [Model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations#model-status) ·
 [Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing).
+
+**Frischelauf-Notiz (`/train model-tiers`-Zyklus 2026-09-28, kein Klassen-/Tier-Trigger i.S.v. AC3):**
+Models overview führt inzwischen **Claude Opus 5.5** (`claude-opus-5.5`, released 22.9.2026, "for
+long-running agentic coding and knowledge work", jetzt Standardempfehlung "for most workloads") und
+**Claude Sonnet 5** (`claude-sonnet-5`, released 30.6.2026) als Top-Vertreter der Klassen
+`opus`/`sonnet` (Opus 5/Opus 4.8 ins „Legacy models"-Verzeichnis verschoben, weiterhin aktiv). Beide
+sind **Punktversionen bestehender Klassen** (AC4) — kein Matrix-Delta: Opus 5.5 kostet $4/$20 MTok
+(günstiger als Opus 5/4.8 mit $5/$25, aber weiterhin klar unter Fable), Sonnet 5 ist inzwischen
+regulärer Standardpreis $2/$10 MTok (die zuvor befristete Einführungspreis-Erhöhung auf $3/$15 zum
+1.9.2026 wurde laut Pricing-Seite **zurückgenommen** — "will not occur"). Klassen-Ordnung
+`haiku ($1/$5) < sonnet ($2/$10) < opus ($4/$20) < fable ($10/$50)` bleibt strikt erhalten (I2
+gewahrt) — kein Rebalancing-Trigger trotz Opus-Verbilligung. Extended-/Adaptive-Thinking-Profil
+unverändert (Opus 5.5 = No/Yes(always on), Sonnet 5 = No/Yes, Fable 5.1 = No/Yes(always on),
+Haiku 4.5 = Yes/No). Neu sichtbar seit dem letzten Zyklus: **Claude Mythos 5 / Mythos 5.1**
+(`claude-mythos-5[-1]`) — Project Glasswing, laut eigener Anthropic-Beschreibung "We do not plan to
+make Claude Mythos Preview generally available" und "unsuitable for general or standard production
+agentic workloads" (invite-only Cybersecurity-Initiative, 11 Launch-Partner + ~40 weitere
+Organisationen); trotz Preis-Parität zu `fable` ($10/$50 MTok) **keine breit verfügbare Klasse** →
+kein (a)-Trigger. Kein Klassen-Deprecation/-Umbenennung der Matrix-Klassen (b). Fazit: reiner
+Frischelauf, Matrix-Tabelle unangetastet.
+Quellen: [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) ·
+[Model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations#model-status) ·
+[Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing) ·
+[Claude Opus 5.5 overview](https://platform.claude.com/docs/en/models/opus-5-5/overview) ·
+[Claude Sonnet 5 overview](https://platform.claude.com/docs/en/models/sonnet-5/overview).
