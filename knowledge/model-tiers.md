@@ -1,6 +1,6 @@
 # Knowledge Pack: model-tiers (Cost-Modi / Modell-Auswahl je Rolle)
 
-> **last_curated:** 2026-09-28 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
+> **last_curated:** 2026-10-23 — Frische-Signal + Cooldown-State für `/train model-tiers` (Spec `docs/specs/model-tier-curator.md`). Der Curator setzt das Datum bei **jedem** Lauf auf heute; Cooldown = max. 1× pro Kalendermonat (`--force` umgeht). `never`/leer ⇒ kein Cooldown, erster Lauf erlaubt.
 >
 > **primary_sources** (autoritativ — **ausschließlich** diese für die Klassen-/Tier-Kuration; `docs.claude.com`-Pfade leiten per 302 auf `platform.claude.com`):
 > - *Models overview* — https://platform.claude.com/docs/en/about-claude/models/overview
@@ -188,3 +188,33 @@ Quellen: [Models overview](https://platform.claude.com/docs/en/about-claude/mode
 [Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing) ·
 [Claude Opus 5.5 overview](https://platform.claude.com/docs/en/models/opus-5-5/overview) ·
 [Claude Sonnet 5 overview](https://platform.claude.com/docs/en/models/sonnet-5/overview).
+
+**Frischelauf-Notiz (`/train model-tiers`-Zyklus 2026-10-23, kein Klassen-/Tier-Trigger i.S.v. AC3):**
+Models overview führt inzwischen **Claude Sonnet 5.5** (`claude-sonnet-5-5`, "the best combination
+of speed and intelligence"), **Claude Haiku 5.5** (`claude-haiku-5-5`) und **Claude Fable 5.1**
+(`claude-fable-5-1`) als aktuelle Top-Vertreter der Klassen `sonnet`/`haiku`/`fable` (Sonnet 5,
+Haiku 4.5 und Fable 5 jeweils ins „Legacy models"-Verzeichnis verschoben, weiterhin aktiv); Opus 5.5
+(seit dem 09-28-Zyklus bekannt) bleibt unverändert aktueller Top-Vertreter der Klasse `opus`. Alle
+vier sind **Punktversionen bestehender Klassen** (AC4) — kein Matrix-Delta: Haiku 5.5 $0.10/$0.50
+MTok, Sonnet 5.5 $2/$10 MTok (identisch zum bisherigen Sonnet-5-Standardpreis), Opus 5.5 unverändert
+$4/$20 MTok, Fable 5.1 $10/$50 MTok (identisch zu Fable 5, nur Cache-Reads günstiger: 2,5% statt 10%
+des Input-Preises). Klassen-Ordnung `haiku ($0.10/$0.50) < sonnet ($2/$10) < opus ($4/$20) < fable
+($10/$50)` bleibt strikt erhalten (I2 gewahrt) — Fable bleibt ~2,5× teurer als Opus, kein
+Rebalancing-Trigger (c). Thinking-Profil unverändert: Fable 5.1 UND Opus 5.5 weiterhin beide
+„Adaptive (always on)", **kein** (abschaltbares) Extended Thinking — Models-overview-Fußnote
+bestätigt zusätzlich explizit, dass Extended Thinking „is deprecated on Claude Opus 4.6 and Claude
+Sonnet 4.6 and not accepted on later models" (reine API-Parameter-Migration, keine Rollen-Relevanz).
+Keine Matrix-Klasse (haiku/sonnet/opus/fable) deprecated/umbenannt — Model-deprecations-Tabelle
+listet `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` je als
+`Active`; nur ältere Punktversionen (u.a. `claude-sonnet-4-5-20250929`, deprecated 30.9.2026) sind
+betroffen, kein Klassen-Trigger (b). Erneut geprüft und weiterhin verworfen als (a)-Trigger: **Claude
+Mythos 5.1** (`claude-mythos-5-1`) — laut Choosing-a-model-Seite explizit dieselbe Fähigkeitsstufe
+wie Fable 5.1 ("offers the same capabilities"), nur zugangsbeschränkt auf Organisationen, die über
+Anthropics Verifizierungsprogramme (z.B. Cyber Verification Program) verifiziert sind — keine eigene
+Rollen-Einordnung, keine neue Klasse neben `fable`. Fazit: reiner Frischelauf, Matrix-Tabelle
+unangetastet.
+Quellen: [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) ·
+[Model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations#model-status) ·
+[Pricing](https://platform.claude.com/docs/en/about-claude/pricing#model-pricing) ·
+[Claude Opus 5.5 overview](https://platform.claude.com/docs/en/models/opus-5-5/overview) ·
+[Choosing a model — Overview](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model#overview).
